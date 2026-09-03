@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { importIssueToTriage, processGitLabIssueWebhook, processGitLabMergeRequestWebhook, processGitLabPipelineWebhook, pushItemToGitLab } from './gitlab-sync.js';
+import { importIssueToTriage, processGitLabIssueWebhook, processGitLabMergeRequestWebhook, processGitLabPipelineWebhook, pushItemToGitLab, resolveConflict } from './gitlab-sync.js';
 
 test('imports GitLab issues into pending triage', async () => {
   let created: unknown;
@@ -10,10 +10,51 @@ test('imports GitLab issues into pending triage', async () => {
   assert.deepEqual(created, { title: 'Bug', description: 'Details', triage: 'pending' });
 });
 
-test('pushes a completed linked item as a closed GitLab issue', async () => {
+test('pushes a completed linked item as a closed GitLab issue when local is the most recent write', async () => {
   let update: unknown;
-  await pushItemToGitLab({ id: 'item-1', title: 'Done', description: null, status: 'done', triage: 'accepted' }, '42', 4, { async updateIssue(project, iid, payload) { update = { project, iid, payload }; } });
+  await pushItemToGitLab(
+    { id: 'item-1', title: 'Done', description: null, status: 'done', triage: 'accepted', updatedAt: new Date('2026-01-02T00:00:00Z') },
+    { updatedAt: new Date('2026-01-01T00:00:00Z') },
+    '42',
+    4,
+    { async updateIssue(project, iid, payload) { update = { project, iid, payload }; } },
+  );
   assert.deepEqual(update, { project: '42', iid: 4, payload: { title: 'Done', description: undefined, stateEvent: 'close' } });
+});
+
+test('skips the GitLab push when the remote write is more recent (last write wins)', async () => {
+  let called = false;
+  await pushItemToGitLab(
+    { id: 'item-1', title: 'Done', description: null, status: 'done', triage: 'accepted', updatedAt: new Date('2026-01-01T00:00:00Z') },
+    { updatedAt: new Date('2026-01-02T00:00:00Z') },
+    '42',
+    4,
+    { async updateIssue() { called = true; } },
+  );
+  assert.equal(called, false);
+});
+
+test('records an audit entry for every push decision', async () => {
+  const entries: unknown[] = [];
+  await pushItemToGitLab(
+    { id: 'item-1', title: 'Done', description: null, status: 'done', triage: 'accepted', updatedAt: new Date('2026-01-01T00:00:00Z') },
+    { updatedAt: new Date('2026-01-02T00:00:00Z') },
+    '42',
+    4,
+    { async updateIssue() {} },
+    { async record(entry) { entries.push(entry); } },
+  );
+  assert.deepEqual(entries, [{ entityId: 'item-1', action: 'push_to_gitlab', decision: 'remote', localUpdatedAt: new Date('2026-01-01T00:00:00Z'), remoteUpdatedAt: new Date('2026-01-02T00:00:00Z') }]);
+});
+
+test('resolveConflict keeps the local write on a tie', () => {
+  const timestamp = new Date('2026-01-01T00:00:00Z');
+  assert.equal(resolveConflict({ updatedAt: timestamp }, { updatedAt: timestamp }), 'local');
+});
+
+test('resolveConflict picks whichever side wrote more recently', () => {
+  assert.equal(resolveConflict({ updatedAt: new Date('2026-01-01T00:00:00Z') }, { updatedAt: new Date('2026-01-02T00:00:00Z') }), 'remote');
+  assert.equal(resolveConflict({ updatedAt: new Date('2026-01-02T00:00:00Z') }, { updatedAt: new Date('2026-01-01T00:00:00Z') }), 'local');
 });
 
 test('processes an issue webhook through the pending triage importer', async () => {

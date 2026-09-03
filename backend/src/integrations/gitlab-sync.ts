@@ -19,7 +19,26 @@ export async function importIssueToTriage(issue: GitLabIssue, repository: SyncIt
   return repository.create({ title: issue.title, description: issue.description ?? undefined, triage: 'pending' });
 }
 
-export async function pushItemToGitLab(item: SyncItem, projectId: string, issueIid: number, gitlab: Pick<GitLabClient, 'updateIssue'>): Promise<void> {
+/** Dernière écriture gagne, comparée par timestamp; une égalité conserve l'état local (aucune écriture inutile). */
+export function resolveConflict(local: { updatedAt: Date }, remote: { updatedAt: Date }): 'local' | 'remote' {
+  return remote.updatedAt.getTime() > local.updatedAt.getTime() ? 'remote' : 'local';
+}
+
+export interface AuditLogSync {
+  record(entry: { entityId: string; action: string; decision: 'local' | 'remote'; localUpdatedAt: Date; remoteUpdatedAt: Date }): Promise<void>;
+}
+
+export async function pushItemToGitLab(
+  item: SyncItem & { updatedAt: Date },
+  remote: { updatedAt: Date },
+  projectId: string,
+  issueIid: number,
+  gitlab: Pick<GitLabClient, 'updateIssue'>,
+  audit?: AuditLogSync,
+): Promise<void> {
+  const decision = resolveConflict(item, remote);
+  await audit?.record({ entityId: item.id, action: 'push_to_gitlab', decision, localUpdatedAt: item.updatedAt, remoteUpdatedAt: remote.updatedAt });
+  if (decision !== 'local') return;
   await gitlab.updateIssue(projectId, issueIid, {
     title: item.title,
     description: item.description ?? undefined,

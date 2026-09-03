@@ -10,6 +10,7 @@ export interface GitLabIssue {
   state: string;
   labels: string[];
   web_url: string;
+  updated_at?: string;
 }
 
 export interface GitLabClientOptions {
