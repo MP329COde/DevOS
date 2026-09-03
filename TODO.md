@@ -83,6 +83,7 @@
 - [ ] Intégration Harbor (une fois déployé)
 - [ ] Intégration Proxmox (vue infra au-delà de K8s)
 - [ ] Intégration Wazuh (alertes sécurité dans le Dashboard)
+- [ ] Intégration Wazuh (alertes sécurité dans le Dashboard)
 
 ---
 
@@ -94,3 +95,4 @@
 - 2026-09-03: Prisma 6.19.3 retenu pour PostgreSQL: schema déclaratif, migrations versionnées et client TypeScript généré. La validation utilise une URL locale injectée au processus; les secrets de production resteront dans Vault. `npm install` signale 3 vulnérabilités élevées à traiter avant la mise en production.
 - 2026-09-03: Client officiel `redis` v5 retenu; la fabrique crée des connexions séparées pour cache, publication et abonnement, sans connexion automatique au chargement.
 - 2026-09-03: Client Vault implémenté avec Kubernetes Auth Method et lecture KV v2 à la demande; le JWT vient du fichier ServiceAccount monté, et le token Vault reste uniquement en mémoire.
+- 2026-09-03: Contrat de configuration Keycloak OIDC ajouté avec issuer configurable et référence Vault pour le client secret. L'item reste ouvert jusqu'au flux HTTP login/callback et à la session frontend.

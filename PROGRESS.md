@@ -31,3 +31,4 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Prisma configure, schema valide et client genere; migration initiale ajoutee.
 - 2026-09-03: Redis configure avec trois clients separes et tests unitaires sans dependance a un serveur local.
 - 2026-09-03: Client Vault configure et teste avec authentification Kubernetes et lecture KV v2 sans secret persiste.
+- 2026-09-03: Configuration OIDC Keycloak ajoutee et testee; login/callback HTTP et session frontend restent a implementer.
