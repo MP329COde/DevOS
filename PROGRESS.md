@@ -5,7 +5,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 ## Phase 0 - Socle technique
 
 - [x] Initialiser le depot et la structure monorepo (`backend/`, `frontend/`, `docs/`)
-- [ ] Setup PostgreSQL + migrations
+- [x] Setup PostgreSQL + migrations (Prisma)
 - [ ] Setup Redis
 - [ ] Integration Vault
 - [ ] Integration Keycloak OIDC
@@ -28,3 +28,4 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 ## Historique
 
 - 2026-09-03: branche `phase-0-foundation` creee; depot initialise; structure monorepo creee.
+- 2026-09-03: Prisma configure, schema valide et client genere; migration initiale ajoutee.

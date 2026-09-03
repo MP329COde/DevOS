@@ -1,0 +1,14 @@
+{
+  "name": "devos",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "db:validate": "npm --workspace backend run db:validate",
+    "db:generate": "npm --workspace backend run db:generate",
+    "db:migrate": "npm --workspace backend run db:migrate"
+  }
+}

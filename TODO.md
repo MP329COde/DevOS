@@ -7,7 +7,7 @@
 ## Phase 0 — Socle technique
 
 - [x] Initialiser le dépôt (structure monorepo : `backend/`, `frontend/`, `docs/`)
-- [ ] Setup PostgreSQL + migrations (choisir un ORM : Prisma ou Drizzle)
+- [x] Setup PostgreSQL + migrations (choisir un ORM : Prisma ou Drizzle)
 - [ ] Setup Redis (cache + pub/sub pour le temps réel)
 - [ ] Intégration Vault : client backend + méthode Kubernetes Auth Method
 - [ ] Intégration Keycloak OIDC (login backend + frontend, gestion de session)
@@ -91,3 +91,4 @@
 <!-- Ajouter ici, au fil de l'avancement, toute décision technique prise sans validation utilisateur, avec la date et la justification, pour traçabilité -->
 
 - 2026-09-03: Initialisation du dépôt sur la branche `phase-0-foundation`, avec un monorepo minimal et `PROGRESS.md` pour suivre les phases. Aucun framework ni dépendance n'est ajouté avant les items qui les nécessitent.
+- 2026-09-03: Prisma 6.19.3 retenu pour PostgreSQL: schema déclaratif, migrations versionnées et client TypeScript généré. La validation utilise une URL locale injectée au processus; les secrets de production resteront dans Vault. `npm install` signale 3 vulnérabilités élevées à traiter avant la mise en production.
