@@ -35,7 +35,7 @@
 
 - [x] Client API GitLab (REST v4 + gestion pagination par curseur)
 - [x] Réception webhooks GitLab (issue, merge_request, pipeline, note) — endpoint sécurisé par secret token
-- [ ] Table de correspondance `task_id ↔ gitlab_project_id ↔ gitlab_issue_iid`
+- [x] Table de correspondance `task_id ↔ gitlab_project_id ↔ gitlab_issue_iid`
 - [ ] Sync GitLab → Outil : création/mise à jour automatique d'une tâche depuis une issue GitLab (passe d'abord par Triage)
 - [ ] Sync Outil → GitLab : toute modification d'une tâche liée met à jour l'issue GitLab correspondante (statut, labels, commentaires)
 - [ ] Détection automatique de lien via pattern `#<iid>` dans les commits/branches
@@ -113,6 +113,7 @@
 - 2026-09-03: Time tracking finalisé avec entrées persistantes, start/stop/history, protection contre double timer et boutons UI. Prisma, lint, builds et 42 tests passent.
 - 2026-09-03: Client GitLab REST v4 ajouté avec token provider asynchrone (compatible Vault), header `private-token`, opérations de notes et pagination par header `Link`; tests HTTP simulés, sans appel à l'instance réelle.
 - 2026-09-03: Webhook GitLab sécurisé ajouté sur `/api/webhooks/gitlab`: secret fourni par provider, comparaison constant-time, événements supportés et accusé 202; aucune action automatique n'est déclenchée par le handler.
+- 2026-09-03: Table `gitlab_issue_links` ajoutée avec unicité issue/projet et item/projet, références Prisma et validation des IIDs positifs; 48 tests et builds passent.
 - 2026-09-03: Statut de Triage ajouté (`none/pending/accepted/rejected`) avec migration et transitions contrôlées pour les items webhook. API/UI et intégration board restent à faire.
 - 2026-09-03: API cycles (`GET`, `POST`, clôture explicite) et panneau UI de cycle actif ajoutés; Playwright valide l'affichage et la clôture mockée. Le service Prisma concret et le report transactionnel restent à brancher.
 - 2026-09-03: Cycles finalisés avec `PrismaCycleService`: création/listage, clôture transactionnelle et report réel des items non terminés vers le cycle suivant. 37 tests et builds passent.
