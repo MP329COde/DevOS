@@ -5,12 +5,14 @@ import type { KeycloakAuthService } from './infrastructure/keycloak-auth.js';
 import { handleItemRequest, type ItemHttpService } from './tasks/item-http.js';
 import { handleCycleRequest, type CycleService } from './tasks/cycle-http.js';
 import { handleTriageRequest, type TriageService } from './tasks/triage-http.js';
+import { handleTimeRequest, type TimeService } from './tasks/time-http.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
   items?: ItemHttpService,
   cycles?: CycleService,
   triage?: TriageService,
+  time?: TimeService,
 ) {
   return createHttpServer(async (request, response) => {
     if (request.method === 'GET' && request.url === '/health') {
@@ -43,6 +45,13 @@ export function createServer(
     if (request.url?.startsWith('/api/triage')) {
       if (!triage) { writeJson(response, 503, { error: 'Triage is not configured' }); return; }
       const result = await handleTriageRequest(request.method ?? 'GET', request.url, triage);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/items/') && request.url.endsWith('/time') || request.url?.startsWith('/api/time/')) {
+      if (!time) { writeJson(response, 503, { error: 'Time tracking is not configured' }); return; }
+      const result = await handleTimeRequest(request.method ?? 'GET', request.url, time);
       writeJson(response, result.status, result.body);
       return;
     }

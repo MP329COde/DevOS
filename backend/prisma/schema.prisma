@@ -52,6 +52,7 @@ model Item {
   triage      TriageStatus @default(none)
   cycleId     String?   @db.Uuid @map("cycle_id")
   cycle       Cycle?    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  timeEntries TimeEntry[]
   parentId    String?   @db.Uuid @map("parent_id")
   parent      Item?     @relation("ItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children    Item[]    @relation("ItemHierarchy")
@@ -92,6 +93,17 @@ model AutomationRule {
 
   @@index([enabled, trigger])
   @@map("automation_rules")
+}
+
+model TimeEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  itemId    String   @db.Uuid @map("item_id")
+  startedAt DateTime @default(now()) @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, startedAt])
+  @@map("time_entries")
 }
 
 model Label {

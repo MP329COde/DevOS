@@ -22,6 +22,7 @@ export function App() {
   const [cycles, setCycles] = useState<Array<{ id: string; name: string; closedAt?: string | null }>>([]);
   const [triage, setTriage] = useState<Array<{ id: string; title: string; type: string }>>([]);
   const [showTriage, setShowTriage] = useState(false);
+  const [activeTimers, setActiveTimers] = useState<Record<string, string>>({});
   const [paletteOpen, setPaletteOpen] = useState(false);
   const titleInput = useRef<HTMLInputElement>(null);
 
@@ -119,6 +120,19 @@ export function App() {
     if (response.ok) setItems((current) => current.filter((entry) => entry.id !== item.id));
   }
 
+  async function toggleTimer(item: { id: string }) {
+    const activeId = activeTimers[item.id];
+    const endpoint = activeId ? `/api/time/${activeId}/stop` : `/api/items/${item.id}/time`;
+    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}${endpoint}`, { method: 'POST' });
+    if (!response.ok) return;
+    const entry = await response.json();
+    setActiveTimers((current) => {
+      const next = { ...current };
+      if (activeId) delete next[item.id]; else next[item.id] = entry.id;
+      return next;
+    });
+  }
+
   async function closeCycle(id: string) {
     const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/cycles/${id}/close`, { method: 'POST' });
     if (response.ok) setCycles((current) => current.map((cycle) => cycle.id === id ? { ...cycle, closedAt: new Date().toISOString() } : cycle));
@@ -135,7 +149,7 @@ export function App() {
     (groups[key] ??= []).push(item);
     return groups;
   }, {});
-  const itemCard = (item: typeof items[number]) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></article>;
+  const itemCard = (item: typeof items[number]) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></article>;
 
   return (
     <main className="shell">
