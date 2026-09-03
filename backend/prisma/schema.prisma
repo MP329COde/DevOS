@@ -19,6 +19,12 @@ enum TaskLevel {
   task
 }
 
+enum ItemLinkType {
+  relates_to
+  blocks
+  is_blocked_by
+}
+
 model SystemSetting {
   key       String   @id @db.VarChar(100)
   value     String   @db.Text
@@ -39,6 +45,8 @@ model Item {
   parent      Item?     @relation("ItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children    Item[]    @relation("ItemHierarchy")
   labels      ItemLabel[]
+  outgoingLinks ItemLink[] @relation("ItemLinkSource")
+  incomingLinks ItemLink[] @relation("ItemLinkTarget")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -66,4 +74,16 @@ model ItemLabel {
 
   @@id([itemId, labelId])
   @@map("item_labels")
+}
+
+model ItemLink {
+  sourceId String       @db.Uuid @map("source_id")
+  targetId String       @db.Uuid @map("target_id")
+  type     ItemLinkType
+  source   Item        @relation("ItemLinkSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target   Item        @relation("ItemLinkTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@id([sourceId, targetId, type])
+  @@index([targetId])
+  @@map("item_links")
 }
