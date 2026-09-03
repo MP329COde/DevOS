@@ -15,6 +15,7 @@ export function App() {
   const [title, setTitle] = useState('');
   const [type, setType] = useState('task');
   const [labels, setLabels] = useState('');
+  const [view, setView] = useState<'list' | 'board' | 'gantt' | 'calendar'>('list');
   const [itemsError, setItemsError] = useState('');
 
   useEffect(() => {
@@ -88,15 +89,22 @@ export function App() {
   }
 
   const visibleItems = filter === 'all' ? items : items.filter((item) => item.type === filter);
+  const groupedItems = visibleItems.reduce<Record<string, typeof visibleItems>>((groups, item) => {
+    const key = view === 'calendar' ? 'À planifier' : item.status.replace('_', ' ');
+    (groups[key] ??= []).push(item);
+    return groups;
+  }, {});
+  const itemCard = (item: typeof items[number]) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></article>;
 
   return (
     <main className="shell">
       <header className="topbar"><div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">Aujourd’hui.</h1></div><button type="button" className="login" onClick={signIn}>Connexion SSO</button></header>
       <section className="workspace" aria-labelledby="items-title">
         <div className="section-heading"><div><span className="kicker">WORK QUEUE</span><h2 id="items-title">Vos items</h2></div><div className="filters" aria-label="Filtrer les items">{['all', 'task', 'doc', 'goal'].map((value) => <button className={filter === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setFilter(value)}>{value === 'all' ? 'Tout' : value}</button>)}</div></div>
+        <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setView(value)}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}</nav>
         <form className="new-item" onSubmit={createItem}><select aria-label="Type" value={type} onChange={(event) => setType(event.target.value)}><option value="task">Tâche</option><option value="doc">Document</option><option value="goal">Objectif</option></select><input aria-label="Titre" placeholder="Ajouter un item..." value={title} onChange={(event) => setTitle(event.target.value)} /><input aria-label="Labels" placeholder="type::bug, priority::high" value={labels} onChange={(event) => setLabels(event.target.value)} /><button type="submit">Ajouter</button></form>
         {itemsError && <p className="error" role="alert">{itemsError}</p>}
-        <div className="items">{visibleItems.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></article>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>
+        <div className={`items view-${view}`}>{view === 'list' ? visibleItems.map(itemCard) : Object.entries(groupedItems).map(([group, groupItems]) => <section className="view-group" key={group}><h3>{group}</h3>{groupItems.map(itemCard)}</section>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>
       </section>
       <span className="status" role="status">{status}</span>
     </main>

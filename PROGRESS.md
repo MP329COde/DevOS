@@ -54,6 +54,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: CRUD API/UI finalise; liste, filtres, creation, statut et suppression ajoutes. 21 tests et builds passent; Playwright mobile valide l'interface.
 - 2026-09-03: Labels normalises integres au modele et au CRUD, champ UI ajoute; 24 tests backend passent.
 - 2026-09-03: Liens types et inversion des relations de blocage ajoutes; migrations validees et 26 tests backend passent.
+- 2026-09-03: Requete partagee et modes Liste/Board/Gantt/Calendrier ajoutes; 28 tests passent et Playwright mobile valide le changement de vue. Rendus timeline/calendrier detailles restent a finaliser.
 
 ## Etat de la Phase 0
 
