@@ -21,7 +21,7 @@
 
 - [x] Modèle de données : table `items` générique (type: task/doc/goal), voir INFO.md section 6
 - [x] Hiérarchie Epic > Story > Task avec rollup automatique de statut
-- [ ] CRUD complet des tâches (API + UI)
+- [x] CRUD complet des tâches (API + UI)
 - [ ] Système de labels croisés (préfixe::valeur, façon GitLab)
 - [ ] Liens typés entre tâches (relates_to / blocks / is_blocked_by)
 - [ ] Vues découplées de la donnée : Liste, Board (Kanban), Gantt simple, Calendrier — une seule API de requête paramétrable, plusieurs rendus frontend
@@ -101,6 +101,7 @@
 - 2026-09-03: Modèle Prisma `Item` ajouté avec type `task/doc/goal`, statut extensible, parent/enfants auto-référencés et index de requête; le rollup hiérarchique est réservé à l'item suivant.
 - 2026-09-03: Hiérarchie ajoutée via `TaskLevel` nullable et migration additive; le rollup pur donne priorité à `blocked`, puis `done` si tous les enfants sont terminés, sinon `in_progress`.
 - 2026-09-03: Service CRUD `Item` ajouté avec validation de titre, normalisation et opérations Prisma list/create/update/delete; l'item reste ouvert jusqu'aux handlers HTTP et à l'UI.
+- 2026-09-03: CRUD finalisé avec handlers HTTP et UI React: liste, filtre par type, création, changement de statut et suppression. 21 tests, lint et builds passent; Playwright mobile valide le rendu et le filtre. L'API nécessite le backend démarré pour afficher les données.
 - 2026-09-03: Flux Keycloak finalisé: échange PKCE backend via secret Vault, session opaque Redis, cookie HttpOnly/Secure et validation frontend du state. Test Playwright du callback invalide réussi; la zone d'administration des références Vault sera approfondie avec les intégrations d'outils.
 - 2026-09-03: Permissions centralisées côté backend: Lecteur lecture seule, Contributeur collaboration sans administration, Admin toutes les actions déclarées dont l'infrastructure. Le frontend ne constitue pas une frontière de sécurité.
 - 2026-09-03: Pipeline GitLab ajoutée avec `npm ci`, lint/typecheck, tests et builds séparés; aucun déploiement automatique n'est inclus afin de garder les changements d'infrastructure explicitement déclenchés.
