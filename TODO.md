@@ -97,3 +97,4 @@
 - 2026-09-03: Client Vault implémenté avec Kubernetes Auth Method et lecture KV v2 à la demande; le JWT vient du fichier ServiceAccount monté, et le token Vault reste uniquement en mémoire.
 - 2026-09-03: Contrat de configuration Keycloak OIDC ajouté avec issuer configurable et référence Vault pour le client secret. L'item reste ouvert jusqu'au flux HTTP login/callback et à la session frontend.
 - 2026-09-03: Helper frontend PKCE ajoute avec challenge S256, state et client public sans secret; les routes backend login/callback et l'application React restent a relier.
+- 2026-09-03: Ecran React/Vite de connexion ajouté, vérifié par Playwright desktop et mobile; console nettoyée après ajout du favicon. Le callback backend et la session Redis restent à implémenter.
