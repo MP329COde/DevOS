@@ -10,7 +10,7 @@
 - [x] Setup PostgreSQL + migrations (choisir un ORM : Prisma ou Drizzle)
 - [x] Setup Redis (cache + pub/sub pour le temps réel)
 - [x] Intégration Vault : client backend + méthode Kubernetes Auth Method
-- [ ] Intégration Keycloak OIDC (login backend + frontend, gestion de session)
+- [x] Intégration Keycloak OIDC (login backend + frontend, gestion de session)
 - [ ] Modèle de permissions à 3 rôles : Admin / Contributeur / Lecteur
 - [ ] Pipeline CI GitLab pour le projet lui-même (lint, test, build)
 - [ ] Dockerfile + docker-compose pour dev local
@@ -98,3 +98,4 @@
 - 2026-09-03: Contrat de configuration Keycloak OIDC ajouté avec issuer configurable et référence Vault pour le client secret. L'item reste ouvert jusqu'au flux HTTP login/callback et à la session frontend.
 - 2026-09-03: Helper frontend PKCE ajoute avec challenge S256, state et client public sans secret; les routes backend login/callback et l'application React restent a relier.
 - 2026-09-03: Ecran React/Vite de connexion ajouté, vérifié par Playwright desktop et mobile; console nettoyée après ajout du favicon. Le callback backend et la session Redis restent à implémenter.
+- 2026-09-03: Flux Keycloak finalisé: échange PKCE backend via secret Vault, session opaque Redis, cookie HttpOnly/Secure et validation frontend du state. Test Playwright du callback invalide réussi; la zone d'administration des références Vault sera approfondie avec les intégrations d'outils.

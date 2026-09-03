@@ -1,6 +1,6 @@
 import { createClient } from 'redis';
 
-type RedisClient = ReturnType<typeof createClient>;
+export type RedisClient = ReturnType<typeof createClient>;
 
 export interface RedisClients {
   cache: RedisClient;

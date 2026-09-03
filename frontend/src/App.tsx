@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { createAuthorizationRequest } from './auth/oidc.js';
 
@@ -10,6 +10,31 @@ const oidcConfig = {
 
 export function App() {
   const [status, setStatus] = useState('Prêt pour une session sécurisée.');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    const expectedState = sessionStorage.getItem('devos.oidc.state');
+    const codeVerifier = sessionStorage.getItem('devos.oidc.verifier');
+
+    if (!code && !state) return;
+    if (!code || state !== expectedState || !codeVerifier) {
+      setStatus('La réponse Keycloak est invalide.');
+      return;
+    }
+
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/auth/callback`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code, codeVerifier }),
+      credentials: 'include',
+    }).then((response) => {
+      setStatus(response.ok ? 'Session ouverte.' : 'Impossible d’ouvrir la session.');
+      sessionStorage.removeItem('devos.oidc.state');
+      sessionStorage.removeItem('devos.oidc.verifier');
+    }).catch(() => setStatus('Le serveur de session est indisponible.'));
+  }, []);
 
   async function signIn() {
     const request = await createAuthorizationRequest(oidcConfig);

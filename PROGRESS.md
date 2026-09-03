@@ -8,7 +8,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - [x] Setup PostgreSQL + migrations (Prisma)
 - [x] Setup Redis (cache + pub/sub)
 - [x] Integration Vault (Kubernetes Auth Method + KV v2)
-- [ ] Integration Keycloak OIDC
+- [x] Integration Keycloak OIDC (PKCE, callback, session opaque)
 - [ ] Permissions
 - [ ] Pipeline CI GitLab
 - [ ] Docker local
@@ -34,3 +34,4 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Configuration OIDC Keycloak ajoutee et testee; login/callback HTTP et session frontend restent a implementer.
 - 2026-09-03: Helper PKCE frontend ajoute et typechecke; routes backend et ecran React restent a implementer.
 - 2026-09-03: Ecran React/Vite ajoute; test Playwright desktop/mobile reussi avec console sans erreur apres correction du favicon.
+- 2026-09-03: Callback backend et session Redis ajoutes; 10 tests backend et test Playwright du state invalide reussis.
