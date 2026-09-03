@@ -16,6 +16,9 @@ import { handleDashboardRequest, type DashboardHttpService } from './tasks/dashb
 import { DashboardService } from './tasks/dashboard-service.js';
 import { verifyAndParseWebhook, type WebhookSecretProvider } from './integrations/gitlab-webhook.js';
 import { processGitLabIssueWebhook, processGitLabMergeRequestWebhook, processGitLabPipelineWebhook, type GitLabStatusSync, type GitLabWebhookSync } from './integrations/gitlab-sync.js';
+import { handleHAProxyRequest, type HAProxyHttpService } from './tasks/haproxy-http.js';
+import { HAProxyClient } from './integrations/haproxy.js';
+import { roles, type Role } from './auth/permissions.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -27,6 +30,7 @@ export function createServer(
   webhookSync?: GitLabWebhookSync,
   statusSync?: GitLabStatusSync,
   dashboard?: DashboardHttpService,
+  haproxy?: HAProxyHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -106,6 +110,21 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/haproxy')) {
+      if (!haproxy) { writeJson(response, 503, { error: 'HAProxy management is not configured' }); return; }
+      // TODO: derive the role from the authenticated session once Keycloak sessions carry a
+      // resolved DevOS role; until then this header is a development-only placeholder.
+      const role = parseRole(headerValue(request.headers['x-devos-role']));
+      const result = await handleHAProxyRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, haproxy);
+      if (result.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -128,7 +147,24 @@ if (require.main === module) {
   const triage = new PrismaTriageService(database);
   const time = new PrismaTimeService(database);
   const dashboard = new DashboardService(database);
-  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+  const haproxy = buildHAProxyServiceFromEnv();
+  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+}
+
+function buildHAProxyServiceFromEnv(): HAProxyHttpService | undefined {
+  const baseUrl = process.env.HAPROXY_DATA_PLANE_URL;
+  const username = process.env.HAPROXY_USERNAME;
+  const password = process.env.HAPROXY_PASSWORD;
+  if (!baseUrl || !username || !password) return undefined;
+  const client = new HAProxyClient({ baseUrl, credentials: { username, password } });
+  return {
+    listBackends: () => client.listBackends(),
+    listFrontends: () => client.listFrontends(),
+    listServers: (backend) => client.listServers(backend),
+    addServer: (backend, server) => client.addServer(backend, server),
+    deleteServer: (backend, name) => client.deleteServer(backend, name),
+    reload: () => client.reload(),
+  };
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {
@@ -154,6 +190,10 @@ function writeJson(response: ServerResponse, status: number, body: unknown): voi
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function parseRole(value: string | undefined): Role | undefined {
+  return roles.find((role) => role === value);
 }
 
 function applyCors(request: IncomingMessage, response: ServerResponse): void {

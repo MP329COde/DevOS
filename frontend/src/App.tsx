@@ -27,6 +27,10 @@ export function App() {
   const [showTriage, setShowTriage] = useState(false);
   const [activeTimers, setActiveTimers] = useState<Record<string, string>>({});
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [showHAProxy, setShowHAProxy] = useState(false);
+  const [haproxyBackends, setHaproxyBackends] = useState<Array<{ name: string; mode?: string }>>([]);
+  const [haproxyServers, setHaproxyServers] = useState<Record<string, Array<{ name: string; address: string; port: number }>>>({});
+  const [haproxyError, setHaproxyError] = useState('');
   const titleInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -67,6 +71,23 @@ export function App() {
       .then(async (response) => { if (!response.ok) throw new Error(); setDashboardItems(await response.json()); })
       .catch(() => setDashboardItems([]));
   }, [showDashboard, dashboardDay]);
+
+  useEffect(() => {
+    if (!showHAProxy) return;
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/backends`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(response.status === 503 ? 'HAProxy n’est pas configuré sur ce backend.' : 'Impossible de charger les backends HAProxy.');
+        const backends = await response.json();
+        setHaproxyBackends(backends);
+        setHaproxyError('');
+        for (const backend of backends as Array<{ name: string }>) {
+          void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/backends/${encodeURIComponent(backend.name)}/servers`)
+            .then(async (response) => { if (!response.ok) return; const servers = await response.json(); setHaproxyServers((current) => ({ ...current, [backend.name]: servers })); })
+            .catch(() => undefined);
+        }
+      })
+      .catch((error: Error) => setHaproxyError(error.message));
+  }, [showHAProxy]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -167,7 +188,7 @@ export function App() {
       <section className="workspace" aria-labelledby="items-title">
         {cycles.length > 0 && <aside className="cycles" aria-label="Cycles"><span className="kicker">CYCLE ACTIF</span>{cycles.filter((cycle) => !cycle.closedAt).map((cycle) => <div className="cycle" key={cycle.id}><strong>{cycle.name}</strong><button type="button" onClick={() => void closeCycle(cycle.id)}>Clôturer</button></div>)}</aside>}
         <div className="section-heading"><div><span className="kicker">WORK QUEUE</span><h2 id="items-title">Vos items</h2></div><div className="filters" aria-label="Filtrer les items">{['all', 'task', 'doc', 'goal'].map((value) => <button className={filter === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setFilter(value)}>{value === 'all' ? 'Tout' : value}</button>)}</div></div>
-        <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={!showDashboard && !showTriage && view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => { setShowTriage(false); setShowDashboard(false); setView(value); }}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}<button className={showTriage ? 'filter active' : 'filter'} type="button" onClick={() => { setShowDashboard(false); setShowTriage(true); }}>Triage ({triage.length})</button><button className={showDashboard ? 'filter active' : 'filter'} type="button" onClick={() => { setShowTriage(false); setShowDashboard(true); }}>Aujourd’hui</button></nav>
+        <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={!showDashboard && !showTriage && !showHAProxy && view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => { setShowTriage(false); setShowDashboard(false); setShowHAProxy(false); setView(value); }}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}<button className={showTriage ? 'filter active' : 'filter'} type="button" onClick={() => { setShowDashboard(false); setShowHAProxy(false); setShowTriage(true); }}>Triage ({triage.length})</button><button className={showDashboard ? 'filter active' : 'filter'} type="button" onClick={() => { setShowTriage(false); setShowDashboard(true); setShowHAProxy(false); }}>Aujourd’hui</button><button className={showHAProxy ? 'filter active' : 'filter'} type="button" onClick={() => { setShowTriage(false); setShowDashboard(false); setShowHAProxy(true); }}>Infra HAProxy</button></nav>
         <form className="new-item" onSubmit={createItem}><select aria-label="Type" value={type} onChange={(event) => setType(event.target.value)}><option value="task">Tâche</option><option value="doc">Document</option><option value="goal">Objectif</option></select><input ref={titleInput} aria-label="Titre" placeholder="Ajouter un item..." value={title} onChange={(event) => setTitle(event.target.value)} /><input aria-label="Labels" placeholder="type::bug, priority::high" value={labels} onChange={(event) => setLabels(event.target.value)} /><input aria-label="Échéance" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /><button type="submit">Ajouter</button></form>
         {itemsError && <p className="error" role="alert">{itemsError}</p>}
         {showDashboard ? (
@@ -184,6 +205,23 @@ export function App() {
               </article>
             ))}
             {dashboardItems.length === 0 && <p className="empty">Aucun item programmé pour {dashboardDay === 'today' ? "aujourd'hui" : 'demain'}.</p>}
+          </div>
+        ) : showHAProxy ? (
+          <div className="items haproxy-panel">
+            {haproxyError && <p className="error" role="alert">{haproxyError}</p>}
+            {!haproxyError && haproxyBackends.length === 0 && <p className="empty">Aucun backend HAProxy à afficher.</p>}
+            {haproxyBackends.map((backend) => (
+              <section className="view-group" key={backend.name}>
+                <h3>{backend.name}{backend.mode ? ` (${backend.mode})` : ''}</h3>
+                {(haproxyServers[backend.name] ?? []).map((server) => (
+                  <article className="item haproxy-server" key={server.name}>
+                    <strong>{server.name}</strong>
+                    <span>{server.address}:{server.port}</span>
+                  </article>
+                ))}
+                {(haproxyServers[backend.name] ?? []).length === 0 && <p className="empty">Aucun serveur pour ce backend.</p>}
+              </section>
+            ))}
           </div>
         ) : showTriage ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div> : <div className={`items view-${view}`}>{view === 'list' ? visibleItems.map(itemCard) : Object.entries(groupedItems).map(([group, groupItems]) => <section className="view-group" key={group}><h3>{view === 'gantt' ? `Échéance ${group}` : group}</h3>{groupItems.map(itemCard)}</section>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>}
       </section>
