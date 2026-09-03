@@ -14,6 +14,7 @@ export function App() {
   const [filter, setFilter] = useState('all');
   const [title, setTitle] = useState('');
   const [type, setType] = useState('task');
+  const [labels, setLabels] = useState('');
   const [itemsError, setItemsError] = useState('');
 
   useEffect(() => {
@@ -62,12 +63,13 @@ export function App() {
     event.preventDefault();
     if (!title.trim()) return;
     const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/items`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, title }),
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, title, labels: labels.split(',').map((label) => label.trim()).filter(Boolean) }),
     });
     if (!response.ok) { setItemsError('Création impossible.'); return; }
     const created = await response.json();
     setItems((current) => [created, ...current]);
     setTitle('');
+    setLabels('');
   }
 
   async function updateStatus(item: { id: string }, nextStatus: string) {
@@ -92,7 +94,7 @@ export function App() {
       <header className="topbar"><div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">Aujourd’hui.</h1></div><button type="button" className="login" onClick={signIn}>Connexion SSO</button></header>
       <section className="workspace" aria-labelledby="items-title">
         <div className="section-heading"><div><span className="kicker">WORK QUEUE</span><h2 id="items-title">Vos items</h2></div><div className="filters" aria-label="Filtrer les items">{['all', 'task', 'doc', 'goal'].map((value) => <button className={filter === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setFilter(value)}>{value === 'all' ? 'Tout' : value}</button>)}</div></div>
-        <form className="new-item" onSubmit={createItem}><select aria-label="Type" value={type} onChange={(event) => setType(event.target.value)}><option value="task">Tâche</option><option value="doc">Document</option><option value="goal">Objectif</option></select><input aria-label="Titre" placeholder="Ajouter un item..." value={title} onChange={(event) => setTitle(event.target.value)} /><button type="submit">Ajouter</button></form>
+        <form className="new-item" onSubmit={createItem}><select aria-label="Type" value={type} onChange={(event) => setType(event.target.value)}><option value="task">Tâche</option><option value="doc">Document</option><option value="goal">Objectif</option></select><input aria-label="Titre" placeholder="Ajouter un item..." value={title} onChange={(event) => setTitle(event.target.value)} /><input aria-label="Labels" placeholder="type::bug, priority::high" value={labels} onChange={(event) => setLabels(event.target.value)} /><button type="submit">Ajouter</button></form>
         {itemsError && <p className="error" role="alert">{itemsError}</p>}
         <div className="items">{visibleItems.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></article>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>
       </section>

@@ -17,6 +17,20 @@ test('normalizes a title before creating an item', async () => {
   assert.equal(receivedTitle, 'Fix uptime');
 });
 
+test('stores labels as normalized relations when creating an item', async () => {
+  let receivedLabels: unknown;
+  const database = {
+    item: {
+      create: async ({ data }: { data: { labels: unknown } }) => { receivedLabels = data.labels; return {}; },
+    },
+  } as never;
+
+  await new ItemService(database).create({ type: ItemType.task, title: 'Labelled', labels: [' Priority::high '] });
+  assert.deepEqual(receivedLabels, {
+    create: [{ label: { connectOrCreate: { where: { prefix_value: { prefix: 'priority', value: 'high' } }, create: { prefix: 'priority', value: 'high' } } } }],
+  });
+});
+
 test('rejects empty or oversized titles', async () => {
   const service = new ItemService({} as never);
   await assert.rejects(() => service.create({ type: ItemType.task, title: ' ' }), /between 1 and 300/);

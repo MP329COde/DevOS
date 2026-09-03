@@ -38,10 +38,32 @@ model Item {
   parentId    String?   @db.Uuid @map("parent_id")
   parent      Item?     @relation("ItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children    Item[]    @relation("ItemHierarchy")
+  labels      ItemLabel[]
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@index([type, status])
   @@index([parentId])
   @@map("items")
+}
+
+model Label {
+  id        String      @id @default(uuid()) @db.Uuid
+  prefix    String      @db.VarChar(50)
+  value     String      @db.VarChar(100)
+  items     ItemLabel[]
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@unique([prefix, value])
+  @@map("labels")
+}
+
+model ItemLabel {
+  itemId  String @db.Uuid @map("item_id")
+  labelId String @db.Uuid @map("label_id")
+  item    Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  label   Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, labelId])
+  @@map("item_labels")
 }

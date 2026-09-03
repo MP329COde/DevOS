@@ -1,10 +1,13 @@
 import { ItemType, PrismaClient, type Item } from '@prisma/client';
 
+import { parseLabel } from './labels.js';
+
 export interface CreateItemInput {
   type: ItemType;
   title: string;
   description?: string;
   parentId?: string;
+  labels?: string[];
 }
 
 export interface UpdateItemInput {
@@ -18,11 +21,12 @@ export class ItemService {
   public constructor(private readonly database: PrismaClient) {}
 
   public list(): Promise<Item[]> {
-    return this.database.item.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.database.item.findMany({ include: { labels: { include: { label: true } } }, orderBy: { createdAt: 'desc' } }) as Promise<Item[]>;
   }
 
   public async create(input: CreateItemInput): Promise<Item> {
     const title = validTitle(input.title);
+    const labels = (input.labels ?? []).map(parseLabel);
     return this.database.item.create({
       data: {
         type: input.type,
@@ -30,6 +34,9 @@ export class ItemService {
         description: input.description,
         parentId: input.parentId,
         taskLevel: input.type === ItemType.task ? 'task' : null,
+        labels: {
+          create: labels.map((label) => ({ label: { connectOrCreate: { where: { prefix_value: label }, create: label } } })),
+        },
       },
     });
   }

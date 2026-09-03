@@ -30,6 +30,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - [x] Modele generique `items` (task/doc/goal)
 - [x] Hierarchie et rollup de statut
 - [x] CRUD complet des taches (API + UI)
+- [x] Systeme de labels croises (`prefix::value`)
 - [ ] CRUD complet des taches (service CRUD avance; handlers HTTP et UI restants)
 
 ## Historique
@@ -50,6 +51,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Hierarchie Epic/Story/Task et rollup de statut ajoutes; migrations Prisma conservees additives et 17 tests backend reussis.
 - 2026-09-03: Service CRUD items ajoute et teste; 19 tests backend passent. Handlers HTTP et UI restent a relier.
 - 2026-09-03: CRUD API/UI finalise; liste, filtres, creation, statut et suppression ajoutes. 21 tests et builds passent; Playwright mobile valide l'interface.
+- 2026-09-03: Labels normalises integres au modele et au CRUD, champ UI ajoute; 24 tests backend passent.
 
 ## Etat de la Phase 0
 
