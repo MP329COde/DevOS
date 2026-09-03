@@ -81,6 +81,7 @@ Phase 1 terminee et validee localement. La suite est la Phase 2, synchronisation
 - [x] Mapping item / projet GitLab / issue IID
 - [x] Sync GitLab -> DevOS via Triage
 - [x] Sync DevOS -> GitLab pour items liés
+- [x] Détection des liens `#<iid>`
 - [x] Webhooks GitLab sécurisés
 - [x] Mapping item / projet GitLab / issue IID
 - 2026-09-03: Cycles finalises avec service Prisma transactionnel, API/UI de cloture et report; 37 tests passent.

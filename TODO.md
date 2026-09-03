@@ -38,7 +38,7 @@
 - [x] Table de correspondance `task_id ↔ gitlab_project_id ↔ gitlab_issue_iid`
 - [x] Sync GitLab → Outil : création/mise à jour automatique d'une tâche depuis une issue GitLab (passe d'abord par Triage)
 - [x] Sync Outil → GitLab : toute modification d'une tâche liée met à jour l'issue GitLab correspondante (statut, labels, commentaires)
-- [ ] Détection automatique de lien via pattern `#<iid>` dans les commits/branches
+- [x] Détection automatique de lien via pattern `#<iid>` dans les commits/branches
 - [ ] Statut de tâche lié au cycle de vie de la MR associée (open/merged/closed), affichage du statut pipeline sur la carte de tâche
 - [ ] Gestion des conflits : dernière écriture gagne + log d'audit consultable
 - [ ] Tests d'intégration bout-en-bout avec une vraie instance GitLab (utiliser l'instance existante `mpc-gitlab.duckdns.org` en environnement de test)
@@ -115,6 +115,7 @@
 - 2026-09-03: Webhook GitLab sécurisé ajouté sur `/api/webhooks/gitlab`: secret fourni par provider, comparaison constant-time, événements supportés et accusé 202; aucune action automatique n'est déclenchée par le handler.
 - 2026-09-03: Table `gitlab_issue_links` ajoutée avec unicité issue/projet et item/projet, références Prisma et validation des IIDs positifs; 48 tests et builds passent.
 - 2026-09-03: Synchronisation bidirectionnelle ajoutée: issue webhook importée en Triage, item lié propagé vers GitLab avec état close/reopen, titre et description. 51 tests passent; aucune instance GitLab réelle appelée.
+- 2026-09-03: Détection automatique `#<iid>` ajoutée pour branches/commits, avec IIDs positifs uniques et faux positifs ignorés; 53 tests passent.
 - 2026-09-03: Statut de Triage ajouté (`none/pending/accepted/rejected`) avec migration et transitions contrôlées pour les items webhook. API/UI et intégration board restent à faire.
 - 2026-09-03: API cycles (`GET`, `POST`, clôture explicite) et panneau UI de cycle actif ajoutés; Playwright valide l'affichage et la clôture mockée. Le service Prisma concret et le report transactionnel restent à brancher.
 - 2026-09-03: Cycles finalisés avec `PrismaCycleService`: création/listage, clôture transactionnelle et report réel des items non terminés vers le cycle suivant. 37 tests et builds passent.
