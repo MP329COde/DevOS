@@ -12,7 +12,7 @@
 - [x] Intégration Vault : client backend + méthode Kubernetes Auth Method
 - [x] Intégration Keycloak OIDC (login backend + frontend, gestion de session)
 - [x] Modèle de permissions à 3 rôles : Admin / Contributeur / Lecteur
-- [ ] Pipeline CI GitLab pour le projet lui-même (lint, test, build)
+- [x] Pipeline CI GitLab pour le projet lui-même (lint, test, build)
 - [ ] Dockerfile + docker-compose pour dev local
 - [ ] Manifests Kubernetes de déploiement (Deployment, Service, Ingress via HAProxy existant)
 - [ ] `catalog-info.yaml` (ou équivalent) — spécifier le format que le module Catalogue lira plus tard
@@ -100,3 +100,4 @@
 - 2026-09-03: Ecran React/Vite de connexion ajouté, vérifié par Playwright desktop et mobile; console nettoyée après ajout du favicon. Le callback backend et la session Redis restent à implémenter.
 - 2026-09-03: Flux Keycloak finalisé: échange PKCE backend via secret Vault, session opaque Redis, cookie HttpOnly/Secure et validation frontend du state. Test Playwright du callback invalide réussi; la zone d'administration des références Vault sera approfondie avec les intégrations d'outils.
 - 2026-09-03: Permissions centralisées côté backend: Lecteur lecture seule, Contributeur collaboration sans administration, Admin toutes les actions déclarées dont l'infrastructure. Le frontend ne constitue pas une frontière de sécurité.
+- 2026-09-03: Pipeline GitLab ajoutée avec `npm ci`, lint/typecheck, tests et builds séparés; aucun déploiement automatique n'est inclus afin de garder les changements d'infrastructure explicitement déclenchés.

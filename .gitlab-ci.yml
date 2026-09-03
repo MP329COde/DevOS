@@ -1,0 +1,35 @@
+image: node:22-alpine
+
+stages:
+  - test
+  - build
+
+cache:
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - .npm/
+
+before_script:
+  - npm ci --cache .npm --prefer-offline
+
+lint:
+  stage: test
+  script:
+    - npm run lint
+
+unit_tests:
+  stage: test
+  script:
+    - npm test
+
+build:
+  stage: build
+  script:
+    - npm run build
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - backend/dist/
+      - frontend/dist/

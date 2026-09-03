@@ -10,6 +10,9 @@
     "db:validate": "npm --workspace backend run db:validate",
     "db:generate": "npm --workspace backend run db:generate",
     "db:migrate": "npm --workspace backend run db:migrate",
-    "typecheck": "npm --workspace backend run typecheck"
+    "typecheck": "npm --workspace backend run typecheck && npm --workspace frontend run typecheck",
+    "lint": "npm run typecheck",
+    "test": "npm --workspace backend test",
+    "build": "npm --workspace backend run build && npm --workspace frontend run build"
   }
 }

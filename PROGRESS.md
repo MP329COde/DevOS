@@ -10,7 +10,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - [x] Integration Vault (Kubernetes Auth Method + KV v2)
 - [x] Integration Keycloak OIDC (PKCE, callback, session opaque)
 - [x] Permissions (Admin / Contributeur / Lecteur)
-- [ ] Pipeline CI GitLab
+- [x] Pipeline CI GitLab (lint, test, build)
 - [ ] Docker local
 - [ ] Manifests Kubernetes
 - [ ] Format `catalog-info.yaml`
@@ -36,3 +36,4 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Ecran React/Vite ajoute; test Playwright desktop/mobile reussi avec console sans erreur apres correction du favicon.
 - 2026-09-03: Callback backend et session Redis ajoutes; 10 tests backend et test Playwright du state invalide reussis.
 - 2026-09-03: Matrice de permissions ajoutee et testee pour les trois roles, avec protection des actions d'administration et d'infrastructure.
+- 2026-09-03: Pipeline GitLab ajoutee et reproduite localement: lint, 14 tests et builds backend/frontend reussis.
