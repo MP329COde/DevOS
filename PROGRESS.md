@@ -25,6 +25,11 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - [ ] Phase 6 - Coder
 - [ ] Phase 7 - Elargissement
 
+## Phase 1 - Module Taches & Projets
+
+- [x] Modele generique `items` (task/doc/goal)
+- [ ] Hierarchie et rollup de statut
+
 ## Historique
 
 - 2026-09-03: branche `phase-0-foundation` creee; depot initialise; structure monorepo creee.

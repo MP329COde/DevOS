@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ItemType {
+  task
+  doc
+  goal
+}
+
 model SystemSetting {
   key       String   @id @db.VarChar(100)
   value     String   @db.Text
@@ -14,4 +20,21 @@ model SystemSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
+}
+
+model Item {
+  id          String    @id @default(uuid()) @db.Uuid
+  type        ItemType
+  title       String    @db.VarChar(300)
+  description String?   @db.Text
+  status      String    @default("backlog") @db.VarChar(50)
+  parentId    String?   @db.Uuid @map("parent_id")
+  parent      Item?     @relation("ItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Item[]    @relation("ItemHierarchy")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([type, status])
+  @@index([parentId])
+  @@map("items")
 }
