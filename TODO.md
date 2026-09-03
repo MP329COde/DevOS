@@ -25,7 +25,7 @@
 - [x] Système de labels croisés (préfixe::valeur, façon GitLab)
 - [x] Liens typés entre tâches (relates_to / blocks / is_blocked_by)
 - [x] Vues découplées de la donnée : Liste, Board (Kanban), Gantt simple, Calendrier — une seule API de requête paramétrable, plusieurs rendus frontend
-- [ ] Cycles (sprints allégés type Linear) avec report automatique des tâches non terminées à la clôture
+- [x] Cycles (sprints allégés type Linear) avec report automatique des tâches non terminées à la clôture
 - [ ] Moteur de règles interne (Trigger → Condition → Action, stocké en JSON, évalué à chaque événement)
 - [ ] File de Triage séparée pour toute tâche créée automatiquement (avant intégration à un board)
 - [ ] Command K (palette de commandes clavier-first) — **exigence UX non négociable**, dès ce stade
@@ -109,6 +109,7 @@
 - 2026-09-03: Noyau du moteur Trigger/Condition/Action ajouté; il retourne uniquement des actions déclaratives et n'exécute jamais les opérations d'infrastructure. Persistance JSON et branchement webhook restent à faire.
 - 2026-09-03: Statut de Triage ajouté (`none/pending/accepted/rejected`) avec migration et transitions contrôlées pour les items webhook. API/UI et intégration board restent à faire.
 - 2026-09-03: API cycles (`GET`, `POST`, clôture explicite) et panneau UI de cycle actif ajoutés; Playwright valide l'affichage et la clôture mockée. Le service Prisma concret et le report transactionnel restent à brancher.
+- 2026-09-03: Cycles finalisés avec `PrismaCycleService`: création/listage, clôture transactionnelle et report réel des items non terminés vers le cycle suivant. 37 tests et builds passent.
 - 2026-09-03: Validation projet complète réussie (lint, 28 tests, builds, Compose config). Le build Docker n'a pas pu démarrer car le daemon local n'était pas disponible; aucune image/service n'a été lancé.
 - 2026-09-03: Contrat de requête partagé ajouté avec filtres, tri et groupement; UI branchée sur les modes Liste/Board/Gantt/Calendrier et contrôlée par Playwright mobile. L'item vues reste ouvert pour les rendus métier complets et les données de timeline/calendrier.
 - 2026-09-03: Flux Keycloak finalisé: échange PKCE backend via secret Vault, session opaque Redis, cookie HttpOnly/Secure et validation frontend du state. Test Playwright du callback invalide réussi; la zone d'administration des références Vault sera approfondie avec les intégrations d'outils.
