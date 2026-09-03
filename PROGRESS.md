@@ -71,6 +71,10 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 ## Etat de la Phase 1
 
 Phase 1 terminee et validee localement. La suite est la Phase 2, synchronisation GitLab.
+
+## Phase 2 - Synchronisation GitLab
+
+- [x] Client API GitLab REST v4 et pagination Link
 - 2026-09-03: Cycles finalises avec service Prisma transactionnel, API/UI de cloture et report; 37 tests passent.
 - 2026-09-03: Statut Triage et transitions pending/accepted/rejected ajoutes; 34 tests passent. API/UI et integration board restent a relier.
 - 2026-09-03: API cycles et panneau UI de cloture ajoutes; Playwright valide le cycle actif et sa disparition apres succes. Service Prisma/report transactionnel restent a implementer.
