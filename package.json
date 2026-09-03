@@ -9,6 +9,7 @@
   "scripts": {
     "db:validate": "npm --workspace backend run db:validate",
     "db:generate": "npm --workspace backend run db:generate",
-    "db:migrate": "npm --workspace backend run db:migrate"
+    "db:migrate": "npm --workspace backend run db:migrate",
+    "typecheck": "npm --workspace backend run typecheck"
   }
 }
