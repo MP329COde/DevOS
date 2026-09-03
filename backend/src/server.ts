@@ -6,6 +6,7 @@ import { handleItemRequest, type ItemHttpService } from './tasks/item-http.js';
 import { handleCycleRequest, type CycleService } from './tasks/cycle-http.js';
 import { handleTriageRequest, type TriageService } from './tasks/triage-http.js';
 import { handleTimeRequest, type TimeService } from './tasks/time-http.js';
+import { verifyAndParseWebhook, type WebhookSecretProvider } from './integrations/gitlab-webhook.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -13,6 +14,7 @@ export function createServer(
   cycles?: CycleService,
   triage?: TriageService,
   time?: TimeService,
+  webhookSecret?: WebhookSecretProvider,
 ) {
   return createHttpServer(async (request, response) => {
     if (request.method === 'GET' && request.url === '/health') {
@@ -49,6 +51,18 @@ export function createServer(
       return;
     }
 
+    if (request.method === 'POST' && request.url === '/api/webhooks/gitlab') {
+      if (!webhookSecret) { writeJson(response, 503, { error: 'GitLab webhook is not configured' }); return; }
+      const rawBody = await readRaw(request);
+      try {
+        await verifyAndParseWebhook(headerValue(request.headers['x-gitlab-token']), headerValue(request.headers['x-gitlab-event']), rawBody, webhookSecret);
+        writeJson(response, 202, { accepted: true });
+      } catch (error) {
+        writeJson(response, 401, { error: error instanceof Error ? error.message : 'Invalid webhook' });
+      }
+      return;
+    }
+
     if (request.url?.startsWith('/api/items/') && request.url.endsWith('/time') || request.url?.startsWith('/api/time/')) {
       if (!time) { writeJson(response, 503, { error: 'Time tracking is not configured' }); return; }
       const result = await handleTimeRequest(request.method ?? 'GET', request.url, time);
@@ -76,9 +90,13 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {
+  return JSON.parse(await readRaw(request));
+}
+
+async function readRaw(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.from(chunk));
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 async function readJsonIfNeeded(request: IncomingMessage): Promise<unknown> {
@@ -88,4 +106,8 @@ async function readJsonIfNeeded(request: IncomingMessage): Promise<unknown> {
 function writeJson(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { 'content-type': 'application/json' });
   response.end(JSON.stringify(body));
+}
+
+function headerValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
