@@ -6,6 +6,7 @@ import { handleItemRequest, type ItemHttpService } from './tasks/item-http.js';
 import { handleCycleRequest, type CycleService } from './tasks/cycle-http.js';
 import { handleTriageRequest, type TriageService } from './tasks/triage-http.js';
 import { handleTimeRequest, type TimeService } from './tasks/time-http.js';
+import { handleDashboardRequest, type DashboardHttpService } from './tasks/dashboard-http.js';
 import { verifyAndParseWebhook, type WebhookSecretProvider } from './integrations/gitlab-webhook.js';
 import { processGitLabIssueWebhook, processGitLabMergeRequestWebhook, processGitLabPipelineWebhook, type GitLabStatusSync, type GitLabWebhookSync } from './integrations/gitlab-sync.js';
 
@@ -18,6 +19,7 @@ export function createServer(
   webhookSecret?: WebhookSecretProvider,
   webhookSync?: GitLabWebhookSync,
   statusSync?: GitLabStatusSync,
+  dashboard?: DashboardHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     if (request.method === 'GET' && request.url === '/health') {
@@ -43,6 +45,13 @@ export function createServer(
     if (request.url?.startsWith('/api/cycles')) {
       if (!cycles) { writeJson(response, 503, { error: 'Cycles are not configured' }); return; }
       const result = await handleCycleRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), cycles);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/dashboard')) {
+      if (!dashboard) { writeJson(response, 503, { error: 'Dashboard is not configured' }); return; }
+      const result = await handleDashboardRequest(request.method ?? 'GET', request.url, dashboard);
       writeJson(response, result.status, result.body);
       return;
     }

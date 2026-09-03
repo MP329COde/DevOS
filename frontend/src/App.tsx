@@ -19,6 +19,9 @@ export function App() {
   const [dueAt, setDueAt] = useState('');
   const [view, setView] = useState<'list' | 'board' | 'gantt' | 'calendar'>('list');
   const [itemsError, setItemsError] = useState('');
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [dashboardDay, setDashboardDay] = useState<'today' | 'tomorrow'>('today');
+  const [dashboardItems, setDashboardItems] = useState<Array<{ id: string; title: string; type: string; dueAt?: string | null }>>([]);
   const [cycles, setCycles] = useState<Array<{ id: string; name: string; closedAt?: string | null }>>([]);
   const [triage, setTriage] = useState<Array<{ id: string; title: string; type: string }>>([]);
   const [showTriage, setShowTriage] = useState(false);
@@ -57,6 +60,13 @@ export function App() {
       .then(async (response) => { if (!response.ok) throw new Error(); setCycles(await response.json()); })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!showDashboard) return;
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/dashboard/${dashboardDay}`)
+      .then(async (response) => { if (!response.ok) throw new Error(); setDashboardItems(await response.json()); })
+      .catch(() => setDashboardItems([]));
+  }, [showDashboard, dashboardDay]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -157,10 +167,25 @@ export function App() {
       <section className="workspace" aria-labelledby="items-title">
         {cycles.length > 0 && <aside className="cycles" aria-label="Cycles"><span className="kicker">CYCLE ACTIF</span>{cycles.filter((cycle) => !cycle.closedAt).map((cycle) => <div className="cycle" key={cycle.id}><strong>{cycle.name}</strong><button type="button" onClick={() => void closeCycle(cycle.id)}>Clôturer</button></div>)}</aside>}
         <div className="section-heading"><div><span className="kicker">WORK QUEUE</span><h2 id="items-title">Vos items</h2></div><div className="filters" aria-label="Filtrer les items">{['all', 'task', 'doc', 'goal'].map((value) => <button className={filter === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setFilter(value)}>{value === 'all' ? 'Tout' : value}</button>)}</div></div>
-        <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => { setShowTriage(false); setView(value); }}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}<button className={showTriage ? 'filter active' : 'filter'} type="button" onClick={() => setShowTriage(true)}>Triage ({triage.length})</button></nav>
+        <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={!showDashboard && !showTriage && view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => { setShowTriage(false); setShowDashboard(false); setView(value); }}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}<button className={showTriage ? 'filter active' : 'filter'} type="button" onClick={() => { setShowDashboard(false); setShowTriage(true); }}>Triage ({triage.length})</button><button className={showDashboard ? 'filter active' : 'filter'} type="button" onClick={() => { setShowTriage(false); setShowDashboard(true); }}>Aujourd’hui</button></nav>
         <form className="new-item" onSubmit={createItem}><select aria-label="Type" value={type} onChange={(event) => setType(event.target.value)}><option value="task">Tâche</option><option value="doc">Document</option><option value="goal">Objectif</option></select><input ref={titleInput} aria-label="Titre" placeholder="Ajouter un item..." value={title} onChange={(event) => setTitle(event.target.value)} /><input aria-label="Labels" placeholder="type::bug, priority::high" value={labels} onChange={(event) => setLabels(event.target.value)} /><input aria-label="Échéance" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /><button type="submit">Ajouter</button></form>
         {itemsError && <p className="error" role="alert">{itemsError}</p>}
-        {showTriage ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div> : <div className={`items view-${view}`}>{view === 'list' ? visibleItems.map(itemCard) : Object.entries(groupedItems).map(([group, groupItems]) => <section className="view-group" key={group}><h3>{view === 'gantt' ? `Échéance ${group}` : group}</h3>{groupItems.map(itemCard)}</section>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>}
+        {showDashboard ? (
+          <div className="items dashboard-timeline">
+            <div className="filters" aria-label="Jour du dashboard">
+              <button className={dashboardDay === 'today' ? 'filter active' : 'filter'} type="button" onClick={() => setDashboardDay('today')}>Aujourd’hui</button>
+              <button className={dashboardDay === 'tomorrow' ? 'filter active' : 'filter'} type="button" onClick={() => setDashboardDay('tomorrow')}>Demain</button>
+            </div>
+            {dashboardItems.map((item) => (
+              <article className="item timeline-entry" key={item.id}>
+                <span className="timeline-time">{item.dueAt ? new Date(item.dueAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
+                <span className={`type type-${item.type}`}>{item.type}</span>
+                <strong>{item.title}</strong>
+              </article>
+            ))}
+            {dashboardItems.length === 0 && <p className="empty">Aucun item programmé pour {dashboardDay === 'today' ? "aujourd'hui" : 'demain'}.</p>}
+          </div>
+        ) : showTriage ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div> : <div className={`items view-${view}`}>{view === 'list' ? visibleItems.map(itemCard) : Object.entries(groupedItems).map(([group, groupItems]) => <section className="view-group" key={group}><h3>{view === 'gantt' ? `Échéance ${group}` : group}</h3>{groupItems.map(itemCard)}</section>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>}
       </section>
       <span className="status" role="status">{status}</span>
       <Command.Dialog open={paletteOpen} onOpenChange={setPaletteOpen} label="Palette de commandes">
