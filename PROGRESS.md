@@ -13,7 +13,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - [x] Pipeline CI GitLab (lint, test, build)
 - [x] Docker local (Dockerfiles + Compose)
 - [x] Manifests Kubernetes (Deployment, Service, Ingress)
-- [ ] Format `catalog-info.yaml`
+- [x] Format `catalog-info.yaml` (Component + API)
 
 ## Phases suivantes
 
@@ -39,3 +39,8 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Pipeline GitLab ajoutee et reproduite localement: lint, 14 tests et builds backend/frontend reussis.
 - 2026-09-03: Dockerfiles et Compose local ajoutes; configuration Compose validee et endpoint backend `/health` teste sur build compile.
 - 2026-09-03: Manifests Kubernetes ajoutes et parses localement; aucun deploiement distant execute.
+- 2026-09-03: Format catalog-info.yaml defini et valide avec deux documents YAML et champs structurants obligatoires.
+
+## Etat de la Phase 0
+
+Phase 0 terminee et validee localement. La suite est la Phase 1, module Taches & Projets.

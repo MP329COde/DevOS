@@ -1,0 +1,42 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: devos
+  description: Centre de commande homelab auto-heberge
+  annotations:
+    devos.io/source: gitlab
+    devos.io/health-endpoint: /health
+  links:
+    - url: https://dev-mpcode.duckdns.org
+      title: DevOS
+spec:
+  type: service
+  lifecycle: experimental
+  owner: user:default/matthew
+  system: homelab
+  dependsOn:
+    - resource:default/devos-postgres
+    - resource:default/devos-redis
+  providesApis:
+    - devos-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: devos-api
+  description: API HTTP du centre de commande DevOS
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: user:default/matthew
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: DevOS API
+      version: 0.1.0
+    paths:
+      /health:
+        get:
+          responses:
+            '200':
+              description: Service disponible

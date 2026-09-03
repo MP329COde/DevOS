@@ -15,7 +15,7 @@
 - [x] Pipeline CI GitLab pour le projet lui-même (lint, test, build)
 - [x] Dockerfile + docker-compose pour dev local
 - [x] Manifests Kubernetes de déploiement (Deployment, Service, Ingress via HAProxy existant)
-- [ ] `catalog-info.yaml` (ou équivalent) — spécifier le format que le module Catalogue lira plus tard
+- [x] `catalog-info.yaml` (ou équivalent) — spécifier le format que le module Catalogue lira plus tard
 
 ## Phase 1 — Module Tâches & Projets (MVP cœur)
 
@@ -103,3 +103,4 @@
 - 2026-09-03: Pipeline GitLab ajoutée avec `npm ci`, lint/typecheck, tests et builds séparés; aucun déploiement automatique n'est inclus afin de garder les changements d'infrastructure explicitement déclenchés.
 - 2026-09-03: Dockerfiles multi-stage et `docker-compose.yml` ajoutés pour PostgreSQL, Redis, backend et frontend; valeurs de développement locales uniquement. Le serveur `/health` a été testé compilé sans démarrer l'infrastructure réelle.
 - 2026-09-03: Manifests Kubernetes ajoutés avec Namespace, ServiceAccount Vault, Deployments/Services et Ingress HAProxy pour `dev-mpcode.duckdns.org`. YAML parsé localement (7 documents); aucun `kubectl apply`, et la validation OpenAPI reste impossible tant que le cluster configuré est inaccessible.
+- 2026-09-03: Format `catalog-info.yaml` défini avec documents Backstage-compatible `Component` et `API`, dépendances, annotations DevOS et règles de validation multi-documents.
