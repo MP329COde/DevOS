@@ -7,7 +7,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - [x] Initialiser le depot et la structure monorepo (`backend/`, `frontend/`, `docs/`)
 - [x] Setup PostgreSQL + migrations (Prisma)
 - [x] Setup Redis (cache + pub/sub)
-- [ ] Integration Vault
+- [x] Integration Vault (Kubernetes Auth Method + KV v2)
 - [ ] Integration Keycloak OIDC
 - [ ] Permissions
 - [ ] Pipeline CI GitLab
@@ -30,3 +30,4 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: branche `phase-0-foundation` creee; depot initialise; structure monorepo creee.
 - 2026-09-03: Prisma configure, schema valide et client genere; migration initiale ajoutee.
 - 2026-09-03: Redis configure avec trois clients separes et tests unitaires sans dependance a un serveur local.
+- 2026-09-03: Client Vault configure et teste avec authentification Kubernetes et lecture KV v2 sans secret persiste.

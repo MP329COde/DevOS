@@ -9,7 +9,7 @@
 - [x] Initialiser le dépôt (structure monorepo : `backend/`, `frontend/`, `docs/`)
 - [x] Setup PostgreSQL + migrations (choisir un ORM : Prisma ou Drizzle)
 - [x] Setup Redis (cache + pub/sub pour le temps réel)
-- [ ] Intégration Vault : client backend + méthode Kubernetes Auth Method
+- [x] Intégration Vault : client backend + méthode Kubernetes Auth Method
 - [ ] Intégration Keycloak OIDC (login backend + frontend, gestion de session)
 - [ ] Modèle de permissions à 3 rôles : Admin / Contributeur / Lecteur
 - [ ] Pipeline CI GitLab pour le projet lui-même (lint, test, build)
@@ -93,3 +93,4 @@
 - 2026-09-03: Initialisation du dépôt sur la branche `phase-0-foundation`, avec un monorepo minimal et `PROGRESS.md` pour suivre les phases. Aucun framework ni dépendance n'est ajouté avant les items qui les nécessitent.
 - 2026-09-03: Prisma 6.19.3 retenu pour PostgreSQL: schema déclaratif, migrations versionnées et client TypeScript généré. La validation utilise une URL locale injectée au processus; les secrets de production resteront dans Vault. `npm install` signale 3 vulnérabilités élevées à traiter avant la mise en production.
 - 2026-09-03: Client officiel `redis` v5 retenu; la fabrique crée des connexions séparées pour cache, publication et abonnement, sans connexion automatique au chargement.
+- 2026-09-03: Client Vault implémenté avec Kubernetes Auth Method et lecture KV v2 à la demande; le JWT vient du fichier ServiceAccount monté, et le token Vault reste uniquement en mémoire.
