@@ -31,6 +31,30 @@ test('stores labels as normalized relations when creating an item', async () => 
   });
 });
 
+test('persists GitLab merge request and pipeline status when provided', async () => {
+  let receivedData: unknown;
+  const database = {
+    item: {
+      update: async ({ data }: { data: unknown }) => { receivedData = data; return {}; },
+    },
+  } as never;
+
+  await new ItemService(database).update('item-1', { mergeRequestState: 'merged', pipelineStatus: 'success' });
+  assert.deepEqual(receivedData, { mergeRequestState: 'merged', pipelineStatus: 'success' });
+});
+
+test('leaves GitLab merge request and pipeline status untouched when absent from the update', async () => {
+  let receivedData: unknown;
+  const database = {
+    item: {
+      update: async ({ data }: { data: unknown }) => { receivedData = data; return {}; },
+    },
+  } as never;
+
+  await new ItemService(database).update('item-1', { status: 'in_progress' });
+  assert.deepEqual(receivedData, { status: 'in_progress' });
+});
+
 test('rejects empty or oversized titles', async () => {
   const service = new ItemService({} as never);
   await assert.rejects(() => service.create({ type: ItemType.task, title: ' ' }), /between 1 and 300/);

@@ -50,6 +50,8 @@ model Item {
   status      String    @default("backlog") @db.VarChar(50)
   dueAt       DateTime? @map("due_at")
   triage      TriageStatus @default(none)
+  mergeRequestState String? @map("merge_request_state") @db.VarChar(20)
+  pipelineStatus String? @map("pipeline_status") @db.VarChar(20)
   cycleId     String?   @db.Uuid @map("cycle_id")
   cycle       Cycle?    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   timeEntries TimeEntry[]

@@ -16,6 +16,8 @@ export interface UpdateItemInput {
   description?: string;
   status?: string;
   parentId?: string | null;
+  mergeRequestState?: string | null;
+  pipelineStatus?: string | null;
 }
 
 export class ItemService {
@@ -51,6 +53,8 @@ export class ItemService {
         ...(input.description === undefined ? {} : { description: input.description }),
         ...(input.status === undefined ? {} : { status: input.status }),
         ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+        ...(input.mergeRequestState === undefined ? {} : { mergeRequestState: input.mergeRequestState }),
+        ...(input.pipelineStatus === undefined ? {} : { pipelineStatus: input.pipelineStatus }),
       },
     });
   }

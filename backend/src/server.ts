@@ -7,7 +7,7 @@ import { handleCycleRequest, type CycleService } from './tasks/cycle-http.js';
 import { handleTriageRequest, type TriageService } from './tasks/triage-http.js';
 import { handleTimeRequest, type TimeService } from './tasks/time-http.js';
 import { verifyAndParseWebhook, type WebhookSecretProvider } from './integrations/gitlab-webhook.js';
-import { processGitLabIssueWebhook, type GitLabWebhookSync } from './integrations/gitlab-sync.js';
+import { processGitLabIssueWebhook, processGitLabMergeRequestWebhook, processGitLabPipelineWebhook, type GitLabStatusSync, type GitLabWebhookSync } from './integrations/gitlab-sync.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -17,6 +17,7 @@ export function createServer(
   time?: TimeService,
   webhookSecret?: WebhookSecretProvider,
   webhookSync?: GitLabWebhookSync,
+  statusSync?: GitLabStatusSync,
 ) {
   return createHttpServer(async (request, response) => {
     if (request.method === 'GET' && request.url === '/health') {
@@ -59,6 +60,8 @@ export function createServer(
       try {
         const event = await verifyAndParseWebhook(headerValue(request.headers['x-gitlab-token']), headerValue(request.headers['x-gitlab-event']), rawBody, webhookSecret);
         if (webhookSync && event.type === 'Issue Hook') await processGitLabIssueWebhook(event.payload, webhookSync);
+        if (statusSync && event.type === 'Merge Request Hook') await processGitLabMergeRequestWebhook(event.payload, statusSync);
+        if (statusSync && event.type === 'Pipeline Hook') await processGitLabPipelineWebhook(event.payload, statusSync);
         writeJson(response, 202, { accepted: true });
       } catch (error) {
         writeJson(response, 401, { error: error instanceof Error ? error.message : 'Invalid webhook' });

@@ -39,7 +39,7 @@
 - [x] Sync GitLab → Outil : création/mise à jour automatique d'une tâche depuis une issue GitLab (passe d'abord par Triage)
 - [x] Sync Outil → GitLab : toute modification d'une tâche liée met à jour l'issue GitLab correspondante (statut, labels, commentaires)
 - [x] Détection automatique de lien via pattern `#<iid>` dans les commits/branches
-- [ ] Statut de tâche lié au cycle de vie de la MR associée (open/merged/closed), affichage du statut pipeline sur la carte de tâche
+- [x] Statut de tâche lié au cycle de vie de la MR associée (open/merged/closed), affichage du statut pipeline sur la carte de tâche
 - [ ] Gestion des conflits : dernière écriture gagne + log d'audit consultable
 - [ ] Tests d'intégration bout-en-bout avec une vraie instance GitLab (utiliser l'instance existante `mpc-gitlab.duckdns.org` en environnement de test)
 
@@ -127,3 +127,4 @@
 - 2026-09-03: Dockerfiles multi-stage et `docker-compose.yml` ajoutés pour PostgreSQL, Redis, backend et frontend; valeurs de développement locales uniquement. Le serveur `/health` a été testé compilé sans démarrer l'infrastructure réelle.
 - 2026-09-03: Manifests Kubernetes ajoutés avec Namespace, ServiceAccount Vault, Deployments/Services et Ingress HAProxy pour `dev-mpcode.duckdns.org`. YAML parsé localement (7 documents); aucun `kubectl apply`, et la validation OpenAPI reste impossible tant que le cluster configuré est inaccessible.
 - 2026-09-03: Format `catalog-info.yaml` défini avec documents Backstage-compatible `Component` et `API`, dépendances, annotations DevOS et règles de validation multi-documents.
+- 2026-09-03: Statut MR/pipeline branché de bout en bout: `projectGitLabStatus` désormais appelé par `processGitLabMergeRequestWebhook`/`processGitLabPipelineWebhook` dans `gitlab-sync.ts`, résolution de l'item via `GitLabIssueLink` (référence `#<iid>` dans le titre/description de la MR), et persistance via `ItemService.update` étendu (`mergeRequestState`/`pipelineStatus` non exposés côté API publique, réservés à la sync interne). Hypothèse retenue: un pipeline n'est propagé que s'il est rattaché à une merge request (`payload.merge_request` présent) — un pipeline de branche seule n'a pas de cible fiable et n'est pas traité. Le câblage Prisma réel (instanciation `PrismaClient` + injection dans `createServer`) n'existe pas encore côté `backend/src` pour aucun des flux GitLab (comme `Issue Hook` déjà en place) — uniquement les fonctions/services testés unitairement.

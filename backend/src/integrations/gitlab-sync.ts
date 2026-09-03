@@ -1,3 +1,5 @@
+import { extractIssueIids } from './gitlab-links.js';
+import { projectGitLabStatus, type GitLabStatusProjection, type MergeRequestState, type PipelineStatus } from './gitlab-status.js';
 import type { GitLabClient, GitLabIssue } from './gitlab.js';
 
 export interface SyncItem {
@@ -42,4 +44,59 @@ export async function processGitLabIssueWebhook(payload: unknown, sync: GitLabWe
     labels: [],
     web_url: typeof attributes.url === 'string' ? attributes.url : '',
   });
+}
+
+export interface GitLabStatusSync {
+  findItemIdByGitLabIssue(gitlabProjectId: string, issueIid: number): Promise<string | null>;
+  applyStatus(itemId: string, status: GitLabStatusProjection): Promise<void>;
+}
+
+function normalizeMergeRequestState(state: unknown): MergeRequestState | undefined {
+  if (state === 'opened' || state === 'reopened') return 'opened';
+  if (state === 'merged') return 'merged';
+  if (state === 'closed') return 'closed';
+  return undefined;
+}
+
+function normalizePipelineStatus(status: unknown): PipelineStatus | undefined {
+  const known: readonly PipelineStatus[] = ['created', 'pending', 'running', 'success', 'failed', 'canceled', 'skipped'];
+  return known.find((candidate) => candidate === status);
+}
+
+export async function processGitLabMergeRequestWebhook(payload: unknown, sync: GitLabStatusSync): Promise<void> {
+  if (!payload || typeof payload !== 'object') return;
+  const attributes = (payload as { object_attributes?: Record<string, unknown> }).object_attributes;
+  const project = (payload as { project?: { id?: number } }).project;
+  if (!attributes || !project?.id) return;
+  const state = normalizeMergeRequestState(attributes.state);
+  if (!state) return;
+  const title = typeof attributes.title === 'string' ? attributes.title : '';
+  const description = typeof attributes.description === 'string' ? attributes.description : '';
+  const gitlabProjectId = String(project.id);
+  const projection = projectGitLabStatus(state);
+  for (const issueIid of extractIssueIids(title, description)) {
+    const itemId = await sync.findItemIdByGitLabIssue(gitlabProjectId, issueIid);
+    if (itemId) await sync.applyStatus(itemId, projection);
+  }
+}
+
+// Un pipeline n'est propagé sur une carte que lorsqu'il est rattache a une merge request
+// (payload.merge_request present) : un pipeline de branche seule n'a pas de cible fiable.
+export async function processGitLabPipelineWebhook(payload: unknown, sync: GitLabStatusSync): Promise<void> {
+  if (!payload || typeof payload !== 'object') return;
+  const attributes = (payload as { object_attributes?: Record<string, unknown> }).object_attributes;
+  const mergeRequest = (payload as { merge_request?: Record<string, unknown> }).merge_request;
+  const project = (payload as { project?: { id?: number } }).project;
+  if (!attributes || !project?.id || !mergeRequest) return;
+  const pipelineStatus = normalizePipelineStatus(attributes.status);
+  if (!pipelineStatus) return;
+  const mergeRequestState = normalizeMergeRequestState(mergeRequest.state);
+  if (!mergeRequestState) return;
+  const title = typeof mergeRequest.title === 'string' ? mergeRequest.title : '';
+  const gitlabProjectId = String(project.id);
+  const projection = projectGitLabStatus(mergeRequestState, pipelineStatus);
+  for (const issueIid of extractIssueIids(title)) {
+    const itemId = await sync.findItemIdByGitLabIssue(gitlabProjectId, issueIid);
+    if (itemId) await sync.applyStatus(itemId, projection);
+  }
 }

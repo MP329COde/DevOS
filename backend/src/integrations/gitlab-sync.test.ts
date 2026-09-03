@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { importIssueToTriage, processGitLabIssueWebhook, pushItemToGitLab } from './gitlab-sync.js';
+import { importIssueToTriage, processGitLabIssueWebhook, processGitLabMergeRequestWebhook, processGitLabPipelineWebhook, pushItemToGitLab } from './gitlab-sync.js';
 
 test('imports GitLab issues into pending triage', async () => {
   let created: unknown;
@@ -23,4 +23,55 @@ test('processes an issue webhook through the pending triage importer', async () 
   });
   assert.equal(imported, true);
   assert.equal(result?.triage, 'pending');
+});
+
+test('applies a done status when a merge request referencing an item is merged', async () => {
+  let applied: unknown;
+  await processGitLabMergeRequestWebhook(
+    { object_attributes: { state: 'merged', title: 'Fixes #4' }, project: { id: 42 } },
+    {
+      async findItemIdByGitLabIssue(gitlabProjectId, issueIid) { assert.equal(gitlabProjectId, '42'); assert.equal(issueIid, 4); return 'item-4'; },
+      async applyStatus(itemId, status) { applied = { itemId, status }; },
+    },
+  );
+  assert.deepEqual(applied, { itemId: 'item-4', status: { itemStatus: 'done', mergeRequestState: 'merged', pipelineStatus: undefined } });
+});
+
+test('does not apply a status when no item is linked to the referenced issue', async () => {
+  let applied = false;
+  await processGitLabMergeRequestWebhook(
+    { object_attributes: { state: 'opened', title: 'Fixes #4' }, project: { id: 42 } },
+    { async findItemIdByGitLabIssue() { return null; }, async applyStatus() { applied = true; } },
+  );
+  assert.equal(applied, false);
+});
+
+test('ignores merge request webhooks with an unrecognized state', async () => {
+  let applied = false;
+  await processGitLabMergeRequestWebhook(
+    { object_attributes: { state: 'locked', title: 'Fixes #4' }, project: { id: 42 } },
+    { async findItemIdByGitLabIssue() { return 'item-4'; }, async applyStatus() { applied = true; } },
+  );
+  assert.equal(applied, false);
+});
+
+test('applies a blocked status when a pipeline attached to a merge request fails', async () => {
+  let applied: unknown;
+  await processGitLabPipelineWebhook(
+    { object_attributes: { status: 'failed' }, merge_request: { state: 'opened', title: 'Fixes #7' }, project: { id: 42 } },
+    {
+      async findItemIdByGitLabIssue(gitlabProjectId, issueIid) { assert.equal(gitlabProjectId, '42'); assert.equal(issueIid, 7); return 'item-7'; },
+      async applyStatus(itemId, status) { applied = { itemId, status }; },
+    },
+  );
+  assert.deepEqual(applied, { itemId: 'item-7', status: { itemStatus: 'blocked', mergeRequestState: 'opened', pipelineStatus: 'failed' } });
+});
+
+test('ignores pipeline webhooks that are not attached to a merge request', async () => {
+  let applied = false;
+  await processGitLabPipelineWebhook(
+    { object_attributes: { status: 'failed' }, project: { id: 42 } },
+    { async findItemIdByGitLabIssue() { return 'item-7'; }, async applyStatus() { applied = true; } },
+  );
+  assert.equal(applied, false);
 });
