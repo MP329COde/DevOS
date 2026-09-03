@@ -32,7 +32,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - [x] CRUD complet des taches (API + UI)
 - [x] Systeme de labels croises (`prefix::value`)
 - [x] Liens types entre taches
-- [ ] CRUD complet des taches (service CRUD avance; handlers HTTP et UI restants)
+- [x] Vues decouplees (Liste, Board, Gantt, Calendrier)
 
 ## Historique
 
@@ -55,6 +55,8 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Labels normalises integres au modele et au CRUD, champ UI ajoute; 24 tests backend passent.
 - 2026-09-03: Liens types et inversion des relations de blocage ajoutes; migrations validees et 26 tests backend passent.
 - 2026-09-03: Requete partagee et modes Liste/Board/Gantt/Calendrier ajoutes; 28 tests passent et Playwright mobile valide le changement de vue. Rendus timeline/calendrier detailles restent a finaliser.
+- 2026-09-03: Echeance `dueAt` ajoutee et rendus Gantt/Calendrier groupes par date; validation Prisma, builds et Playwright mobile reussis.
+- 2026-09-03: Validation globale reussie hors Docker; `docker compose build` bloque par daemon Docker local arrete.
 
 ## Etat de la Phase 0
 

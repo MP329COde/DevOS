@@ -41,6 +41,7 @@ model Item {
   title       String    @db.VarChar(300)
   description String?   @db.Text
   status      String    @default("backlog") @db.VarChar(50)
+  dueAt       DateTime? @map("due_at")
   parentId    String?   @db.Uuid @map("parent_id")
   parent      Item?     @relation("ItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children    Item[]    @relation("ItemHierarchy")

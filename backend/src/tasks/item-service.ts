@@ -8,6 +8,7 @@ export interface CreateItemInput {
   description?: string;
   parentId?: string;
   labels?: string[];
+  dueAt?: string;
 }
 
 export interface UpdateItemInput {
@@ -37,6 +38,7 @@ export class ItemService {
         labels: {
           create: labels.map((label) => ({ label: { connectOrCreate: { where: { prefix_value: label }, create: label } } })),
         },
+        ...(input.dueAt ? { dueAt: validDate(input.dueAt) } : {}),
       },
     });
   }
@@ -56,6 +58,12 @@ export class ItemService {
   public delete(id: string): Promise<Item> {
     return this.database.item.delete({ where: { id } });
   }
+}
+
+function validDate(value: string): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error('Item due date must be a valid ISO date');
+  return date;
 }
 
 function validTitle(title: string): string {

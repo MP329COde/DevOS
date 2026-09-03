@@ -24,7 +24,7 @@
 - [x] CRUD complet des tâches (API + UI)
 - [x] Système de labels croisés (préfixe::valeur, façon GitLab)
 - [x] Liens typés entre tâches (relates_to / blocks / is_blocked_by)
-- [ ] Vues découplées de la donnée : Liste, Board (Kanban), Gantt simple, Calendrier — une seule API de requête paramétrable, plusieurs rendus frontend
+- [x] Vues découplées de la donnée : Liste, Board (Kanban), Gantt simple, Calendrier — une seule API de requête paramétrable, plusieurs rendus frontend
 - [ ] Cycles (sprints allégés type Linear) avec report automatique des tâches non terminées à la clôture
 - [ ] Moteur de règles interne (Trigger → Condition → Action, stocké en JSON, évalué à chaque événement)
 - [ ] File de Triage séparée pour toute tâche créée automatiquement (avant intégration à un board)
@@ -104,6 +104,8 @@
 - 2026-09-03: CRUD finalisé avec handlers HTTP et UI React: liste, filtre par type, création, changement de statut et suppression. 21 tests, lint et builds passent; Playwright mobile valide le rendu et le filtre. L'API nécessite le backend démarré pour afficher les données.
 - 2026-09-03: Labels croisés intégrés au CRUD: tables `labels`/`item_labels`, unicité préfixe-valeur, parsing `prefix::value`, création relationnelle et champ UI multi-labels séparé par virgules. 24 tests passent.
 - 2026-09-03: Liens typés ajoutés via `item_links` à clé composite source/cible/type, avec cascades, interdiction des auto-liens et inversion `blocks`/`is_blocked_by`. 26 tests passent.
+- 2026-09-03: Vues découplées finalisées avec `dueAt` nullable, champ échéance CRUD et groupement réel par date pour Gantt/Calendrier. Prisma, lint, 28 tests, builds et Playwright mobile passent; aucun déploiement distant effectué.
+- 2026-09-03: Validation projet complète réussie (lint, 28 tests, builds, Compose config). Le build Docker n'a pas pu démarrer car le daemon local n'était pas disponible; aucune image/service n'a été lancé.
 - 2026-09-03: Contrat de requête partagé ajouté avec filtres, tri et groupement; UI branchée sur les modes Liste/Board/Gantt/Calendrier et contrôlée par Playwright mobile. L'item vues reste ouvert pour les rendus métier complets et les données de timeline/calendrier.
 - 2026-09-03: Flux Keycloak finalisé: échange PKCE backend via secret Vault, session opaque Redis, cookie HttpOnly/Secure et validation frontend du state. Test Playwright du callback invalide réussi; la zone d'administration des références Vault sera approfondie avec les intégrations d'outils.
 - 2026-09-03: Permissions centralisées côté backend: Lecteur lecture seule, Contributeur collaboration sans administration, Admin toutes les actions déclarées dont l'infrastructure. Le frontend ne constitue pas une frontière de sécurité.

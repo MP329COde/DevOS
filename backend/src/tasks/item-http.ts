@@ -46,6 +46,7 @@ function parseCreate(body: unknown) {
     type: input.type as 'task' | 'doc' | 'goal',
     title: input.title,
     ...(Array.isArray(input.labels) ? { labels: input.labels.filter((label): label is string => typeof label === 'string') } : {}),
+    ...(typeof input.dueAt === 'string' ? { dueAt: input.dueAt } : {}),
     ...(typeof input.description === 'string' ? { description: input.description } : {}),
   };
 }
