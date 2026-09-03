@@ -44,10 +44,11 @@ export class GitLabClient {
   }
 
   public async updateIssue(projectId: string, issueIid: number, update: { title?: string; description?: string; labels?: string[]; stateEvent?: 'close' | 'reopen' }): Promise<void> {
+    const { stateEvent, ...rest } = update;
     await this.request(`/projects/${encodeURIComponent(projectId)}/issues/${issueIid}`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...update, labels: update.labels?.join(',') }),
+      body: JSON.stringify({ ...rest, labels: update.labels?.join(','), state_event: stateEvent }),
     });
   }
 
