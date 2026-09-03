@@ -27,7 +27,7 @@
 - [x] Vues découplées de la donnée : Liste, Board (Kanban), Gantt simple, Calendrier — une seule API de requête paramétrable, plusieurs rendus frontend
 - [x] Cycles (sprints allégés type Linear) avec report automatique des tâches non terminées à la clôture
 - [x] Moteur de règles interne (Trigger → Condition → Action, stocké en JSON, évalué à chaque événement)
-- [ ] File de Triage séparée pour toute tâche créée automatiquement (avant intégration à un board)
+- [x] File de Triage séparée pour toute tâche créée automatiquement (avant intégration à un board)
 - [ ] Command K (palette de commandes clavier-first) — **exigence UX non négociable**, dès ce stade
 - [ ] Time tracking basique (start/stop sur une tâche, historique)
 
@@ -108,6 +108,7 @@
 - 2026-09-03: Cycles ajoutés côté domaine avec dates, fermeture et report pur des items non terminés; migrations, lint, builds et 30 tests passent. UI/API de gestion des cycles restent à relier.
 - 2026-09-03: Noyau du moteur Trigger/Condition/Action ajouté; il retourne uniquement des actions déclaratives et n'exécute jamais les opérations d'infrastructure. Persistance JSON et branchement webhook restent à faire.
 - 2026-09-03: Moteur de règles finalisé avec table JSONB `automation_rules`, service Prisma et évaluation `actionsFor(event)` sans exécution implicite; 38 tests passent.
+- 2026-09-03: File Triage finalisée: items `pending` exclus de la liste générale, API GET/accept/reject, service Prisma et vue UI dédiée. Playwright valide l'acceptation mockée; 39 tests passent.
 - 2026-09-03: Statut de Triage ajouté (`none/pending/accepted/rejected`) avec migration et transitions contrôlées pour les items webhook. API/UI et intégration board restent à faire.
 - 2026-09-03: API cycles (`GET`, `POST`, clôture explicite) et panneau UI de cycle actif ajoutés; Playwright valide l'affichage et la clôture mockée. Le service Prisma concret et le report transactionnel restent à brancher.
 - 2026-09-03: Cycles finalisés avec `PrismaCycleService`: création/listage, clôture transactionnelle et report réel des items non terminés vers le cycle suivant. 37 tests et builds passent.

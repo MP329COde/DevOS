@@ -35,6 +35,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - [x] Vues decouplees (Liste, Board, Gantt, Calendrier)
 - [x] Cycles et report automatique
 - [x] Moteur de regles declaratif et persistant
+- [x] File de Triage
 
 ## Historique
 
@@ -61,6 +62,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Cycles et report des items incomplets ajoutes et testes; 30 tests passent. Interface et endpoints de cycle restent a relier.
 - 2026-09-03: Moteur de regles declaratif ajoute et teste; 32 tests passent. Persistance JSON et evaluation sur webhooks restent a relier.
 - 2026-09-03: Moteur de regles persistant en JSONB et evaluation par evenement finalises; 38 tests passent sans execution automatique d'action.
+- 2026-09-03: File Triage API/UI finalisee avec isolation des pending et transitions explicites; Playwright valide l'acceptation et 39 tests passent.
 - 2026-09-03: Cycles finalises avec service Prisma transactionnel, API/UI de cloture et report; 37 tests passent.
 - 2026-09-03: Statut Triage et transitions pending/accepted/rejected ajoutes; 34 tests passent. API/UI et integration board restent a relier.
 - 2026-09-03: API cycles et panneau UI de cloture ajoutes; Playwright valide le cycle actif et sa disparition apres succes. Service Prisma/report transactionnel restent a implementer.
