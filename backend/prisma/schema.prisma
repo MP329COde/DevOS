@@ -123,6 +123,18 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model HAProxyChangeLog {
+  id         String    @id @default(uuid()) @db.Uuid
+  action     String    @db.VarChar(20)
+  backend    String    @db.VarChar(100)
+  server     Json
+  createdAt  DateTime  @default(now()) @map("created_at")
+  revertedAt DateTime? @map("reverted_at")
+
+  @@index([backend])
+  @@map("haproxy_change_logs")
+}
+
 model GitLabIssueLink {
   id              String   @id @default(uuid()) @db.Uuid
   itemId          String   @db.Uuid @map("item_id")

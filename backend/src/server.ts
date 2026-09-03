@@ -18,6 +18,8 @@ import { verifyAndParseWebhook, type WebhookSecretProvider } from './integration
 import { processGitLabIssueWebhook, processGitLabMergeRequestWebhook, processGitLabPipelineWebhook, type GitLabStatusSync, type GitLabWebhookSync } from './integrations/gitlab-sync.js';
 import { handleHAProxyRequest, type HAProxyHttpService } from './tasks/haproxy-http.js';
 import { HAProxyClient } from './integrations/haproxy.js';
+import { addServerWithHistory, deleteServerWithHistory, rollbackChange } from './integrations/haproxy-history.js';
+import { PrismaHAProxyHistoryRepository } from './integrations/haproxy-history-repository.js';
 import { roles, type Role } from './auth/permissions.js';
 
 export function createServer(
@@ -147,23 +149,26 @@ if (require.main === module) {
   const triage = new PrismaTriageService(database);
   const time = new PrismaTimeService(database);
   const dashboard = new DashboardService(database);
-  const haproxy = buildHAProxyServiceFromEnv();
+  const haproxy = buildHAProxyServiceFromEnv(database);
   createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
 }
 
-function buildHAProxyServiceFromEnv(): HAProxyHttpService | undefined {
+function buildHAProxyServiceFromEnv(database: PrismaClient): HAProxyHttpService | undefined {
   const baseUrl = process.env.HAPROXY_DATA_PLANE_URL;
   const username = process.env.HAPROXY_USERNAME;
   const password = process.env.HAPROXY_PASSWORD;
   if (!baseUrl || !username || !password) return undefined;
   const client = new HAProxyClient({ baseUrl, credentials: { username, password } });
+  const history = new PrismaHAProxyHistoryRepository(database);
   return {
     listBackends: () => client.listBackends(),
     listFrontends: () => client.listFrontends(),
     listServers: (backend) => client.listServers(backend),
-    addServer: (backend, server) => client.addServer(backend, server),
-    deleteServer: (backend, name) => client.deleteServer(backend, name),
+    addServer: (backend, server) => addServerWithHistory(client, history, backend, server),
+    deleteServer: (backend, name) => deleteServerWithHistory(client, history, backend, name),
     reload: () => client.reload(),
+    listHistory: () => history.list(),
+    rollback: (id) => rollbackChange(id, history, client),
   };
 }
 

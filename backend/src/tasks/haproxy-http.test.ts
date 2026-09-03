@@ -10,6 +10,8 @@ const readOnlyService = {
   async addServer() {},
   async deleteServer() {},
   async reload() {},
+  async listHistory() { return []; },
+  async rollback() {},
 };
 
 test('lists backends without requiring a role', async () => {
@@ -59,4 +61,24 @@ test('allows an admin to trigger a reload', async () => {
 test('rejects an invalid server payload', async () => {
   const result = await handleHAProxyRequest('POST', '/api/haproxy/backends/web-backend/servers', { name: 'srv2' }, 'Admin', readOnlyService);
   assert.equal(result.status, 400);
+});
+
+test('lists the change history without requiring a role', async () => {
+  const record = { id: 'change-1', action: 'add_server' as const, backend: 'web-backend', server: { name: 'srv1', address: '10.0.0.1', port: 8080 }, createdAt: new Date(), revertedAt: null };
+  const service = { ...readOnlyService, async listHistory() { return [record]; } };
+  const result = await handleHAProxyRequest('GET', '/api/haproxy/history', null, undefined, service);
+  assert.deepEqual(result, { status: 200, body: [record] });
+});
+
+test('rejects a rollback request for a non-admin role', async () => {
+  const result = await handleHAProxyRequest('POST', '/api/haproxy/history/change-1/rollback', null, 'Contributeur', readOnlyService);
+  assert.equal(result.status, 400);
+});
+
+test('allows an admin to roll back a change', async () => {
+  let rolledBack: unknown;
+  const service = { ...readOnlyService, async rollback(id: string) { rolledBack = id; } };
+  const result = await handleHAProxyRequest('POST', '/api/haproxy/history/change-1/rollback', null, 'Admin', service);
+  assert.equal(result.status, 200);
+  assert.equal(rolledBack, 'change-1');
 });

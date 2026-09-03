@@ -1,5 +1,6 @@
 import { assertCan, type Role } from '../auth/permissions.js';
 import type { HAProxyBackend, HAProxyFrontend, HAProxyServer } from '../integrations/haproxy.js';
+import type { HAProxyChangeRecord } from '../integrations/haproxy-history.js';
 
 export interface HAProxyHttpService {
   listBackends(): Promise<HAProxyBackend[]>;
@@ -8,6 +9,8 @@ export interface HAProxyHttpService {
   addServer(backend: string, server: HAProxyServer, role: Role): Promise<void>;
   deleteServer(backend: string, name: string, role: Role): Promise<void>;
   reload(role: Role): Promise<void>;
+  listHistory(): Promise<HAProxyChangeRecord[]>;
+  rollback(id: string, role: Role): Promise<void>;
 }
 
 export interface HAProxyHttpResponse {
@@ -36,6 +39,14 @@ export async function handleHAProxyRequest(method: string, path: string, body: u
     if (method === 'POST' && path === '/api/haproxy/reload') {
       await service.reload(requireRole(role));
       return { status: 202, body: { accepted: true } };
+    }
+
+    if (method === 'GET' && path === '/api/haproxy/history') return { status: 200, body: await service.listHistory() };
+
+    const rollback = path.match(/^\/api\/haproxy\/history\/([^/]+)\/rollback$/);
+    if (method === 'POST' && rollback) {
+      await service.rollback(decodeURIComponent(rollback[1]), requireRole(role));
+      return { status: 200, body: { accepted: true } };
     }
 
     return { status: 404, body: { error: 'Not found' } };
