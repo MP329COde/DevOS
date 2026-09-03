@@ -42,6 +42,14 @@ export class GitLabClient {
     });
   }
 
+  public async updateIssue(projectId: string, issueIid: number, update: { title?: string; description?: string; labels?: string[]; stateEvent?: 'close' | 'reopen' }): Promise<void> {
+    await this.request(`/projects/${encodeURIComponent(projectId)}/issues/${issueIid}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...update, labels: update.labels?.join(',') }),
+    });
+  }
+
   private async request<T>(pathOrUrl: string, init?: RequestInit): Promise<{ body: T; next?: string }> {
     const token = await this.options.tokenProvider.getToken();
     const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${this.options.baseUrl}${pathOrUrl}`;
