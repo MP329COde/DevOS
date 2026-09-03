@@ -11,7 +11,7 @@
 - [x] Setup Redis (cache + pub/sub pour le temps réel)
 - [x] Intégration Vault : client backend + méthode Kubernetes Auth Method
 - [x] Intégration Keycloak OIDC (login backend + frontend, gestion de session)
-- [ ] Modèle de permissions à 3 rôles : Admin / Contributeur / Lecteur
+- [x] Modèle de permissions à 3 rôles : Admin / Contributeur / Lecteur
 - [ ] Pipeline CI GitLab pour le projet lui-même (lint, test, build)
 - [ ] Dockerfile + docker-compose pour dev local
 - [ ] Manifests Kubernetes de déploiement (Deployment, Service, Ingress via HAProxy existant)
@@ -99,3 +99,4 @@
 - 2026-09-03: Helper frontend PKCE ajoute avec challenge S256, state et client public sans secret; les routes backend login/callback et l'application React restent a relier.
 - 2026-09-03: Ecran React/Vite de connexion ajouté, vérifié par Playwright desktop et mobile; console nettoyée après ajout du favicon. Le callback backend et la session Redis restent à implémenter.
 - 2026-09-03: Flux Keycloak finalisé: échange PKCE backend via secret Vault, session opaque Redis, cookie HttpOnly/Secure et validation frontend du state. Test Playwright du callback invalide réussi; la zone d'administration des références Vault sera approfondie avec les intégrations d'outils.
+- 2026-09-03: Permissions centralisées côté backend: Lecteur lecture seule, Contributeur collaboration sans administration, Admin toutes les actions déclarées dont l'infrastructure. Le frontend ne constitue pas une frontière de sécurité.

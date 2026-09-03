@@ -9,7 +9,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - [x] Setup Redis (cache + pub/sub)
 - [x] Integration Vault (Kubernetes Auth Method + KV v2)
 - [x] Integration Keycloak OIDC (PKCE, callback, session opaque)
-- [ ] Permissions
+- [x] Permissions (Admin / Contributeur / Lecteur)
 - [ ] Pipeline CI GitLab
 - [ ] Docker local
 - [ ] Manifests Kubernetes
@@ -35,3 +35,4 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Helper PKCE frontend ajoute et typechecke; routes backend et ecran React restent a implementer.
 - 2026-09-03: Ecran React/Vite ajoute; test Playwright desktop/mobile reussi avec console sans erreur apres correction du favicon.
 - 2026-09-03: Callback backend et session Redis ajoutes; 10 tests backend et test Playwright du state invalide reussis.
+- 2026-09-03: Matrice de permissions ajoutee et testee pour les trois roles, avec protection des actions d'administration et d'infrastructure.
