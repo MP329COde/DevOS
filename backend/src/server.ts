@@ -25,6 +25,10 @@ import { handleCatalogRequest, type CatalogHttpService } from './catalog/catalog
 import { CatalogService } from './catalog/catalog-service.js';
 import { scanCatalogFromGitLab } from './catalog/catalog-scan.js';
 import { GitLabClient } from './integrations/gitlab.js';
+import { handleInfraRequest, type InfraHttpService } from './catalog/infra-http.js';
+import { KubernetesClient } from './catalog/kubernetes.js';
+import { ArgoCDClient } from './catalog/argocd.js';
+import { HarborTrivyClient } from './catalog/harbor-trivy.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -38,6 +42,7 @@ export function createServer(
   dashboard?: DashboardHttpService,
   haproxy?: HAProxyHttpService,
   catalog?: CatalogHttpService,
+  infra?: InfraHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -132,6 +137,13 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/catalog/kubernetes') || request.url?.startsWith('/api/catalog/argocd') || request.url?.startsWith('/api/catalog/trivy')) {
+      if (!infra) { writeJson(response, 503, { error: 'Infrastructure integrations are not configured' }); return; }
+      const result = await handleInfraRequest(request.method ?? 'GET', request.url, infra);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.url?.startsWith('/api/catalog')) {
       if (!catalog) { writeJson(response, 503, { error: 'Catalog is not configured' }); return; }
       const result = await handleCatalogRequest(request.method ?? 'GET', request.url, catalog);
@@ -163,7 +175,37 @@ if (require.main === module) {
   const dashboard = new DashboardService(database);
   const haproxy = buildHAProxyServiceFromEnv(database);
   const catalog = buildCatalogServiceFromEnv(database);
-  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+  const infra = buildInfraServiceFromEnv();
+  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+}
+
+function buildInfraServiceFromEnv(): InfraHttpService | undefined {
+  const k8sApiServer = process.env.K8S_API_SERVER;
+  const k8sToken = process.env.K8S_TOKEN;
+  const argoBaseUrl = process.env.ARGOCD_BASE_URL;
+  const argoToken = process.env.ARGOCD_TOKEN;
+  const harborBaseUrl = process.env.HARBOR_BASE_URL;
+  const harborUsername = process.env.HARBOR_USERNAME;
+  const harborPassword = process.env.HARBOR_PASSWORD;
+  if (!k8sApiServer && !k8sToken && !argoBaseUrl && !argoToken && !harborBaseUrl) return undefined;
+
+  const kubernetes = k8sApiServer && k8sToken ? new KubernetesClient({ apiServer: k8sApiServer, token: k8sToken }) : undefined;
+  const argocd = argoBaseUrl && argoToken ? new ArgoCDClient({ baseUrl: argoBaseUrl, token: argoToken }) : undefined;
+  const harbor = harborBaseUrl && harborUsername && harborPassword ? new HarborTrivyClient({ baseUrl: harborBaseUrl, username: harborUsername, password: harborPassword }) : undefined;
+
+  const requireClient = <T>(client: T | undefined, name: string): T => {
+    if (!client) throw new Error(`${name} is not configured`);
+    return client;
+  };
+
+  return {
+    listPods: (namespace) => requireClient(kubernetes, 'Kubernetes').listPods(namespace),
+    listDeployments: (namespace) => requireClient(kubernetes, 'Kubernetes').listDeployments(namespace),
+    listNodes: () => requireClient(kubernetes, 'Kubernetes').listNodes(),
+    listArgoApplications: () => requireClient(argocd, 'ArgoCD').listApplications(),
+    getArgoSyncHistory: (name) => requireClient(argocd, 'ArgoCD').getSyncHistory(name),
+    getTrivySummary: (project, repository, tag) => requireClient(harbor, 'Harbor').getVulnerabilitySummary(project, repository, tag),
+  };
 }
 
 function buildCatalogServiceFromEnv(database: PrismaClient): CatalogHttpService {

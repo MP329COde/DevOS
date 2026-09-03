@@ -32,6 +32,8 @@ export function App() {
   const [catalogEntities, setCatalogEntities] = useState<Array<{ kind: string; name: string; type: string; owner: string; sourceProject: string }>>([]);
   const [catalogGraph, setCatalogGraph] = useState<{ nodes: Array<{ id: string; known: boolean }>; edges: Array<{ from: string; to: string }> }>({ nodes: [], edges: [] });
   const [catalogError, setCatalogError] = useState('');
+  const [k8sNodes, setK8sNodes] = useState<Array<{ name: string; ready: boolean }>>([]);
+  const [argoApps, setArgoApps] = useState<Array<{ name: string; syncStatus: string; healthStatus: string }>>([]);
   const titleInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -101,6 +103,12 @@ export function App() {
       .catch((error: Error) => setCatalogError(error.message));
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/catalog/graph`)
       .then(async (response) => { if (response.ok) setCatalogGraph(await response.json()); })
+      .catch(() => undefined);
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/catalog/kubernetes/nodes`)
+      .then(async (response) => { if (response.ok) setK8sNodes(await response.json()); })
+      .catch(() => undefined);
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/catalog/argocd/applications`)
+      .then(async (response) => { if (response.ok) setArgoApps(await response.json()); })
       .catch(() => undefined);
   }, [panel]);
 
@@ -265,6 +273,18 @@ export function App() {
               <section className="view-group">
                 <h3>Dépendances</h3>
                 {catalogGraph.edges.map((edge, index) => <p className="empty" key={index}>{edge.from} → {edge.to}</p>)}
+              </section>
+            )}
+            {k8sNodes.length > 0 && (
+              <section className="view-group">
+                <h3>Nœuds Kubernetes ({k8sNodes.filter((node) => node.ready).length}/{k8sNodes.length} prêts)</h3>
+                {k8sNodes.map((node) => <p className="empty" key={node.name}>{node.name} — {node.ready ? 'ready' : 'not ready'}</p>)}
+              </section>
+            )}
+            {argoApps.length > 0 && (
+              <section className="view-group">
+                <h3>Applications ArgoCD</h3>
+                {argoApps.map((app) => <p className="empty" key={app.name}>{app.name} — {app.syncStatus} / {app.healthStatus}</p>)}
               </section>
             )}
           </div>
