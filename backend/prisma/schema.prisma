@@ -80,6 +80,20 @@ model Cycle {
   @@map("cycles")
 }
 
+model AutomationRule {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(150)
+  enabled   Boolean  @default(true)
+  trigger   String   @db.VarChar(80)
+  condition Json?
+  action    Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled, trigger])
+  @@map("automation_rules")
+}
+
 model Label {
   id        String      @id @default(uuid()) @db.Uuid
   prefix    String      @db.VarChar(50)
