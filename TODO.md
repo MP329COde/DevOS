@@ -14,7 +14,7 @@
 - [x] Modèle de permissions à 3 rôles : Admin / Contributeur / Lecteur
 - [x] Pipeline CI GitLab pour le projet lui-même (lint, test, build)
 - [x] Dockerfile + docker-compose pour dev local
-- [ ] Manifests Kubernetes de déploiement (Deployment, Service, Ingress via HAProxy existant)
+- [x] Manifests Kubernetes de déploiement (Deployment, Service, Ingress via HAProxy existant)
 - [ ] `catalog-info.yaml` (ou équivalent) — spécifier le format que le module Catalogue lira plus tard
 
 ## Phase 1 — Module Tâches & Projets (MVP cœur)
@@ -102,3 +102,4 @@
 - 2026-09-03: Permissions centralisées côté backend: Lecteur lecture seule, Contributeur collaboration sans administration, Admin toutes les actions déclarées dont l'infrastructure. Le frontend ne constitue pas une frontière de sécurité.
 - 2026-09-03: Pipeline GitLab ajoutée avec `npm ci`, lint/typecheck, tests et builds séparés; aucun déploiement automatique n'est inclus afin de garder les changements d'infrastructure explicitement déclenchés.
 - 2026-09-03: Dockerfiles multi-stage et `docker-compose.yml` ajoutés pour PostgreSQL, Redis, backend et frontend; valeurs de développement locales uniquement. Le serveur `/health` a été testé compilé sans démarrer l'infrastructure réelle.
+- 2026-09-03: Manifests Kubernetes ajoutés avec Namespace, ServiceAccount Vault, Deployments/Services et Ingress HAProxy pour `dev-mpcode.duckdns.org`. YAML parsé localement (7 documents); aucun `kubectl apply`, et la validation OpenAPI reste impossible tant que le cluster configuré est inaccessible.

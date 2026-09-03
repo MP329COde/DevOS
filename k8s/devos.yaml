@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devos
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: devos-backend
+  namespace: devos
+  annotations:
+    vault.hashicorp.com/role: devos-backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devos-backend
+  namespace: devos
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devos-backend
+  template:
+    metadata:
+      labels:
+        app: devos-backend
+    spec:
+      serviceAccountName: devos-backend
+      containers:
+        - name: backend
+          image: REPLACE_WITH_REGISTRY/devos/backend:latest
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: VAULT_KUBERNETES_ROLE
+              value: devos-backend
+            - name: VAULT_KUBERNETES_JWT_FILE
+              value: /var/run/secrets/kubernetes.io/serviceaccount/token
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devos-backend
+  namespace: devos
+spec:
+  selector:
+    app: devos-backend
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devos-frontend
+  namespace: devos
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devos-frontend
+  template:
+    metadata:
+      labels:
+        app: devos-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: REPLACE_WITH_REGISTRY/devos/frontend:latest
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 150m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devos-frontend
+  namespace: devos
+spec:
+  selector:
+    app: devos-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devos
+  namespace: devos
+  annotations:
+    kubernetes.io/ingress.class: haproxy
+spec:
+  rules:
+    - host: dev-mpcode.duckdns.org
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: devos-backend
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: devos-frontend
+                port:
+                  name: http

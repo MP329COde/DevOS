@@ -12,7 +12,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - [x] Permissions (Admin / Contributeur / Lecteur)
 - [x] Pipeline CI GitLab (lint, test, build)
 - [x] Docker local (Dockerfiles + Compose)
-- [ ] Manifests Kubernetes
+- [x] Manifests Kubernetes (Deployment, Service, Ingress)
 - [ ] Format `catalog-info.yaml`
 
 ## Phases suivantes
@@ -38,3 +38,4 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Matrice de permissions ajoutee et testee pour les trois roles, avec protection des actions d'administration et d'infrastructure.
 - 2026-09-03: Pipeline GitLab ajoutee et reproduite localement: lint, 14 tests et builds backend/frontend reussis.
 - 2026-09-03: Dockerfiles et Compose local ajoutes; configuration Compose validee et endpoint backend `/health` teste sur build compile.
+- 2026-09-03: Manifests Kubernetes ajoutes et parses localement; aucun deploiement distant execute.
