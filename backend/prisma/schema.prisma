@@ -25,6 +25,13 @@ enum ItemLinkType {
   is_blocked_by
 }
 
+enum TriageStatus {
+  none
+  pending
+  accepted
+  rejected
+}
+
 model SystemSetting {
   key       String   @id @db.VarChar(100)
   value     String   @db.Text
@@ -42,6 +49,7 @@ model Item {
   description String?   @db.Text
   status      String    @default("backlog") @db.VarChar(50)
   dueAt       DateTime? @map("due_at")
+  triage      TriageStatus @default(none)
   cycleId     String?   @db.Uuid @map("cycle_id")
   cycle       Cycle?    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   parentId    String?   @db.Uuid @map("parent_id")
