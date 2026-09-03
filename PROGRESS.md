@@ -59,6 +59,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Cycles et report des items incomplets ajoutes et testes; 30 tests passent. Interface et endpoints de cycle restent a relier.
 - 2026-09-03: Moteur de regles declaratif ajoute et teste; 32 tests passent. Persistance JSON et evaluation sur webhooks restent a relier.
 - 2026-09-03: Statut Triage et transitions pending/accepted/rejected ajoutes; 34 tests passent. API/UI et integration board restent a relier.
+- 2026-09-03: API cycles et panneau UI de cloture ajoutes; Playwright valide le cycle actif et sa disparition apres succes. Service Prisma/report transactionnel restent a implementer.
 - 2026-09-03: Validation globale reussie hors Docker; `docker compose build` bloque par daemon Docker local arrete.
 
 ## Etat de la Phase 0

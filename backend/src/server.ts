@@ -3,10 +3,12 @@ import { createServer as createHttpServer, type IncomingMessage, type ServerResp
 import { handleAuthCallback } from './infrastructure/keycloak-http.js';
 import type { KeycloakAuthService } from './infrastructure/keycloak-auth.js';
 import { handleItemRequest, type ItemHttpService } from './tasks/item-http.js';
+import { handleCycleRequest, type CycleService } from './tasks/cycle-http.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
   items?: ItemHttpService,
+  cycles?: CycleService,
 ) {
   return createHttpServer(async (request, response) => {
     if (request.method === 'GET' && request.url === '/health') {
@@ -25,6 +27,13 @@ export function createServer(
         response.end();
         return;
       }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/cycles')) {
+      if (!cycles) { writeJson(response, 503, { error: 'Cycles are not configured' }); return; }
+      const result = await handleCycleRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), cycles);
       writeJson(response, result.status, result.body);
       return;
     }

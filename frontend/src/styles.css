@@ -21,6 +21,9 @@ body { margin: 0; min-width: 320px; }
 .topbar h1 { margin-bottom: 0; }
 .login { background: #17211b; }
 .workspace { max-width: 1120px; margin: 0 auto; }
+.cycles { margin-bottom: 24px; padding: 14px 18px; border-left: 4px solid #a34f31; background: rgba(255, 252, 242, .72); }
+.cycle { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 8px; font: 15px Arial, sans-serif; }
+.cycle button { padding: 8px 12px; }
 .kicker { font: 700 11px Arial, sans-serif; color: #a34f31; }
 h2 { margin: 8px 0 20px; font-size: 34px; }
 .filters { display: flex; gap: 6px; flex-wrap: wrap; }
