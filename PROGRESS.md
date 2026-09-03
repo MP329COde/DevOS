@@ -28,7 +28,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 ## Phase 1 - Module Taches & Projets
 
 - [x] Modele generique `items` (task/doc/goal)
-- [ ] Hierarchie et rollup de statut
+- [x] Hierarchie et rollup de statut
 
 ## Historique
 
@@ -45,6 +45,7 @@ Etat maintenu au fil des phases du backlog `TODO.md`.
 - 2026-09-03: Dockerfiles et Compose local ajoutes; configuration Compose validee et endpoint backend `/health` teste sur build compile.
 - 2026-09-03: Manifests Kubernetes ajoutes et parses localement; aucun deploiement distant execute.
 - 2026-09-03: Format catalog-info.yaml defini et valide avec deux documents YAML et champs structurants obligatoires.
+- 2026-09-03: Hierarchie Epic/Story/Task et rollup de statut ajoutes; migrations Prisma conservees additives et 17 tests backend reussis.
 
 ## Etat de la Phase 0
 

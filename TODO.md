@@ -20,7 +20,7 @@
 ## Phase 1 — Module Tâches & Projets (MVP cœur)
 
 - [x] Modèle de données : table `items` générique (type: task/doc/goal), voir INFO.md section 6
-- [ ] Hiérarchie Epic > Story > Task avec rollup automatique de statut
+- [x] Hiérarchie Epic > Story > Task avec rollup automatique de statut
 - [ ] CRUD complet des tâches (API + UI)
 - [ ] Système de labels croisés (préfixe::valeur, façon GitLab)
 - [ ] Liens typés entre tâches (relates_to / blocks / is_blocked_by)
@@ -99,6 +99,7 @@
 - 2026-09-03: Helper frontend PKCE ajoute avec challenge S256, state et client public sans secret; les routes backend login/callback et l'application React restent a relier.
 - 2026-09-03: Ecran React/Vite de connexion ajouté, vérifié par Playwright desktop et mobile; console nettoyée après ajout du favicon. Le callback backend et la session Redis restent à implémenter.
 - 2026-09-03: Modèle Prisma `Item` ajouté avec type `task/doc/goal`, statut extensible, parent/enfants auto-référencés et index de requête; le rollup hiérarchique est réservé à l'item suivant.
+- 2026-09-03: Hiérarchie ajoutée via `TaskLevel` nullable et migration additive; le rollup pur donne priorité à `blocked`, puis `done` si tous les enfants sont terminés, sinon `in_progress`.
 - 2026-09-03: Flux Keycloak finalisé: échange PKCE backend via secret Vault, session opaque Redis, cookie HttpOnly/Secure et validation frontend du state. Test Playwright du callback invalide réussi; la zone d'administration des références Vault sera approfondie avec les intégrations d'outils.
 - 2026-09-03: Permissions centralisées côté backend: Lecteur lecture seule, Contributeur collaboration sans administration, Admin toutes les actions déclarées dont l'infrastructure. Le frontend ne constitue pas une frontière de sécurité.
 - 2026-09-03: Pipeline GitLab ajoutée avec `npm ci`, lint/typecheck, tests et builds séparés; aucun déploiement automatique n'est inclus afin de garder les changements d'infrastructure explicitement déclenchés.
