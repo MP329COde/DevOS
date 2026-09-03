@@ -13,6 +13,12 @@ export interface GitLabIssue {
   updated_at?: string;
 }
 
+export interface GitLabProject {
+  id: number;
+  path_with_namespace: string;
+  default_branch: string | null;
+}
+
 export interface GitLabClientOptions {
   baseUrl: string;
   tokenProvider: GitLabTokenProvider;
@@ -33,6 +39,25 @@ export class GitLabClient {
       for (const issue of page.body) yield issue;
       url = page.next;
     }
+  }
+
+  public async *listProjects(): AsyncGenerator<GitLabProject> {
+    let url: string | undefined = `${this.options.baseUrl}/projects?membership=true&simple=true`;
+    while (url) {
+      const page: { body: GitLabProject[]; next?: string } = await this.request<GitLabProject[]>(url);
+      for (const project of page.body) yield project;
+      url = page.next;
+    }
+  }
+
+  /** Returns the raw file content at `path` on `ref`, or `null` if the file does not exist in the repository. */
+  public async getRawFile(projectId: string, path: string, ref: string): Promise<string | null> {
+    const token = await this.options.tokenProvider.getToken();
+    const url = `${this.options.baseUrl}/projects/${encodeURIComponent(projectId)}/repository/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(ref)}`;
+    const response = await this.fetchImpl(url, { headers: { 'private-token': token } });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`GitLab API request failed (${response.status})`);
+    return response.text();
   }
 
   public async addNote(projectId: string, issueIid: number, body: string): Promise<void> {

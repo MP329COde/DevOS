@@ -21,6 +21,10 @@ import { HAProxyClient } from './integrations/haproxy.js';
 import { addServerWithHistory, deleteServerWithHistory, rollbackChange } from './integrations/haproxy-history.js';
 import { PrismaHAProxyHistoryRepository } from './integrations/haproxy-history-repository.js';
 import { roles, type Role } from './auth/permissions.js';
+import { handleCatalogRequest, type CatalogHttpService } from './catalog/catalog-http.js';
+import { CatalogService } from './catalog/catalog-service.js';
+import { scanCatalogFromGitLab } from './catalog/catalog-scan.js';
+import { GitLabClient } from './integrations/gitlab.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -33,6 +37,7 @@ export function createServer(
   statusSync?: GitLabStatusSync,
   dashboard?: DashboardHttpService,
   haproxy?: HAProxyHttpService,
+  catalog?: CatalogHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -127,6 +132,13 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/catalog')) {
+      if (!catalog) { writeJson(response, 503, { error: 'Catalog is not configured' }); return; }
+      const result = await handleCatalogRequest(request.method ?? 'GET', request.url, catalog);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -150,7 +162,25 @@ if (require.main === module) {
   const time = new PrismaTimeService(database);
   const dashboard = new DashboardService(database);
   const haproxy = buildHAProxyServiceFromEnv(database);
-  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+  const catalog = buildCatalogServiceFromEnv(database);
+  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+}
+
+function buildCatalogServiceFromEnv(database: PrismaClient): CatalogHttpService {
+  const service = new CatalogService(database);
+  return {
+    list: () => service.list(),
+    graph: () => service.graph(),
+    async scan() {
+      const baseUrl = process.env.GITLAB_BASE_URL;
+      const token = process.env.GITLAB_TOKEN;
+      if (!baseUrl || !token) throw new Error('GITLAB_BASE_URL and GITLAB_TOKEN must be set to scan the catalog');
+      const gitlab = new GitLabClient({ baseUrl, tokenProvider: { async getToken() { return token; } } });
+      const result = await scanCatalogFromGitLab(gitlab);
+      await service.sync(result.entities);
+      return { scanned: result.entities.length, errors: result.errors };
+    },
+  };
 }
 
 function buildHAProxyServiceFromEnv(database: PrismaClient): HAProxyHttpService | undefined {
