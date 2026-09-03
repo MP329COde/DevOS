@@ -1,12 +1,19 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
+import { PrismaClient } from '@prisma/client';
+
 import { handleAuthCallback } from './infrastructure/keycloak-http.js';
 import type { KeycloakAuthService } from './infrastructure/keycloak-auth.js';
 import { handleItemRequest, type ItemHttpService } from './tasks/item-http.js';
+import { ItemService } from './tasks/item-service.js';
 import { handleCycleRequest, type CycleService } from './tasks/cycle-http.js';
+import { PrismaCycleService } from './tasks/cycle-service.js';
 import { handleTriageRequest, type TriageService } from './tasks/triage-http.js';
+import { PrismaTriageService } from './tasks/triage-service.js';
 import { handleTimeRequest, type TimeService } from './tasks/time-http.js';
+import { PrismaTimeService } from './tasks/time-service.js';
 import { handleDashboardRequest, type DashboardHttpService } from './tasks/dashboard-http.js';
+import { DashboardService } from './tasks/dashboard-service.js';
 import { verifyAndParseWebhook, type WebhookSecretProvider } from './integrations/gitlab-webhook.js';
 import { processGitLabIssueWebhook, processGitLabMergeRequestWebhook, processGitLabPipelineWebhook, type GitLabStatusSync, type GitLabWebhookSync } from './integrations/gitlab-sync.js';
 
@@ -22,8 +29,29 @@ export function createServer(
   dashboard?: DashboardHttpService,
 ) {
   return createHttpServer(async (request, response) => {
+    applyCors(request, response);
+    if (request.method === 'OPTIONS') {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+    try {
+      await handleRequest(request, response);
+    } catch (error) {
+      if (!response.headersSent) writeJson(response, 500, { error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+  });
+
+  async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (request.method === 'GET' && request.url === '/health') {
       writeJson(response, 200, { status: 'ok' });
+      return;
+    }
+
+    if (request.url?.startsWith('/api/items/') && request.url.endsWith('/time') || request.url?.startsWith('/api/time/')) {
+      if (!time) { writeJson(response, 503, { error: 'Time tracking is not configured' }); return; }
+      const result = await handleTimeRequest(request.method ?? 'GET', request.url, time);
+      writeJson(response, result.status, result.body);
       return;
     }
 
@@ -78,13 +106,6 @@ export function createServer(
       return;
     }
 
-    if (request.url?.startsWith('/api/items/') && request.url.endsWith('/time') || request.url?.startsWith('/api/time/')) {
-      if (!time) { writeJson(response, 503, { error: 'Time tracking is not configured' }); return; }
-      const result = await handleTimeRequest(request.method ?? 'GET', request.url, time);
-      writeJson(response, result.status, result.body);
-      return;
-    }
-
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -97,11 +118,17 @@ export function createServer(
     }
 
     writeJson(response, 404, { error: 'Not found' });
-  });
+  }
 }
 
-if (process.env.NODE_ENV !== 'test') {
-  createServer().listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+if (require.main === module) {
+  const database = new PrismaClient();
+  const items = new ItemService(database);
+  const cycles = new PrismaCycleService(database);
+  const triage = new PrismaTriageService(database);
+  const time = new PrismaTimeService(database);
+  const dashboard = new DashboardService(database);
+  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {
@@ -115,7 +142,9 @@ async function readRaw(request: IncomingMessage): Promise<string> {
 }
 
 async function readJsonIfNeeded(request: IncomingMessage): Promise<unknown> {
-  return request.method === 'GET' || request.method === 'DELETE' ? null : readJson(request);
+  if (request.method === 'GET' || request.method === 'DELETE') return null;
+  const raw = await readRaw(request);
+  return raw.trim() === '' ? null : (JSON.parse(raw) as unknown);
 }
 
 function writeJson(response: ServerResponse, status: number, body: unknown): void {
@@ -125,4 +154,17 @@ function writeJson(response: ServerResponse, status: number, body: unknown): voi
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function applyCors(request: IncomingMessage, response: ServerResponse): void {
+  const configuredOrigin = process.env.FRONTEND_ORIGIN;
+  const allowedOrigin = configuredOrigin ?? headerValue(request.headers.origin);
+  if (!allowedOrigin) return;
+  response.setHeader('access-control-allow-origin', allowedOrigin);
+  // Credentials are only allowed once FRONTEND_ORIGIN is explicitly configured; reflecting an
+  // arbitrary request origin with credentials enabled would let any site read a signed-in session.
+  if (configuredOrigin) response.setHeader('access-control-allow-credentials', 'true');
+  response.setHeader('access-control-allow-methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  response.setHeader('access-control-allow-headers', 'content-type');
+  response.setHeader('vary', 'origin');
 }
