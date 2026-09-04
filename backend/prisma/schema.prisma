@@ -67,6 +67,7 @@ model Item {
   cycle       Cycle?    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   timeEntries TimeEntry[]
   gitlabLinks GitLabIssueLink[]
+  comments    ItemComment[]
   parentId    String?   @db.Uuid @map("parent_id")
   parent      Item?     @relation("ItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children    Item[]    @relation("ItemHierarchy")
@@ -207,6 +208,19 @@ model GitLabIssueLink {
   @@unique([gitlabProjectId, issueIid])
   @@unique([itemId, gitlabProjectId])
   @@map("gitlab_issue_links")
+}
+
+model ItemComment {
+  id                 String   @id @default(uuid()) @db.Uuid
+  itemId             String   @db.Uuid @map("item_id")
+  body               String   @db.Text
+  author             String?  @db.VarChar(200)
+  propagatedToGitlab Boolean  @default(false) @map("propagated_to_gitlab")
+  createdAt          DateTime @default(now()) @map("created_at")
+  item               Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, createdAt])
+  @@map("item_comments")
 }
 
 model Label {

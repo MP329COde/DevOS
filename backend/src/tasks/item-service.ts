@@ -27,7 +27,11 @@ export class ItemService {
   public constructor(private readonly database: PrismaClient) {}
 
   public list(): Promise<Item[]> {
-    return this.database.item.findMany({ where: { triage: { not: 'pending' } }, include: { labels: { include: { label: true } } }, orderBy: { createdAt: 'desc' } }) as Promise<Item[]>;
+    return this.database.item.findMany({
+      where: { triage: { not: 'pending' } },
+      include: { labels: { include: { label: true } }, gitlabLinks: true },
+      orderBy: { createdAt: 'desc' },
+    }) as Promise<Item[]>;
   }
 
   public async create(input: CreateItemInput): Promise<Item> {

@@ -18,8 +18,9 @@ export class DashboardService {
   public today(reference: Date = new Date()): Promise<Item[]> {
     return this.database.item.findMany({
       where: { dueAt: { gte: startOfDay(reference), lte: endOfDay(reference) } },
+      include: { gitlabLinks: true },
       orderBy: { dueAt: 'asc' },
-    });
+    }) as Promise<Item[]>;
   }
 
   public tomorrow(reference: Date = new Date()): Promise<Item[]> {
