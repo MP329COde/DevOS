@@ -33,7 +33,7 @@ Fichiers : `frontend/src/App.tsx` (bloc `panel === 'home'`, fonctions `moveHomeW
 
 Fichiers : `frontend/src/App.tsx` (`navButton`, `<nav className="sidebar">`), `frontend/src/styles.css` (`.nav-link`)
 
-- [ ] `aria-current="page"` sur le lien actif en plus de la classe `.active`
+- [x] `aria-current="page"` sur le lien actif en plus de la classe `.active`
 - [ ] Focus clavier visible (outline) sur `.nav-link` et `.sidebar-collapse`, y compris en mode replié (title/aria-label déjà présents à vérifier au clavier, pas seulement à la souris)
 
 ## C. Topologie réseau — graphe interactif zoomable

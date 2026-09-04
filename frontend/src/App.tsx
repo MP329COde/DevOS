@@ -442,7 +442,7 @@ export function App() {
   }, []);
   const collapsed = navLayout === 'sidebar' && sidebarCollapsed;
   const navButton = (item: (typeof navItems)[number]) => (
-    <button key={item.id} className={panel === item.id ? 'nav-link active' : 'nav-link'} type="button" title={collapsed ? item.label : undefined} onClick={() => setPanel(item.id)}>
+    <button key={item.id} className={panel === item.id ? 'nav-link active' : 'nav-link'} type="button" aria-current={panel === item.id ? 'page' : undefined} title={collapsed ? item.label : undefined} onClick={() => setPanel(item.id)}>
       <Icon name={item.icon} />
       {!collapsed && <span className="nav-label">{item.label}</span>}
       {item.badge ? <span className="nav-badge">{item.badge}</span> : null}
