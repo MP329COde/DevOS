@@ -164,3 +164,20 @@ button:hover { background: #7f3d29; }
   .shell.layout-sidebar { max-width: 1800px; }
   .shell.layout-topbar .workspace, .shell.layout-topbar .topbar { max-width: 1400px; }
 }
+
+/* Module Réseau & Serveurs — identité visuelle "infra critique" : fond sombre, monospace, accents terracotta. */
+.network-graph-shell { border-radius: 16px; background: #17211b; padding: 16px; box-shadow: 0 8px 20px rgba(23, 33, 27, .28); }
+.network-graph-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+.network-graph-toolbar .filter { background: rgba(255, 253, 244, .1); color: #dbe8dc; border: 1px solid rgba(255, 253, 244, .18); }
+.network-graph-toolbar .filter:hover { background: rgba(255, 253, 244, .18); }
+.network-graph { display: block; cursor: grab; touch-action: none; }
+.network-graph:active { cursor: grabbing; }
+.network-cluster { fill: rgba(163, 79, 49, .08); stroke: rgba(163, 79, 49, .35); stroke-width: 1; stroke-dasharray: 4 3; }
+.network-edge { stroke: rgba(219, 232, 220, .35); stroke-width: 1.5; }
+.network-node { cursor: pointer; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; }
+.network-node circle { stroke: #17211b; stroke-width: 2; }
+.network-node:hover circle, .network-node:focus-visible circle { stroke: #a34f31; }
+.network-node-label { fill: #dbe8dc; font-size: 11px; }
+.network-node-detail { margin-top: 12px; padding: 14px 16px; border-radius: 12px; background: #17211b; color: #dbe8dc; border: 1px solid rgba(163, 79, 49, .4); }
+.network-node-detail h4 { margin: 0 0 8px; color: #f1dfc2; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; }
+.network-node-detail .empty { color: #a8b5a7; }

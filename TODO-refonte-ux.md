@@ -42,10 +42,10 @@ Contexte : demande explicite d'une vue nœuds/traits zoomable montrant IP/DNS, V
 
 - [x] `backend/src/catalog/network-topology.ts` — fonction pure combinant les données Proxmox (hôte → VMs) et DNS (nom → IP) en un graphe `{ nodes, edges }` typé, sur le modèle de `backend/src/catalog/catalog-graph.ts` déjà existant (même pattern de construction de graphe pur, testable unitairement)
 - [x] Endpoint HTTP dans `backend/src/catalog/infra-http.ts` (`GET /api/infra/network-topology`), branché dans `server.ts`
-- [ ] `frontend/src/components/NetworkGraph.tsx` — composant SVG/canvas avec zoom/pan (implémentation native, pas de dépendance graphe lourde sauf justification), nœuds colorés par type (hôte Proxmox / VM / enregistrement DNS), regroupement visuel par cluster
-- [ ] Nouveau panel `'network'` dans `App.tsx` + entrée de nav (groupe "Infrastructure", icône dédiée)
-- [ ] Affichage des certificats (échéance, autorité) sur les nœuds concernés si l'info est disponible via une intégration existante — sinon documenter le manque plutôt que d'inventer une donnée
-- [ ] Vérifier avec Playwright : rendu du graphe avec données réelles/mock, zoom, pan, clic sur un nœud
+- [x] `frontend/src/components/NetworkGraph.tsx` — composant SVG/canvas avec zoom/pan (implémentation native, pas de dépendance graphe lourde sauf justification), nœuds colorés par type (hôte Proxmox / VM / enregistrement DNS), regroupement visuel par cluster
+- [x] Nouveau panel `'network'` dans `App.tsx` + entrée de nav (groupe "Infrastructure", icône dédiée)
+- [x] Affichage des certificats (échéance, autorité) sur les nœuds concernés si l'info est disponible via une intégration existante — sinon documenter le manque plutôt que d'inventer une donnée — **manque documenté** : aucune intégration du dépôt n'expose de données de certificat (voir commentaire dans `network-topology.ts`), donc rien n'est affiché plutôt que d'inventer une donnée
+- [x] Vérifier avec Playwright : rendu du graphe avec données réelles/mock, zoom, pan, clic sur un nœud
 
 ## D. Générateur d'intégration générique
 

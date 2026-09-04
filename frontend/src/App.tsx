@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Command } from 'cmdk';
 
 import { createAuthorizationRequest } from './auth/oidc.js';
+import { NetworkGraph, type NetworkGraphEdge, type NetworkGraphNode } from './components/NetworkGraph.js';
 
 const oidcConfig = {
   issuerUrl: import.meta.env.VITE_KEYCLOAK_ISSUER_URL ?? 'https://keycloak.example.internal/realms/devos',
@@ -74,7 +75,7 @@ export function App() {
   const [dueAt, setDueAt] = useState('');
   const [view, setView] = useState<'list' | 'board' | 'gantt' | 'calendar'>('list');
   const [itemsError, setItemsError] = useState('');
-  const [panel, setPanel] = useState<'home' | 'items' | 'today' | 'triage' | 'haproxy' | 'catalog' | 'docs' | 'widgets' | 'settings'>('home');
+  const [panel, setPanel] = useState<'home' | 'items' | 'today' | 'triage' | 'haproxy' | 'catalog' | 'docs' | 'widgets' | 'settings' | 'network'>('home');
   const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('devos.sidebarCollapsed') === '1');
   const [homeEditMode, setHomeEditMode] = useState(false);
@@ -115,6 +116,8 @@ export function App() {
   const [settingsDrafts, setSettingsDrafts] = useState<Record<string, string>>({});
   const [settingsError, setSettingsError] = useState('');
   const [settingsSavedKey, setSettingsSavedKey] = useState('');
+  const [networkGraph, setNetworkGraph] = useState<{ nodes: NetworkGraphNode[]; edges: NetworkGraphEdge[] } | null>(null);
+  const [networkError, setNetworkError] = useState('');
   const titleInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -206,6 +209,17 @@ export function App() {
       })();
     });
   }, [panel, homeWidgets]);
+
+  useEffect(() => {
+    if (panel !== 'network') return;
+    setNetworkError('');
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/infra/network-topology`)
+      .then(async (response) => {
+        if (!response.ok) { setNetworkError(response.status === 503 ? 'Non configuré (Proxmox + PowerDNS requis).' : 'Topologie réseau indisponible.'); return; }
+        setNetworkGraph(await response.json());
+      })
+      .catch(() => setNetworkError('Topologie réseau indisponible.'));
+  }, [panel]);
 
   useEffect(() => {
     if (panel !== 'haproxy') return;
@@ -430,6 +444,7 @@ export function App() {
     { id: 'triage', label: 'Triage', badge: triage.length, icon: 'inbox', group: 'Travail' },
     { id: 'today', label: 'Aujourd’hui', icon: 'clock', group: 'Travail' },
     { id: 'catalog', label: 'Catalogue', icon: 'layers', group: 'Infrastructure' },
+    { id: 'network', label: 'Topologie réseau', icon: 'network', group: 'Infrastructure' },
     { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: 'Infrastructure' },
     { id: 'widgets', label: 'Widgets', icon: 'widget', group: 'Infrastructure' },
     { id: 'settings', label: 'Paramètres', icon: 'gear', group: 'Autres' },
@@ -560,6 +575,12 @@ export function App() {
               </article>
             ))}
             {dashboardItems.length === 0 && <p className="empty">Aucun item programmé pour {dashboardDay === 'today' ? "aujourd'hui" : 'demain'}.</p>}
+          </div>
+        ) : panel === 'network' ? (
+          <div className="items network-panel">
+            {networkError && <p className="error" role="alert">{networkError}</p>}
+            {!networkError && !networkGraph && <p className="empty">Chargement de la topologie…</p>}
+            {!networkError && networkGraph && <NetworkGraph nodes={networkGraph.nodes} edges={networkGraph.edges} />}
           </div>
         ) : panel === 'haproxy' ? (
           <div className="items haproxy-panel">
