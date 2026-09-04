@@ -87,6 +87,89 @@ Fichiers : `backend/prisma/schema.prisma` (champ `required Boolean @default(fals
 
 - [x] Clarifier le contenu attendu (checklist d'arrivée sur un projet ? documentation d'un service à consulter avant intervention ?) — **réponse utilisateur : extension du module Docs** avec un type de page dédié (le service réel vit dans `backend/src/docs/docs-service.ts`, pas `tasks/`) ; implémenté : `pageType` sur `DocPage`, formulaire de création titre + contenu Markdown, badge distinct dans le panel Docs
 
+## J. Paramètres — favicon/icône réelle, formulaires typés par service, sections repliables
+
+Contexte : retour utilisateur du 2026-09-04 — le panel Paramètres n'a pas de vraie icône (favicon générique), tout y est un simple champ clé/valeur texte alors que certaines intégrations ont besoin de plusieurs champs structurés (ex. SMTP : hôte, port, utilisateur, mot de passe, adresse expéditeur, nom d'expéditeur pour les alertes), et tout est regroupé dans un seul bloc qu'il faut faire défiler au lieu d'être organisé en sections dépliables/navigables.
+
+- [ ] Favicon réel du produit (remplacer le favicon Vite par défaut dans `frontend/index.html` / `frontend/public`)
+- [ ] Regrouper les ~57+ clés de Paramètres en sections repliables par intégration/thème (Général, Apparence, GitLab, Email/SMTP, Webhooks, Vault, HAProxy, Coder, Proxmox, etc.) avec ancre/scroll-to-section, plutôt qu'une liste plate unique
+- [ ] Formulaire structuré dédié pour l'email sortant (SMTP) : hôte, port, utilisateur, mot de passe, adresse expéditeur, nom expéditeur — au lieu de clés brutes génériques, en s'appuyant sur les clés déjà utilisées par `backend/src/notifications/` (vérifier les noms de variables SMTP existants avant d'en inventer de nouveaux)
+- [ ] Vérifier Playwright : favicon visible, navigation entre sections, formulaire SMTP structuré fonctionnel
+
+## K. Thème — personnalisation du fond et vrai mode sombre
+
+Contexte : couleurs/teintes incohérentes signalées (décalages), seul un thème clair existe alors que `Design.md` prévoit "dark mode par défaut, light mode disponible". L'utilisateur veut 5-6 réglages de personnalisation du fond (couleur d'accent bleu, autres teintes) en plus du choix clair/sombre.
+
+- [ ] Implémenter un vrai thème sombre (tokens CSS dupliqués en variante sombre dans `frontend/src/styles.css`, cohérents avec la palette `Design.md`) et un sélecteur clair/sombre/système dans Paramètres → Apparence
+- [ ] Ajouter 5-6 réglages de personnalisation (couleur d'accent, teinte de fond, etc.) persistés en `localStorage`, appliqués via variables CSS
+- [ ] Corriger les décalages/incohérences de teinte existants relevés visuellement (comparer captures avant/après)
+- [ ] Vérifier Playwright : bascule clair/sombre, personnalisation d'accent, captures avant/après
+
+## L. URL — paramètres de requête pour l'état de navigation
+
+Contexte : actuellement l'état (panel actif, filtres, item ouvert) n'est pas reflété dans l'URL, empêchant le lien direct/partage/retour arrière navigateur.
+
+- [x] Synchroniser `panel` (et filtres/état pertinents) avec `history.pushState`/`URLSearchParams` dans `App.tsx`, lecture au chargement initial
+- [x] Vérifier Playwright : navigation entre panels met à jour l'URL, rechargement sur une URL paramétrée restaure le bon panel
+
+## M. Documentation — cerner strictement le contenu à DevOS + guides opérationnels
+
+Contexte : la documentation doit se limiter à la documentation de DevOS lui-même (pas de contenu hors sujet), et il manque des guides opérationnels : comment configurer un reverse proxy HAProxy par service, quel logiciel/dépôt/version installer selon le contexte, recommandations de sécurité.
+
+- [ ] Créer/lister dans le module Docs des pages d'onboarding dédiées (réutiliser `pageType` déjà ajouté en section I) : "Configurer un backend HAProxy pour un nouveau service", "Choisir un dépôt/version de logiciel", "Bonnes pratiques de sécurité"
+- [ ] Vérifier que le panel Docs ne mélange pas de contenu hors périmètre DevOS (filtrage/label dédié si nécessaire)
+- [ ] Vérifier Playwright : pages visibles et accessibles depuis le panel Docs
+
+## N. Tâches — vue du jour + intégration GitLab enrichie (commentaires depuis l'interface)
+
+Contexte : demande d'une vraie vue "tâches du jour" pilotable depuis l'app, et d'un vrai module développement pour GitLab (pas seulement un badge de statut) — pouvoir ouvrir une tâche liée à une issue/MR, voir son état, et ajouter un commentaire qui se propage vers GitLab sans changer d'outil.
+
+- [ ] Vérifier/étendre la vue "Aujourd'hui" existante (Phase 3) pour permettre de contrôler une tâche directement (changer statut, voir détail) sans changer de panel
+- [ ] Ajouter la possibilité de poster un commentaire sur un item lié à une issue GitLab depuis l'interface DevOS, propagé via `GitLabClient` existant (note sur l'issue), avec historique des commentaires affiché sur la tâche
+- [ ] Vérifier Playwright : ajout d'un commentaire depuis l'UI, apparition dans l'historique
+
+## O. Dashboard — cases de stats éditables + widget performance machine + grille responsive avec prévisualisation
+
+Contexte : les 4 cases de statistiques en haut du Dashboard sont fixes (non supprimables/déplaçables) contrairement aux widgets. Il manque un widget de performance machine (CPU/RAM/disque), et le mode édition doit devenir une vraie grille drag-and-drop qui s'adapte à la taille d'écran avec prévisualisation à données fictives si l'intégration n'est pas configurée.
+
+- [ ] Intégrer les 4 cases de stats dans le même système `homeWidgets` que les autres widgets (déplaçables/masquables/réordonnables), au lieu d'un bloc séparé non éditable
+- [ ] Nouveau widget "Performance machine" (CPU/RAM/disque) réutilisant l'exporter Prometheus générique déjà en place (`backend/src/catalog/prometheus-metrics.ts`), 503 propre si non configuré
+- [ ] Grille responsive (colonnes qui s'adaptent à la largeur d'écran) pour `.widget-grid`
+- [ ] En mode édition, si un widget n'a pas de données réelles (503/non configuré), afficher un aperçu avec données fictives clairement labellisées "exemple" plutôt qu'un état vide
+- [ ] Vérifier Playwright : cases de stats déplaçables/masquables, widget performance machine, aperçu à données fictives, redimensionnement de fenêtre
+
+## P. Catalogue — création de projet depuis template + corrections topologie réseau
+
+Contexte : le catalogue doit permettre de créer un nouveau projet à partir d'un template existant. La vue topologie réseau (section C) a des bugs de design signalés et doit lister les outils/services par machine plus clairement.
+
+- [ ] Action "Créer un projet" dans le panel Catalogue avec choix d'un template `catalog-info.yaml` existant comme point de départ (génère un nouveau document, ne pousse rien vers GitLab automatiquement sans confirmation explicite)
+- [ ] Revue et correction des bugs visuels de `frontend/src/components/NetworkGraph.tsx` relevés (à identifier précisément via Playwright avant de corriger)
+- [ ] Afficher, par nœud machine du graphe, la liste des services/outils qui y tournent (croiser avec les données Catalogue/Proxmox déjà disponibles)
+- [ ] Vérifier Playwright : création de projet depuis template, captures avant/après des corrections de topologie
+
+## Q. Infra — HAProxy et Proxmox à approfondir, vraie supervision système
+
+Contexte : le module Infra HAProxy est jugé peu avancé, l'intégration Proxmox (VMs) manque d'une vraie gestion (actions, pas seulement lecture) et de supervision système générale.
+
+- [ ] Étendre le panel HAProxy (Phase 8 déjà fait côté backend) avec édition guidée frontend des frontends/ACL/certificats déjà exposés par l'API, pas seulement lecture de backends/serveurs
+- [ ] Ajouter des actions de contrôle VM Proxmox (start/stop/reboot) côté backend (`backend/src/catalog/proxmox.ts` déjà en lecture seule — étendre avec confirmation explicite avant toute action destructive, cohérent avec l'identité visuelle "infra critique" de `Design.md`) et panel frontend dédié
+- [ ] Vérifier Playwright : actions VM avec confirmation, affichage HAProxy étendu
+
+## R. Widgets — personnalisation, création via template/code, variables
+
+Contexte : les widgets doivent être personnalisables et il doit être possible d'en créer de nouveaux à partir d'un template (ou de code), avec des variables configurables.
+
+- [ ] Définir un format de widget "custom" simple (JSON : titre, source de données parmi `/api/extras/*` existants, template d'affichage) persisté via `SettingsService`
+- [ ] UI de création de widget custom dans le panel Widgets/Paramètres : choix d'une source existante + variables (clé à afficher, libellé), pas d'exécution de code arbitraire côté serveur pour rester sûr
+- [ ] Vérifier Playwright : création d'un widget custom, apparition dans le Dashboard
+
+## S. Intégrations — page dédiée dans Paramètres, sections au lieu d'un bloc unique
+
+Contexte : le générateur d'intégration générique (section D) existe mais doit devenir une vraie page à l'intérieur de Paramètres (pas un panel séparé isolé), organisée en sections comme le reste de J plutôt qu'en bloc unique.
+
+- [ ] Déplacer/lier le panel "Intégrations" (section D) comme sous-section de Paramètres, cohérent avec le regroupement en sections de la section J
+- [ ] Vérifier Playwright : accès aux intégrations depuis Paramètres, navigation par section
+
 ---
 
 ## Notes de performance à respecter à chaque tâche
