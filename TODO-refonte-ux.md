@@ -68,8 +68,8 @@ Contexte : Vault est déjà intégré côté backend (`backend/src/infrastructur
 
 ## F. Calendriers personnel/professionnel
 
-- [ ] Clarifier avec l'utilisateur le protocole visé (CalDAV générique ? Google Calendar API ? ICS en lecture seule ?) avant de coder — item explicitement sous-spécifié, ne pas supposer
-- [ ] Une fois clarifié : intégration en lecture seule dans un premier temps, affichage combiné avec la vue Calendrier existante (`view === 'calendar'` dans `App.tsx`)
+- [x] Clarifier avec l'utilisateur le protocole visé (CalDAV générique ? Google Calendar API ? ICS en lecture seule ?) avant de coder — **réponse utilisateur : ICS en lecture seule**
+- [x] Une fois clarifié : intégration en lecture seule dans un premier temps, affichage combiné avec la vue Calendrier existante (`view === 'calendar'` dans `App.tsx`)
 
 ## G. Marquage "obligatoire"/requis sur un item
 

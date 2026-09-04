@@ -71,6 +71,8 @@ import { testIntegration } from './integrations/integration-builder.js';
 import { handleSecretsRequest, type SecretsHttpService } from './tasks/secrets-http.js';
 import { SecretsService } from './tasks/secrets-service.js';
 import { VaultClient } from './infrastructure/vault.js';
+import { handleCalendarRequest, type CalendarHttpService, type CalendarSourceEvent } from './tasks/calendar-http.js';
+import { fetchIcsEvents } from './integrations/ics-calendar.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -91,6 +93,7 @@ export function createServer(
   settings?: SettingsHttpService,
   integrationBuilder?: IntegrationBuilderHttpService,
   secrets?: SecretsHttpService,
+  calendar?: CalendarHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -256,6 +259,13 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/calendar')) {
+      if (!calendar) { writeJson(response, 503, { error: 'Calendar integrations are not configured' }); return; }
+      const result = await handleCalendarRequest(request.method ?? 'GET', request.url, calendar);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -292,7 +302,8 @@ if (require.main === module) {
     const auth = await buildAuthServiceFromEnv();
     const integrationBuilder = buildIntegrationBuilderServiceFromEnv(settingsService);
     const secrets = await buildSecretsServiceFromEnv();
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const calendar = buildCalendarServiceFromEnv();
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -334,6 +345,27 @@ async function buildSecretsServiceFromEnv(): Promise<SecretsHttpService | undefi
     return undefined;
   }
   return new SecretsService(vault);
+}
+
+/** Combines the personal + professional ICS calendars (read-only) when at least one URL is configured. */
+function buildCalendarServiceFromEnv(): CalendarHttpService | undefined {
+  const personalUrl = process.env.CALENDAR_PERSONAL_ICS_URL;
+  const professionalUrl = process.env.CALENDAR_PROFESSIONAL_ICS_URL;
+  if (!personalUrl && !professionalUrl) return undefined;
+
+  return {
+    async listEvents(): Promise<CalendarSourceEvent[]> {
+      const sources: Array<{ url: string; source: 'personal' | 'professional' }> = [
+        ...(personalUrl ? [{ url: personalUrl, source: 'personal' as const }] : []),
+        ...(professionalUrl ? [{ url: professionalUrl, source: 'professional' as const }] : []),
+      ];
+      const results = await Promise.all(sources.map(async ({ url, source }) => {
+        const events = await fetchIcsEvents(url);
+        return events.map((event) => ({ ...event, source }));
+      }));
+      return results.flat();
+    },
+  };
 }
 
 /** Loads integration settings persisted via the Settings screen into process.env, without overriding variables already set (env vars always win). */

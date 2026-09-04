@@ -175,6 +175,11 @@ button:hover { background: #7f3d29; }
 .integration-test-result { margin: 14px 0; }
 .integration-test-result button { margin-top: 8px; }
 
+.calendar-source-badge { display: inline-flex; padding: 1px 8px; border-radius: 999px; font: 700 10px sans-serif; text-transform: uppercase; }
+.calendar-source-personal { color: #2f6b3a; background: rgba(47, 107, 58, .12); }
+.calendar-source-professional { color: #a34f31; background: rgba(163, 79, 49, .12); }
+.calendar-integration-note { margin: 8px 0; }
+
 .secrets-panel { margin-top: 16px; }
 .secret-value { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; letter-spacing: .04em; }
 .secret-value[data-revealed="true"] { color: #a34f31; font-weight: 700; }

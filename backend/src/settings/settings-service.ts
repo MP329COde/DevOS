@@ -58,6 +58,8 @@ const KNOWN_INTEGRATION_KEYS: readonly string[] = [
   'CODER_ORGANIZATION_ID',
   'CODER_OWNER',
   'CODER_DEFAULT_TEMPLATE_ID',
+  'CALENDAR_PERSONAL_ICS_URL',
+  'CALENDAR_PROFESSIONAL_ICS_URL',
 ];
 
 export class SettingsService {

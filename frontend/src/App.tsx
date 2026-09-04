@@ -120,6 +120,8 @@ export function App() {
   const [settingsSavedKey, setSettingsSavedKey] = useState('');
   const [networkGraph, setNetworkGraph] = useState<{ nodes: NetworkGraphNode[]; edges: NetworkGraphEdge[] } | null>(null);
   const [networkError, setNetworkError] = useState('');
+  const [calendarEvents, setCalendarEvents] = useState<Array<{ uid: string; title: string; start: string; end?: string; allDay: boolean; source: 'personal' | 'professional' }>>([]);
+  const [calendarError, setCalendarError] = useState('');
   const titleInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -211,6 +213,17 @@ export function App() {
       })();
     });
   }, [panel, homeWidgets]);
+
+  useEffect(() => {
+    if (panel !== 'items' || view !== 'calendar') return;
+    setCalendarError('');
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/calendar/events`)
+      .then(async (response) => {
+        if (!response.ok) { setCalendarEvents([]); setCalendarError(response.status === 503 ? 'Aucun calendrier ICS configuré.' : 'Calendriers externes indisponibles.'); return; }
+        setCalendarEvents(await response.json());
+      })
+      .catch(() => setCalendarError('Calendriers externes indisponibles.'));
+  }, [panel, view]);
 
   useEffect(() => {
     if (panel !== 'network') return;
@@ -573,6 +586,18 @@ export function App() {
         <form className="new-item" onSubmit={createItem}><select aria-label="Type" value={type} onChange={(event) => setType(event.target.value)}><option value="task">Tâche</option><option value="doc">Document</option><option value="goal">Objectif</option></select><input ref={titleInput} aria-label="Titre" placeholder="Ajouter un item..." value={title} onChange={(event) => setTitle(event.target.value)} /><input aria-label="Labels" placeholder="type::bug, priority::high" value={labels} onChange={(event) => setLabels(event.target.value)} /><input aria-label="Échéance" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /><button type="submit">Ajouter</button></form>
         {type === 'doc' && <textarea className="doc-editor" aria-label="Contenu du document" placeholder="Contenu Markdown du document..." value={content} onChange={(event) => setContent(event.target.value)} />}
         {itemsError && <p className="error" role="alert">{itemsError}</p>}
+        {view === 'calendar' && calendarError && <p className="empty calendar-integration-note">{calendarError}</p>}
+        {view === 'calendar' && calendarEvents.length > 0 && (
+          <section className="view-group calendar-external-events">
+            <h3>Calendriers externes (ICS, lecture seule)</h3>
+            {calendarEvents.map((event) => (
+              <p className="empty" key={event.uid}>
+                <span className={`calendar-source-badge calendar-source-${event.source}`}>{event.source === 'personal' ? 'Personnel' : 'Pro'}</span>{' '}
+                {event.allDay ? new Date(event.start).toLocaleDateString('fr-FR') : new Date(event.start).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} · {event.title}
+              </p>
+            ))}
+          </section>
+        )}
         <div className={`items view-${view}`}>{view === 'list' ? visibleItems.map(itemCard) : Object.entries(groupedItems).map(([group, groupItems]) => <section className="view-group" key={group}><h3>{view === 'gantt' ? `Échéance ${group}` : group}</h3>{groupItems.map(itemCard)}</section>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>
         </>) : panel === 'today' ? (
           <div className="items dashboard-timeline">
