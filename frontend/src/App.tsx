@@ -7,11 +7,23 @@ import { ProxmoxPanel } from './components/ProxmoxPanel.js';
 import { CustomWidgetsPanel, type CustomWidget } from './components/CustomWidgetsPanel.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
 import { NotesPanel } from './components/NotesPanel.js';
+import { DevTemplatesPanel } from './components/DevTemplatesPanel.js';
 import { TaskDetailPanel } from './components/TaskDetailPanel.js';
 import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js';
 import { THEME_COLOR_SETTINGS, THEME_PRESETS, type ThemeMode } from './theme.js';
 
-const PANEL_IDS = ['home', 'items', 'today', 'triage', 'notes', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'settings', 'network'] as const;
+const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'settings', 'network'] as const;
+
+// Sous-onglets internes du panel "Travail" (section X) : fusionne les anciens panels séparés
+// Tâches/Triage/Aujourd'hui en un seul onglet cohérent, sans perdre de fonctionnalité — seule
+// la navigation change (barre de sous-onglets au lieu d'entrées de nav séparées).
+const WORK_TABS = ['tasks', 'triage', 'today'] as const;
+type WorkTab = (typeof WORK_TABS)[number];
+
+function readUrlWorkTab(fallback: WorkTab): WorkTab {
+  const value = new URLSearchParams(window.location.search).get('sub');
+  return value && (WORK_TABS as readonly string[]).includes(value) ? (value as WorkTab) : fallback;
+}
 
 const oidcConfig = {
   issuerUrl: import.meta.env.VITE_KEYCLOAK_ISSUER_URL ?? 'https://keycloak.example.internal/realms/devos',
@@ -140,6 +152,7 @@ export function App() {
   const [view, setView] = useState<'list' | 'board' | 'gantt' | 'calendar'>('list');
   const [itemsError, setItemsError] = useState('');
   const [panel, setPanel] = useState<(typeof PANEL_IDS)[number]>(() => readUrlPanel(PANEL_IDS, 'home'));
+  const [workTab, setWorkTab] = useState<WorkTab>(() => readUrlWorkTab('tasks'));
   const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => (localStorage.getItem('devos.theme') as ThemeMode | null) ?? 'system');
   const [themeColors, setThemeColors] = useState<Record<string, string>>(() => {
@@ -279,6 +292,23 @@ export function App() {
 
   useUrlState(panel, setPanel, PANEL_IDS, filter, setFilter);
 
+  // Garde le sous-onglet du panel Travail synchronisé avec `?sub=`, sur le même principe que
+  // `useUrlState` pour panel/filter (deep links, retour arrière navigateur).
+  useEffect(() => {
+    function onPopState() { setWorkTab(readUrlWorkTab('tasks')); }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const current = params.get('sub');
+    const next = panel === 'work' && workTab !== 'tasks' ? workTab : null;
+    if (current === next) return;
+    if (next) params.set('sub', next); else params.delete('sub');
+    const query = params.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+  }, [panel, workTab]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
@@ -398,11 +428,11 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (panel !== 'today') return;
+    if (panel !== 'work' || workTab !== 'today') return;
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/dashboard/${dashboardDay}`)
       .then(async (response) => { if (!response.ok) throw new Error(); setDashboardItems(await response.json()); })
       .catch(() => setDashboardItems([]));
-  }, [panel, dashboardDay]);
+  }, [panel, workTab, dashboardDay]);
 
   useEffect(() => {
     localStorage.setItem('devos.navLayout', navLayout);
@@ -452,7 +482,7 @@ export function App() {
   }, [panel, homeWidgets, combinedExtraCatalog]);
 
   useEffect(() => {
-    if (panel !== 'items' || view !== 'calendar') return;
+    if (panel !== 'work' || workTab !== 'tasks' || view !== 'calendar') return;
     setCalendarError('');
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/calendar/events`)
       .then(async (response) => {
@@ -460,7 +490,7 @@ export function App() {
         setCalendarEvents(await response.json());
       })
       .catch(() => setCalendarError('Calendriers externes indisponibles.'));
-  }, [panel, view]);
+  }, [panel, workTab, view]);
 
   useEffect(() => {
     if (panel !== 'network') return;
@@ -738,10 +768,8 @@ export function App() {
   const statusCounts = items.reduce<Record<string, number>>((acc, item) => { acc[item.status] = (acc[item.status] ?? 0) + 1; return acc; }, {});
   const navItems: Array<{ id: typeof panel; label: string; badge?: number; icon: string; group: string }> = [
     { id: 'home', label: 'Dashboard', icon: 'home', group: 'Vue d’ensemble' },
-    { id: 'items', label: 'Tâches', icon: 'tasks', group: 'Travail' },
-    { id: 'triage', label: 'Triage', badge: triage.length, icon: 'inbox', group: 'Travail' },
+    { id: 'work', label: 'Travail', badge: triage.length, icon: 'tasks', group: 'Travail' },
     { id: 'notes', label: 'Notes', icon: 'doc', group: 'Travail' },
-    { id: 'today', label: 'Aujourd’hui', icon: 'clock', group: 'Travail' },
     { id: 'catalog', label: 'Catalogue', icon: 'layers', group: 'Infrastructure' },
     { id: 'network', label: 'Topologie réseau', icon: 'network', group: 'Infrastructure' },
     { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: 'Infrastructure' },
