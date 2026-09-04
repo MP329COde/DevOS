@@ -73,6 +73,8 @@ import { SecretsService } from './tasks/secrets-service.js';
 import { VaultClient } from './infrastructure/vault.js';
 import { handleCalendarRequest, type CalendarHttpService, type CalendarSourceEvent } from './tasks/calendar-http.js';
 import { fetchIcsEvents } from './integrations/ics-calendar.js';
+import { handleNotificationsRequest, type NotificationsHttpService } from './tasks/notifications-http.js';
+import { NotificationsService } from './tasks/notifications-service.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -94,6 +96,7 @@ export function createServer(
   integrationBuilder?: IntegrationBuilderHttpService,
   secrets?: SecretsHttpService,
   calendar?: CalendarHttpService,
+  notifications?: NotificationsHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -266,6 +269,12 @@ export function createServer(
       return;
     }
 
+    if (request.url === '/api/notifications/trigger' && notifications) {
+      const result = await handleNotificationsRequest(request.method ?? 'POST', request.url, await readJsonIfNeeded(request), notifications);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -303,7 +312,8 @@ if (require.main === module) {
     const integrationBuilder = buildIntegrationBuilderServiceFromEnv(settingsService);
     const secrets = await buildSecretsServiceFromEnv();
     const calendar = buildCalendarServiceFromEnv();
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const notifications: NotificationsHttpService = buildNotificationsServiceFromEnv();
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -366,6 +376,28 @@ function buildCalendarServiceFromEnv(): CalendarHttpService | undefined {
       return results.flat();
     },
   };
+}
+
+/**
+ * Server-side notification channels (email via SMTP, generic outbound webhook) — the browser
+ * channel is handled entirely client-side and never touches this. Always returns a usable
+ * service: with no channel configured, trigger() just dispatches to zero channels (200, empty
+ * results), so the browser channel keeps working independently of server-side config.
+ */
+function buildNotificationsServiceFromEnv(): NotificationsHttpService {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = process.env.SMTP_PORT;
+  const emailFrom = process.env.NOTIFICATIONS_EMAIL_FROM;
+  const emailTo = process.env.NOTIFICATIONS_EMAIL_TO;
+  const email = smtpHost && smtpPort && emailFrom && emailTo
+    ? { host: smtpHost, port: Number(smtpPort), user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD, from: emailFrom, to: emailTo }
+    : undefined;
+
+  const webhookUrl = process.env.NOTIFICATIONS_WEBHOOK_URL;
+  const webhook = webhookUrl ? { url: webhookUrl } : undefined;
+
+  const service = new NotificationsService(email, webhook);
+  return { trigger: (payload) => service.trigger(payload) };
 }
 
 /** Loads integration settings persisted via the Settings screen into process.env, without overriding variables already set (env vars always win). */
