@@ -86,13 +86,18 @@ input { flex: 1; min-width: 0; }
 .edit-toggle { padding: 8px; color: #49634c; background: rgba(255, 252, 242, .78); border: 1px solid rgba(23, 33, 27, .12); }
 .edit-toggle:hover { background: rgba(73, 99, 76, .12); }
 .edit-toggle.active { color: #fffdf4; background: #49634c; }
-.widget-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-.widget-card { padding: 18px; border-radius: 12px; background: rgba(255, 252, 242, .78); border: 1px solid rgba(23, 33, 27, .1); }
+.widget-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; padding: 4px; border-radius: 16px; transition: background .15s, border-color .15s; border: 1px dashed transparent; }
+.widget-grid.edit-mode { background: rgba(73, 99, 76, .06); border-color: rgba(73, 99, 76, .35); padding: 14px; }
+.widget-card { padding: 18px; border-radius: 12px; background: rgba(255, 252, 242, .78); border: 1px solid rgba(23, 33, 27, .1); transition: transform .1s, box-shadow .1s, opacity .1s; }
 .widget-card.widget-hidden { opacity: .45; border-style: dashed; }
+.widget-grid.edit-mode .widget-card { cursor: grab; }
+.widget-card.dragging { opacity: .5; box-shadow: 0 6px 18px rgba(23, 33, 27, .18); cursor: grabbing; }
+.widget-card.drag-over { border-color: #a34f31; box-shadow: 0 0 0 2px rgba(163, 79, 49, .35) inset; }
 .widget-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font: 700 13px sans-serif; text-transform: uppercase; color: #49634c; }
-.widget-controls { display: flex; gap: 4px; margin-left: auto; }
+.widget-controls { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .widget-controls button { padding: 4px; color: #49634c; background: rgba(73, 99, 76, .1); text-transform: none; }
 .widget-controls button:hover { background: rgba(73, 99, 76, .2); }
+.widget-drag-handle { display: inline-flex; padding: 4px; color: #49634c; cursor: grab; }
 .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font: 600 12px sans-serif; }
 .status-badge-off { color: #8a7a4a; background: rgba(122, 99, 45, .12); }
 .status-badge-warn { color: #a34f31; background: rgba(163, 79, 49, .12); }

@@ -26,6 +26,7 @@ const iconPaths: Record<string, string> = {
   down: 'M5 8l5 5 5-5',
   x: 'M5 5l10 10M15 5 5 15',
   dot: 'M10 10',
+  drag: 'M7 5.5h.01M13 5.5h.01M7 10h.01M13 10h.01M7 14.5h.01M13 14.5h.01',
 };
 
 function Icon({ name, size = 16 }: { name: string; size?: number }) {
@@ -115,13 +116,18 @@ export function App() {
   useEffect(() => { localStorage.setItem('devos.sidebarCollapsed', sidebarCollapsed ? '1' : '0'); }, [sidebarCollapsed]);
   useEffect(() => { localStorage.setItem('devos.homeWidgets', JSON.stringify(homeWidgets)); }, [homeWidgets]);
 
-  const moveHomeWidget = (id: string, direction: -1 | 1) => {
+  const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null);
+  const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null);
+
+  const reorderHomeWidget = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
     setHomeWidgets((current) => {
-      const index = current.findIndex((w) => w.id === id);
-      const target = index + direction;
-      if (index < 0 || target < 0 || target >= current.length) return current;
+      const sourceIndex = current.findIndex((w) => w.id === sourceId);
+      const targetIndex = current.findIndex((w) => w.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
       const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
       return next;
     });
   };
@@ -445,7 +451,7 @@ export function App() {
                 <Icon name="pencil" />
               </button>
             </div>
-            <div className="widget-grid">
+            <div className={homeEditMode ? 'widget-grid edit-mode' : 'widget-grid'}>
               {homeWidgets.filter((w) => homeEditMode || w.visible).map((w) => {
                 const def = homeWidgetDefs[w.id];
                 const body = w.id === 'pipelines'
@@ -454,11 +460,19 @@ export function App() {
                   ? (widgetData ? (widgetData.alerts.items.length > 0 ? widgetData.alerts.items.map((a) => <p key={a.fingerprint} className="empty">{a.labels.alertname ?? a.fingerprint} · {a.status.state}</p>) : <p className="empty">Aucune alerte active.</p>) : <StatusBadge state="off" label="Non configuré" />)
                   : (wazuhAlerts ? (wazuhAlerts.length > 0 ? wazuhAlerts.slice(0, 5).map((a) => <p key={a.id} className="empty">{a.ruleDescription} · niveau {a.level}</p>) : <p className="empty">Aucune alerte Wazuh.</p>) : <StatusBadge state="off" label="Non configuré" />);
                 return (
-                  <section className={`widget-card${!w.visible ? ' widget-hidden' : ''}`} key={w.id}>
+                  <section
+                    className={`widget-card${!w.visible ? ' widget-hidden' : ''}${draggedWidgetId === w.id ? ' dragging' : ''}${dragOverWidgetId === w.id && draggedWidgetId !== w.id ? ' drag-over' : ''}`}
+                    key={w.id}
+                    draggable={homeEditMode}
+                    onDragStart={(event) => { setDraggedWidgetId(w.id); event.dataTransfer.effectAllowed = 'move'; }}
+                    onDragOver={(event) => { if (!homeEditMode || !draggedWidgetId) return; event.preventDefault(); setDragOverWidgetId(w.id); }}
+                    onDragLeave={() => setDragOverWidgetId((current) => (current === w.id ? null : current))}
+                    onDrop={(event) => { event.preventDefault(); if (draggedWidgetId) reorderHomeWidget(draggedWidgetId, w.id); setDraggedWidgetId(null); setDragOverWidgetId(null); }}
+                    onDragEnd={() => { setDraggedWidgetId(null); setDragOverWidgetId(null); }}
+                  >
                     <h3><Icon name={def.icon} /> {def.title}{homeEditMode && (
                       <span className="widget-controls">
-                        <button type="button" aria-label="Monter" onClick={() => moveHomeWidget(w.id, -1)}><Icon name="up" size={14} /></button>
-                        <button type="button" aria-label="Descendre" onClick={() => moveHomeWidget(w.id, 1)}><Icon name="down" size={14} /></button>
+                        <span className="widget-drag-handle" aria-hidden="true" title="Glisser pour réordonner"><Icon name="drag" size={14} /></span>
                         <button type="button" aria-label={w.visible ? 'Masquer' : 'Afficher'} onClick={() => toggleHomeWidget(w.id)}><Icon name={w.visible ? 'x' : 'plus'} size={14} /></button>
                       </span>
                     )}</h3>
