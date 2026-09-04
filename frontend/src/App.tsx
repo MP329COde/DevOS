@@ -20,7 +20,9 @@ export function App() {
   const [dueAt, setDueAt] = useState('');
   const [view, setView] = useState<'list' | 'board' | 'gantt' | 'calendar'>('list');
   const [itemsError, setItemsError] = useState('');
-  const [panel, setPanel] = useState<'none' | 'dashboard' | 'triage' | 'haproxy' | 'catalog' | 'docs' | 'widgets' | 'settings'>('none');
+  const [panel, setPanel] = useState<'home' | 'items' | 'today' | 'triage' | 'haproxy' | 'catalog' | 'docs' | 'widgets' | 'settings'>('home');
+  const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
+  const [wazuhAlerts, setWazuhAlerts] = useState<Array<{ id: string; ruleDescription: string; level: number; timestamp: string }> | null>(null);
   const [content, setContent] = useState('');
   const [dashboardDay, setDashboardDay] = useState<'today' | 'tomorrow'>('today');
   const [dashboardItems, setDashboardItems] = useState<Array<{ id: string; title: string; type: string; dueAt?: string | null }>>([]);
@@ -84,11 +86,25 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (panel !== 'dashboard') return;
+    if (panel !== 'today') return;
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/dashboard/${dashboardDay}`)
       .then(async (response) => { if (!response.ok) throw new Error(); setDashboardItems(await response.json()); })
       .catch(() => setDashboardItems([]));
   }, [panel, dashboardDay]);
+
+  useEffect(() => {
+    localStorage.setItem('devos.navLayout', navLayout);
+  }, [navLayout]);
+
+  useEffect(() => {
+    if (panel !== 'home') return;
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/extras/dashboard/widgets`)
+      .then(async (response) => { if (response.ok) setWidgetData(await response.json()); })
+      .catch(() => undefined);
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/extras/wazuh/alerts`)
+      .then(async (response) => { if (response.ok) setWazuhAlerts(await response.json()); })
+      .catch(() => undefined);
+  }, [panel]);
 
   useEffect(() => {
     if (panel !== 'haproxy') return;
@@ -306,19 +322,66 @@ export function App() {
     (groups[key] ??= []).push(item);
     return groups;
   }, {});
-  const itemCard = (item: typeof items[number]) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}{item.coderWorkspaceStatus && ` · Workspace ${item.coderWorkspaceStatus}`}</span><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><span className="item-actions">{item.type === 'task' && <button className="open-workspace" type="button" onClick={() => void openWorkspace(item)}>{item.coderWorkspaceName ? 'Ouvrir dans VS Code' : 'Ouvrir un environnement'}</button>}<button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></span></article>;
+  const statusCounts = items.reduce<Record<string, number>>((acc, item) => { acc[item.status] = (acc[item.status] ?? 0) + 1; return acc; }, {});
+  const navItems: Array<{ id: typeof panel; label: string; badge?: number }> = [
+    { id: 'home', label: 'Dashboard' },
+    { id: 'items', label: 'Tâches' },
+    { id: 'triage', label: 'Triage', badge: triage.length },
+    { id: 'today', label: 'Aujourd’hui' },
+    { id: 'catalog', label: 'Catalogue' },
+    { id: 'haproxy', label: 'Infra HAProxy' },
+    { id: 'docs', label: 'Docs' },
+    { id: 'widgets', label: 'Widgets' },
+    { id: 'settings', label: 'Paramètres' },
+  ];
+  const navButton = (item: (typeof navItems)[number]) => (
+    <button key={item.id} className={panel === item.id ? 'nav-link active' : 'nav-link'} type="button" onClick={() => setPanel(item.id)}>
+      {item.label}{item.badge ? <span className="nav-badge">{item.badge}</span> : null}
+    </button>
+  );
+  const itemCard = (item: typeof items[number]) =><article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}{item.coderWorkspaceStatus && ` · Workspace ${item.coderWorkspaceStatus}`}</span><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><span className="item-actions">{item.type === 'task' && <button className="open-workspace" type="button" onClick={() => void openWorkspace(item)}>{item.coderWorkspaceName ? 'Ouvrir dans VS Code' : 'Ouvrir un environnement'}</button>}<button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></span></article>;
 
   return (
-    <main className="shell">
-      <header className="topbar"><div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">Aujourd’hui.</h1></div><button type="button" className="login" onClick={signIn}>Connexion SSO</button></header>
-      <section className="workspace" aria-labelledby="items-title">
+    <div className={`shell layout-${navLayout}`}>
+      <header className="topbar">
+        <div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">{navItems.find((n) => n.id === panel)?.label ?? 'Dashboard'}</h1></div>
+        <button type="button" className="login" onClick={signIn}>Connexion SSO</button>
+      </header>
+      {navLayout === 'sidebar' && <nav className="sidebar" aria-label="Navigation">{navItems.map(navButton)}</nav>}
+      <main className="workspace" aria-labelledby="items-title">
+        {navLayout === 'topbar' && <nav className="views topnav" aria-label="Navigation">{navItems.map(navButton)}</nav>}
+        {panel === 'home' ? (
+          <div className="home-dashboard">
+            <div className="stat-cards">
+              <div className="stat-card"><span className="stat-value">{items.length}</span><span className="stat-label">Items au total</span></div>
+              <div className="stat-card"><span className="stat-value">{statusCounts.in_progress ?? 0}</span><span className="stat-label">En cours</span></div>
+              <div className="stat-card"><span className="stat-value">{statusCounts.blocked ?? 0}</span><span className="stat-label">Bloqués</span></div>
+              <div className="stat-card"><span className="stat-value">{statusCounts.done ?? 0}</span><span className="stat-label">Terminés</span></div>
+            </div>
+            <div className="widget-grid">
+              <section className="widget-card">
+                <h3>Pipelines en cours</h3>
+                {widgetData ? (widgetData.pipelines.items.length > 0 ? widgetData.pipelines.items.map((p) => <p key={p.id} className="empty">#{p.id} · {p.ref} · {p.status}</p>) : <p className="empty">Aucun pipeline en cours.</p>) : <p className="empty">Non configuré.</p>}
+              </section>
+              <section className="widget-card">
+                <h3>Alertes actives</h3>
+                {widgetData ? (widgetData.alerts.items.length > 0 ? widgetData.alerts.items.map((a) => <p key={a.fingerprint} className="empty">{a.labels.alertname ?? a.fingerprint} · {a.status.state}</p>) : <p className="empty">Aucune alerte active.</p>) : <p className="empty">Non configuré.</p>}
+              </section>
+              <section className="widget-card">
+                <h3>Sécurité (Wazuh)</h3>
+                {wazuhAlerts ? (wazuhAlerts.length > 0 ? wazuhAlerts.slice(0, 5).map((a) => <p key={a.id} className="empty">{a.ruleDescription} · niveau {a.level}</p>) : <p className="empty">Aucune alerte Wazuh.</p>) : <p className="empty">Non configuré.</p>}
+              </section>
+            </div>
+          </div>
+        ) : panel === 'items' ? (<>
         {cycles.length > 0 && <aside className="cycles" aria-label="Cycles"><span className="kicker">CYCLE ACTIF</span>{cycles.filter((cycle) => !cycle.closedAt).map((cycle) => <div className="cycle" key={cycle.id}><strong>{cycle.name}</strong><button type="button" onClick={() => void closeCycle(cycle.id)}>Clôturer</button></div>)}</aside>}
         <div className="section-heading"><div><span className="kicker">WORK QUEUE</span><h2 id="items-title">Vos items</h2></div><div className="filters" aria-label="Filtrer les items">{['all', 'task', 'doc', 'goal'].map((value) => <button className={filter === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setFilter(value)}>{value === 'all' ? 'Tout' : value}</button>)}</div></div>
-        <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={panel === 'none' && view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => { setPanel('none'); setView(value); }}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}<button className={panel === 'triage' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('triage')}>Triage ({triage.length})</button><button className={panel === 'dashboard' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('dashboard')}>Aujourd’hui</button><button className={panel === 'haproxy' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('haproxy')}>Infra HAProxy</button><button className={panel === 'catalog' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('catalog')}>Catalogue</button><button className={panel === 'docs' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('docs')}>Docs</button><button className={panel === 'widgets' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('widgets')}>Widgets</button><button className={panel === 'settings' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('settings')}>Paramètres</button></nav>
+        <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setView(value)}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}</nav>
         <form className="new-item" onSubmit={createItem}><select aria-label="Type" value={type} onChange={(event) => setType(event.target.value)}><option value="task">Tâche</option><option value="doc">Document</option><option value="goal">Objectif</option></select><input ref={titleInput} aria-label="Titre" placeholder="Ajouter un item..." value={title} onChange={(event) => setTitle(event.target.value)} /><input aria-label="Labels" placeholder="type::bug, priority::high" value={labels} onChange={(event) => setLabels(event.target.value)} /><input aria-label="Échéance" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /><button type="submit">Ajouter</button></form>
         {type === 'doc' && <textarea className="doc-editor" aria-label="Contenu du document" placeholder="Contenu Markdown du document..." value={content} onChange={(event) => setContent(event.target.value)} />}
         {itemsError && <p className="error" role="alert">{itemsError}</p>}
-        {panel === 'dashboard' ? (
+        <div className={`items view-${view}`}>{view === 'list' ? visibleItems.map(itemCard) : Object.entries(groupedItems).map(([group, groupItems]) => <section className="view-group" key={group}><h3>{view === 'gantt' ? `Échéance ${group}` : group}</h3>{groupItems.map(itemCard)}</section>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>
+        </>) : panel === 'today' ? (
           <div className="items dashboard-timeline">
             <div className="filters" aria-label="Jour du dashboard">
               <button className={dashboardDay === 'today' ? 'filter active' : 'filter'} type="button" onClick={() => setDashboardDay('today')}>Aujourd’hui</button>
@@ -418,6 +481,13 @@ export function App() {
           </div>
         ) : panel === 'settings' ? (
           <div className="items settings-panel">
+            <section className="widget-card">
+              <h3>Apparence</h3>
+              <div className="filters" aria-label="Disposition de navigation">
+                <button className={navLayout === 'sidebar' ? 'filter active' : 'filter'} type="button" onClick={() => setNavLayout('sidebar')}>Barre latérale</button>
+                <button className={navLayout === 'topbar' ? 'filter active' : 'filter'} type="button" onClick={() => setNavLayout('topbar')}>Barre du haut</button>
+              </div>
+            </section>
             {settingsError && <p className="error" role="alert">{settingsError}</p>}
             {!settingsError && settingsKnown.length === 0 && <p className="empty">Chargement des paramètres…</p>}
             {settingsKnown.map((key) => (
@@ -437,22 +507,24 @@ export function App() {
               </article>
             ))}
           </div>
-        ) : panel === 'triage' ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div> : <div className={`items view-${view}`}>{view === 'list' ? visibleItems.map(itemCard) : Object.entries(groupedItems).map(([group, groupItems]) => <section className="view-group" key={group}><h3>{view === 'gantt' ? `Échéance ${group}` : group}</h3>{groupItems.map(itemCard)}</section>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>}
-      </section>
+        ) : panel === 'triage' ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div> : null}
+      </main>
       <span className="status" role="status">{status}</span>
       <Command.Dialog open={paletteOpen} onOpenChange={setPaletteOpen} label="Palette de commandes">
         <Command.Input placeholder="Rechercher une commande..." />
         <Command.List>
           <Command.Empty>Aucune commande trouvée.</Command.Empty>
           <Command.Group heading="Navigation">
-            {(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <Command.Item key={value} onSelect={() => { setPanel('none'); setView(value); setPaletteOpen(false); }}>{value === 'list' ? 'Ouvrir la liste' : value === 'board' ? 'Ouvrir le board' : value === 'gantt' ? 'Ouvrir Gantt' : 'Ouvrir le calendrier'}</Command.Item>)}
+            {(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <Command.Item key={value} onSelect={() => { setPanel('items'); setView(value); setPaletteOpen(false); }}>{value === 'list' ? 'Ouvrir la liste' : value === 'board' ? 'Ouvrir le board' : value === 'gantt' ? 'Ouvrir Gantt' : 'Ouvrir le calendrier'}</Command.Item>)}
             <Command.Item onSelect={() => { setPanel('triage'); setPaletteOpen(false); }}>Ouvrir le triage</Command.Item>
+            <Command.Item onSelect={() => { setPanel('home'); setPaletteOpen(false); }}>Ouvrir le dashboard</Command.Item>
           </Command.Group>
           <Command.Group heading="Actions">
             <Command.Item onSelect={() => { setPaletteOpen(false); titleInput.current?.focus(); }}>Créer un item</Command.Item>
+            <Command.Item onSelect={() => { setNavLayout((current) => current === 'sidebar' ? 'topbar' : 'sidebar'); setPaletteOpen(false); }}>Changer la disposition de navigation</Command.Item>
           </Command.Group>
         </Command.List>
       </Command.Dialog>
-    </main>
+    </div>
   );
 }
