@@ -38,6 +38,13 @@ enum TriageStatus {
   rejected
 }
 
+enum BugSeverity {
+  low
+  medium
+  high
+  critical
+}
+
 /**
  * Statut d'un "Projet de développement" (module Développement, section AM).
  * Distinct de `Item.status` (texte libre) : ce cycle de vie couvre le projet dans son
@@ -91,6 +98,9 @@ model Item {
   outgoingLinks ItemLink[] @relation("ItemLinkSource")
   incomingLinks ItemLink[] @relation("ItemLinkTarget")
   docLinks    DocLink[]
+  attachments ItemAttachment[]
+  codeReferences ItemCodeReference[]
+  bugs        Bug[]
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -119,6 +129,7 @@ model DevProject {
   plannedEndAt    DateTime?         @map("planned_end_at")
   deliveryGoal    String?           @db.Text @map("delivery_goal")
   items           Item[]
+  bugs            Bug[]
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
@@ -330,4 +341,99 @@ model DevTemplate {
 
   @@index([active])
   @@map("dev_templates")
+}
+
+/**
+ * Pièce jointe libre sur un item (AM.5) : capture, log, fichier de repro... Stockée comme
+ * référence (URL/chemin), jamais le binaire en base — cohérent avec le reste du schéma (pas de
+ * BLOB en Postgres ici).
+ */
+model ItemAttachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  itemId    String   @db.Uuid @map("item_id")
+  fileName  String   @db.VarChar(300) @map("file_name")
+  url       String   @db.Text
+  mimeType  String?  @db.VarChar(120) @map("mime_type")
+  size      Int?
+  createdAt DateTime @default(now()) @map("created_at")
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@map("item_attachments")
+}
+
+/**
+ * Référence de code liée à un item (AM.5) : commit, merge/pull request ou version/release.
+ * Complète les champs `mergeRequestState`/`pipelineStatus` déjà sur `Item` (qui reflètent l'état
+ * de LA MR courante) en permettant plusieurs références horodatées (historique).
+ */
+model ItemCodeReference {
+  id        String   @id @default(uuid()) @db.Uuid
+  itemId    String   @db.Uuid @map("item_id")
+  refType   String   @db.VarChar(20) @map("ref_type") // commit | merge_request | release
+  label     String   @db.VarChar(200)
+  url       String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, refType])
+  @@map("item_code_references")
+}
+
+/**
+ * Workflow de statuts configurable (AM.5) : remplace l'idée d'un statut figé unique pour tous les
+ * items. `scope` référence `DevProject.id` (texte libre, pas de FK stricte pour rester utilisable
+ * avant/sans projet — ex. workflow global) ; `scope = null` définit le workflow par défaut utilisé
+ * quand un projet n'a pas configuré le sien.
+ */
+model WorkflowStatus {
+  id        String   @id @default(uuid()) @db.Uuid
+  scope     String?  @db.VarChar(100)
+  key       String   @db.VarChar(50)
+  label     String   @db.VarChar(100)
+  color     String?  @db.VarChar(20)
+  order     Int      @default(0)
+  isDefault Boolean  @default(false) @map("is_default")
+  isFinal   Boolean  @default(false) @map("is_final")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([scope, key])
+  @@index([scope, order])
+  @@map("workflow_statuses")
+}
+
+/**
+ * Modèle "Bug" distinct des tâches (AM.5) : un item générique ne porte pas de gravité,
+ * environnement, version affectée, comportement attendu/observé, étapes de reproduction ou logs.
+ * `itemId` relie optionnellement le bug à un item de suivi (ex. tâche de correction) sans
+ * dupliquer son cycle de vie ; `devProjectId` rattache le bug à un projet une fois AM.1 en place.
+ */
+model Bug {
+  id                String       @id @default(uuid()) @db.Uuid
+  title             String       @db.VarChar(300)
+  description       String?      @db.Text
+  severity          BugSeverity  @default(medium)
+  status            String       @default("open") @db.VarChar(50)
+  environment       String?      @db.VarChar(100)
+  versionAffected   String?      @db.VarChar(100) @map("version_affected")
+  expectedBehavior  String?      @db.Text @map("expected_behavior")
+  observedBehavior  String?      @db.Text @map("observed_behavior")
+  reproSteps        String?      @db.Text @map("repro_steps")
+  logs              String?      @db.Text
+  screenshots       String[]     @default([])
+  releaseRef        String?      @db.VarChar(200) @map("release_ref")
+  commitRef         String?      @db.VarChar(200) @map("commit_ref")
+  itemId            String?      @db.Uuid @map("item_id")
+  item              Item?        @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  devProjectId      String?      @db.Uuid @map("dev_project_id")
+  devProject        DevProject?  @relation(fields: [devProjectId], references: [id], onDelete: SetNull)
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([severity])
+  @@index([itemId])
+  @@index([devProjectId])
+  @@map("bugs")
 }
