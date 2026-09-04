@@ -47,6 +47,7 @@ model Item {
   taskLevel   TaskLevel? @map("task_level")
   title       String    @db.VarChar(300)
   description String?   @db.Text
+  content     String?   @db.Text
   status      String    @default("backlog") @db.VarChar(50)
   dueAt       DateTime? @map("due_at")
   triage      TriageStatus @default(none)
@@ -62,6 +63,7 @@ model Item {
   labels      ItemLabel[]
   outgoingLinks ItemLink[] @relation("ItemLinkSource")
   incomingLinks ItemLink[] @relation("ItemLinkTarget")
+  docLinks    DocLink[]
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -121,6 +123,32 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@map("audit_logs")
+}
+
+model DocPage {
+  id            String   @id @default(uuid()) @db.Uuid
+  sourceProject String   @db.VarChar(200) @map("source_project")
+  path          String   @db.VarChar(500)
+  title         String   @db.VarChar(300)
+  content       String   @db.Text
+  links         DocLink[]
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([sourceProject, path])
+  @@map("doc_pages")
+}
+
+model DocLink {
+  id        String   @id @default(uuid()) @db.Uuid
+  docPageId String   @db.Uuid @map("doc_page_id")
+  itemId    String   @db.Uuid @map("item_id")
+  docPage   DocPage  @relation(fields: [docPageId], references: [id], onDelete: Cascade)
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([docPageId, itemId])
+  @@map("doc_links")
 }
 
 model CatalogEntity {

@@ -19,6 +19,11 @@ export interface GitLabProject {
   default_branch: string | null;
 }
 
+export interface GitLabTreeEntry {
+  path: string;
+  type: 'blob' | 'tree';
+}
+
 export interface GitLabClientOptions {
   baseUrl: string;
   tokenProvider: GitLabTokenProvider;
@@ -58,6 +63,20 @@ export class GitLabClient {
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`GitLab API request failed (${response.status})`);
     return response.text();
+  }
+
+  /** Lists blob/tree entries recursively under `path` (empty for the repository root) on `ref`. Returns an empty array if the path does not exist. */
+  public async *listRepositoryTree(projectId: string, path: string, ref: string): AsyncGenerator<GitLabTreeEntry> {
+    let url: string | undefined = `${this.options.baseUrl}/projects/${encodeURIComponent(projectId)}/repository/tree?path=${encodeURIComponent(path)}&ref=${encodeURIComponent(ref)}&recursive=true&per_page=100`;
+    while (url) {
+      const token = await this.options.tokenProvider.getToken();
+      const response: Response = await this.fetchImpl(url, { headers: { 'private-token': token } });
+      if (response.status === 404) return;
+      if (!response.ok) throw new Error(`GitLab API request failed (${response.status})`);
+      const entries = (await response.json()) as GitLabTreeEntry[];
+      for (const entry of entries) yield entry;
+      url = parseNext(response.headers.get('link'));
+    }
   }
 
   public async addNote(projectId: string, issueIid: number, body: string): Promise<void> {

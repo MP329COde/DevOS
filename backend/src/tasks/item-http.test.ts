@@ -18,3 +18,18 @@ test('rejects invalid item payloads', async () => {
   const response = await handleItemRequest('POST', '/api/items', { title: '' }, {} as never);
   assert.equal(response.status, 400);
 });
+
+test('passes markdown content through on create and update for doc items', async () => {
+  let receivedCreate: unknown;
+  let receivedUpdate: unknown;
+  const service = {
+    async list() { return []; },
+    async create(input: unknown) { receivedCreate = input; return {}; },
+    async update(_id: string, input: unknown) { receivedUpdate = input; return {}; },
+    async delete() { return {}; },
+  };
+  await handleItemRequest('POST', '/api/items', { type: 'doc', title: 'Guide', content: '# Guide' }, service);
+  assert.deepEqual(receivedCreate, { type: 'doc', title: 'Guide', content: '# Guide' });
+  await handleItemRequest('PATCH', '/api/items/doc-1', { content: '# Updated' }, service);
+  assert.deepEqual(receivedUpdate, { content: '# Updated' });
+});

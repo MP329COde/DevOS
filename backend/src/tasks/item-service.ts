@@ -6,6 +6,7 @@ export interface CreateItemInput {
   type: ItemType;
   title: string;
   description?: string;
+  content?: string;
   parentId?: string;
   labels?: string[];
   dueAt?: string;
@@ -14,6 +15,7 @@ export interface CreateItemInput {
 export interface UpdateItemInput {
   title?: string;
   description?: string;
+  content?: string;
   status?: string;
   parentId?: string | null;
   mergeRequestState?: string | null;
@@ -35,6 +37,7 @@ export class ItemService {
         type: input.type,
         title,
         description: input.description,
+        content: input.content,
         parentId: input.parentId,
         taskLevel: input.type === ItemType.task ? 'task' : null,
         labels: {
@@ -51,6 +54,7 @@ export class ItemService {
       data: {
         ...(input.title === undefined ? {} : { title: validTitle(input.title) }),
         ...(input.description === undefined ? {} : { description: input.description }),
+        ...(input.content === undefined ? {} : { content: input.content }),
         ...(input.status === undefined ? {} : { status: input.status }),
         ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
         ...(input.mergeRequestState === undefined ? {} : { mergeRequestState: input.mergeRequestState }),

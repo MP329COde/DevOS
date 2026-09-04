@@ -29,6 +29,9 @@ import { handleInfraRequest, type InfraHttpService } from './catalog/infra-http.
 import { KubernetesClient } from './catalog/kubernetes.js';
 import { ArgoCDClient } from './catalog/argocd.js';
 import { HarborTrivyClient } from './catalog/harbor-trivy.js';
+import { handleDocsRequest, type DocsHttpService } from './docs/docs-http.js';
+import { DocsService } from './docs/docs-service.js';
+import { scanDocsFromGitLab } from './docs/docs-scan.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -43,6 +46,7 @@ export function createServer(
   haproxy?: HAProxyHttpService,
   catalog?: CatalogHttpService,
   infra?: InfraHttpService,
+  docs?: DocsHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -151,6 +155,18 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/docs')) {
+      if (!docs) { writeJson(response, 503, { error: 'Docs are not configured' }); return; }
+      const result = await handleDocsRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), docs);
+      if (result.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -176,7 +192,27 @@ if (require.main === module) {
   const haproxy = buildHAProxyServiceFromEnv(database);
   const catalog = buildCatalogServiceFromEnv(database);
   const infra = buildInfraServiceFromEnv();
-  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+  const docs = buildDocsServiceFromEnv(database);
+  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+}
+
+function buildDocsServiceFromEnv(database: PrismaClient): DocsHttpService {
+  const service = new DocsService(database);
+  return {
+    list: () => service.list(),
+    get: (id) => service.get(id),
+    link: (docPageId, itemId) => service.link(docPageId, itemId),
+    unlink: (docPageId, itemId) => service.unlink(docPageId, itemId),
+    async scan() {
+      const baseUrl = process.env.GITLAB_BASE_URL;
+      const token = process.env.GITLAB_TOKEN;
+      if (!baseUrl || !token) throw new Error('GITLAB_BASE_URL and GITLAB_TOKEN must be set to scan docs');
+      const gitlab = new GitLabClient({ baseUrl, tokenProvider: { async getToken() { return token; } } });
+      const result = await scanDocsFromGitLab(gitlab, process.env.DOCS_PATH);
+      await service.sync(result.pages);
+      return { scanned: result.pages.length, errors: result.errors };
+    },
+  };
 }
 
 function buildInfraServiceFromEnv(): InfraHttpService | undefined {

@@ -19,7 +19,8 @@ export function App() {
   const [dueAt, setDueAt] = useState('');
   const [view, setView] = useState<'list' | 'board' | 'gantt' | 'calendar'>('list');
   const [itemsError, setItemsError] = useState('');
-  const [panel, setPanel] = useState<'none' | 'dashboard' | 'triage' | 'haproxy' | 'catalog'>('none');
+  const [panel, setPanel] = useState<'none' | 'dashboard' | 'triage' | 'haproxy' | 'catalog' | 'docs'>('none');
+  const [content, setContent] = useState('');
   const [dashboardDay, setDashboardDay] = useState<'today' | 'tomorrow'>('today');
   const [dashboardItems, setDashboardItems] = useState<Array<{ id: string; title: string; type: string; dueAt?: string | null }>>([]);
   const [cycles, setCycles] = useState<Array<{ id: string; name: string; closedAt?: string | null }>>([]);
@@ -34,6 +35,8 @@ export function App() {
   const [catalogError, setCatalogError] = useState('');
   const [k8sNodes, setK8sNodes] = useState<Array<{ name: string; ready: boolean }>>([]);
   const [argoApps, setArgoApps] = useState<Array<{ name: string; syncStatus: string; healthStatus: string }>>([]);
+  const [docPages, setDocPages] = useState<Array<{ id: string; title: string; sourceProject: string; path: string }>>([]);
+  const [docsError, setDocsError] = useState('');
   const titleInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -113,6 +116,17 @@ export function App() {
   }, [panel]);
 
   useEffect(() => {
+    if (panel !== 'docs') return;
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/docs`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(response.status === 503 ? 'Les docs ne sont pas configurées sur ce backend.' : 'Impossible de charger les docs.');
+        setDocPages(await response.json());
+        setDocsError('');
+      })
+      .catch((error: Error) => setDocsError(error.message));
+  }, [panel]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const state = params.get('state');
@@ -149,7 +163,7 @@ export function App() {
     event.preventDefault();
     if (!title.trim()) return;
     const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/items`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, title, labels: labels.split(',').map((label) => label.trim()).filter(Boolean), ...(dueAt ? { dueAt: new Date(`${dueAt}T12:00:00`).toISOString() } : {}) }),
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, title, labels: labels.split(',').map((label) => label.trim()).filter(Boolean), ...(dueAt ? { dueAt: new Date(`${dueAt}T12:00:00`).toISOString() } : {}), ...(type === 'doc' && content ? { content } : {}) }),
     });
     if (!response.ok) { setItemsError('Création impossible.'); return; }
     const created = await response.json();
@@ -157,6 +171,7 @@ export function App() {
     setTitle('');
     setLabels('');
     setDueAt('');
+    setContent('');
   }
 
   async function updateStatus(item: { id: string }, nextStatus: string) {
@@ -208,6 +223,13 @@ export function App() {
     if (graphResponse.ok) setCatalogGraph(await graphResponse.json());
   }
 
+  async function scanDocs() {
+    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/docs/scan`, { method: 'POST' });
+    if (!response.ok) { setDocsError('Le scan des docs a échoué.'); return; }
+    const docsResponse = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/docs`);
+    if (docsResponse.ok) setDocPages(await docsResponse.json());
+  }
+
   const visibleItems = filter === 'all' ? items : items.filter((item) => item.type === filter);
   const groupedItems = visibleItems.reduce<Record<string, typeof visibleItems>>((groups, item) => {
     const key = view === 'calendar' || view === 'gantt' ? (item.dueAt ? new Date(item.dueAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : 'Sans date') : item.status.replace('_', ' ');
@@ -222,8 +244,9 @@ export function App() {
       <section className="workspace" aria-labelledby="items-title">
         {cycles.length > 0 && <aside className="cycles" aria-label="Cycles"><span className="kicker">CYCLE ACTIF</span>{cycles.filter((cycle) => !cycle.closedAt).map((cycle) => <div className="cycle" key={cycle.id}><strong>{cycle.name}</strong><button type="button" onClick={() => void closeCycle(cycle.id)}>Clôturer</button></div>)}</aside>}
         <div className="section-heading"><div><span className="kicker">WORK QUEUE</span><h2 id="items-title">Vos items</h2></div><div className="filters" aria-label="Filtrer les items">{['all', 'task', 'doc', 'goal'].map((value) => <button className={filter === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setFilter(value)}>{value === 'all' ? 'Tout' : value}</button>)}</div></div>
-        <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={panel === 'none' && view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => { setPanel('none'); setView(value); }}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}<button className={panel === 'triage' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('triage')}>Triage ({triage.length})</button><button className={panel === 'dashboard' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('dashboard')}>Aujourd’hui</button><button className={panel === 'haproxy' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('haproxy')}>Infra HAProxy</button><button className={panel === 'catalog' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('catalog')}>Catalogue</button></nav>
+        <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={panel === 'none' && view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => { setPanel('none'); setView(value); }}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}<button className={panel === 'triage' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('triage')}>Triage ({triage.length})</button><button className={panel === 'dashboard' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('dashboard')}>Aujourd’hui</button><button className={panel === 'haproxy' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('haproxy')}>Infra HAProxy</button><button className={panel === 'catalog' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('catalog')}>Catalogue</button><button className={panel === 'docs' ? 'filter active' : 'filter'} type="button" onClick={() => setPanel('docs')}>Docs</button></nav>
         <form className="new-item" onSubmit={createItem}><select aria-label="Type" value={type} onChange={(event) => setType(event.target.value)}><option value="task">Tâche</option><option value="doc">Document</option><option value="goal">Objectif</option></select><input ref={titleInput} aria-label="Titre" placeholder="Ajouter un item..." value={title} onChange={(event) => setTitle(event.target.value)} /><input aria-label="Labels" placeholder="type::bug, priority::high" value={labels} onChange={(event) => setLabels(event.target.value)} /><input aria-label="Échéance" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /><button type="submit">Ajouter</button></form>
+        {type === 'doc' && <textarea className="doc-editor" aria-label="Contenu du document" placeholder="Contenu Markdown du document..." value={content} onChange={(event) => setContent(event.target.value)} />}
         {itemsError && <p className="error" role="alert">{itemsError}</p>}
         {panel === 'dashboard' ? (
           <div className="items dashboard-timeline">
@@ -287,6 +310,18 @@ export function App() {
                 {argoApps.map((app) => <p className="empty" key={app.name}>{app.name} — {app.syncStatus} / {app.healthStatus}</p>)}
               </section>
             )}
+          </div>
+        ) : panel === 'docs' ? (
+          <div className="items docs-panel">
+            <div className="filters" aria-label="Actions docs"><button type="button" onClick={() => void scanDocs()}>Scanner les dépôts GitLab</button></div>
+            {docsError && <p className="error" role="alert">{docsError}</p>}
+            {!docsError && docPages.length === 0 && <p className="empty">Aucune doc trouvée. Lancez un scan pour peupler la liste.</p>}
+            {docPages.map((page) => (
+              <article className="item doc-page" key={page.id}>
+                <strong>{page.title}</strong>
+                <span className="integrations">{page.sourceProject} · {page.path}</span>
+              </article>
+            ))}
           </div>
         ) : panel === 'triage' ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div> : <div className={`items view-${view}`}>{view === 'list' ? visibleItems.map(itemCard) : Object.entries(groupedItems).map(([group, groupItems]) => <section className="view-group" key={group}><h3>{view === 'gantt' ? `Échéance ${group}` : group}</h3>{groupItems.map(itemCard)}</section>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>}
       </section>

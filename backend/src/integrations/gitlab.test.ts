@@ -67,6 +67,31 @@ test('returns null when the raw file does not exist', async () => {
   assert.equal(await client.getRawFile('root/a', 'catalog-info.yaml', 'main'), null);
 });
 
+test('lists a repository tree recursively, paginating across pages', async () => {
+  const urls: string[] = [];
+  const client = new GitLabClient({
+    baseUrl: 'https://gitlab.test/api/v4',
+    tokenProvider: { async getToken() { return 'token'; } },
+    fetchImpl: async (input) => {
+      urls.push(String(input));
+      return urls.length === 1
+        ? new Response(JSON.stringify([{ path: 'docs/a.md', type: 'blob' }]), { status: 200, headers: { link: '<https://gitlab.test/api/v4/projects/1/repository/tree?path=docs&page=2>; rel="next"' } })
+        : new Response(JSON.stringify([{ path: 'docs/b.md', type: 'blob' }]), { status: 200 });
+    },
+  });
+  const entries = [];
+  for await (const entry of client.listRepositoryTree('1', 'docs', 'main')) entries.push(entry.path);
+  assert.deepEqual(entries, ['docs/a.md', 'docs/b.md']);
+  assert.equal(urls[0], 'https://gitlab.test/api/v4/projects/1/repository/tree?path=docs&ref=main&recursive=true&per_page=100');
+});
+
+test('yields nothing when the tree path does not exist', async () => {
+  const client = new GitLabClient({ baseUrl: 'https://gitlab.test/api/v4', tokenProvider: { async getToken() { return 'token'; } }, fetchImpl: async () => new Response('', { status: 404 }) });
+  const entries = [];
+  for await (const entry of client.listRepositoryTree('1', 'docs', 'main')) entries.push(entry);
+  assert.deepEqual(entries, []);
+});
+
 test('rejects failed GitLab responses', async () => {
   const client = new GitLabClient({ baseUrl: 'https://gitlab.test/api/v4', tokenProvider: { async getToken() { return 'token'; } }, fetchImpl: async () => new Response('{}', { status: 401 }) });
   await assert.rejects(async () => { for await (const _issue of client.listIssues('1')) { /* consume */ } }, /failed \(401\)/);

@@ -48,6 +48,7 @@ function parseCreate(body: unknown) {
     ...(Array.isArray(input.labels) ? { labels: input.labels.filter((label): label is string => typeof label === 'string') } : {}),
     ...(typeof input.dueAt === 'string' ? { dueAt: input.dueAt } : {}),
     ...(typeof input.description === 'string' ? { description: input.description } : {}),
+    ...(typeof input.content === 'string' ? { content: input.content } : {}),
   };
 }
 
@@ -57,6 +58,7 @@ function parseUpdate(body: unknown) {
   return {
     ...(typeof input.title === 'string' ? { title: input.title } : {}),
     ...(typeof input.description === 'string' ? { description: input.description } : {}),
+    ...(typeof input.content === 'string' ? { content: input.content } : {}),
     ...(typeof input.status === 'string' ? { status: input.status } : {}),
   };
 }

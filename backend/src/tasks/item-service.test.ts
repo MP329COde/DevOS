@@ -55,6 +55,30 @@ test('leaves GitLab merge request and pipeline status untouched when absent from
   assert.deepEqual(receivedData, { status: 'in_progress' });
 });
 
+test('persists markdown content when creating a doc item', async () => {
+  let receivedContent: unknown;
+  const database = {
+    item: {
+      create: async ({ data }: { data: { content?: string } }) => { receivedContent = data.content; return {}; },
+    },
+  } as never;
+
+  await new ItemService(database).create({ type: ItemType.doc, title: 'Guide', content: '# Guide\n\nBody.' });
+  assert.equal(receivedContent, '# Guide\n\nBody.');
+});
+
+test('updates the content of an existing doc item', async () => {
+  let receivedData: unknown;
+  const database = {
+    item: {
+      update: async ({ data }: { data: unknown }) => { receivedData = data; return {}; },
+    },
+  } as never;
+
+  await new ItemService(database).update('doc-1', { content: '# Updated' });
+  assert.deepEqual(receivedData, { content: '# Updated' });
+});
+
 test('rejects empty or oversized titles', async () => {
   const service = new ItemService({} as never);
   await assert.rejects(() => service.create({ type: ItemType.task, title: ' ' }), /between 1 and 300/);
