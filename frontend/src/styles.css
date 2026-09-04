@@ -81,6 +81,9 @@ input { flex: 1; min-width: 0; }
 .haproxy-server { grid-template-columns: 1fr auto; }
 .catalog-entity { grid-template-columns: 90px 1fr auto; }
 .doc-page { grid-template-columns: 1fr auto; }
+.doc-page-onboarding { border-left-color: #7a632d; }
+.onboarding-badge { flex-shrink: 0; display: inline-flex; padding: 2px 8px; border-radius: 999px; font: 700 10px sans-serif; text-transform: uppercase; color: #fffdf4; background: #7a632d; }
+.onboarding-form { margin: 14px 0 0; }
 .doc-editor { width: 100%; min-height: 140px; margin: -14px 0 24px; padding: 12px 14px; font: 14px/1.5 monospace; background: rgba(255, 252, 242, .72); border: 1px solid #d0d9ce; resize: vertical; }
 .setting-row { grid-template-columns: 260px 1fr auto; }
 .setting-row input { padding: 8px 10px; border: 1px solid #d0d9ce; background: rgba(255, 252, 242, .72); font: 13px monospace; }

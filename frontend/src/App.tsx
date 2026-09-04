@@ -107,7 +107,9 @@ export function App() {
   const [catalogError, setCatalogError] = useState('');
   const [k8sNodes, setK8sNodes] = useState<Array<{ name: string; ready: boolean }>>([]);
   const [argoApps, setArgoApps] = useState<Array<{ name: string; syncStatus: string; healthStatus: string }>>([]);
-  const [docPages, setDocPages] = useState<Array<{ id: string; title: string; sourceProject: string; path: string }>>([]);
+  const [docPages, setDocPages] = useState<Array<{ id: string; title: string; sourceProject: string; path: string; pageType?: 'scanned' | 'onboarding' }>>([]);
+  const [onboardingTitle, setOnboardingTitle] = useState('');
+  const [onboardingContent, setOnboardingContent] = useState('');
   const [docsError, setDocsError] = useState('');
   const [widgetData, setWidgetData] = useState<{ pipelines: { running: number; items: Array<{ id: number; status: string; ref: string; web_url: string }> }; alerts: { active: number; critical: number; items: Array<{ fingerprint: string; labels: Record<string, string>; status: { state: string }; startsAt: string }> } } | null>(null);
   const [widgetsError, setWidgetsError] = useState('');
@@ -461,6 +463,19 @@ export function App() {
     if (docsResponse.ok) setDocPages(await docsResponse.json());
   }
 
+  async function createOnboardingPage(event: FormEvent) {
+    event.preventDefault();
+    if (!onboardingTitle.trim() || !onboardingContent.trim()) return;
+    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/docs/onboarding`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: onboardingTitle, content: onboardingContent }),
+    });
+    if (!response.ok) { setDocsError('La création de la fiche onboarding a échoué.'); return; }
+    const created = await response.json();
+    setDocPages((current) => [...current, created]);
+    setOnboardingTitle('');
+    setOnboardingContent('');
+  }
+
   async function saveSetting(key: string) {
     const value = settingsDrafts[key] ?? '';
     const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings/${encodeURIComponent(key)}`, {
@@ -696,11 +711,18 @@ export function App() {
         ) : panel === 'docs' ? (
           <div className="items docs-panel">
             <div className="filters" aria-label="Actions docs"><button type="button" onClick={() => void scanDocs()}>Scanner les dépôts GitLab</button></div>
+            <form className="new-item onboarding-form" onSubmit={(event) => void createOnboardingPage(event)}>
+              <input aria-label="Titre de la fiche onboarding" placeholder="Titre (ex: Arrivée sur le projet DevOS)" value={onboardingTitle} onChange={(event) => setOnboardingTitle(event.target.value)} />
+              <button type="submit">Créer une fiche onboarding</button>
+            </form>
+            {onboardingTitle && (
+              <textarea className="doc-editor" aria-label="Contenu de la fiche onboarding" placeholder="Checklist ou documentation à consulter (Markdown)..." value={onboardingContent} onChange={(event) => setOnboardingContent(event.target.value)} />
+            )}
             {docsError && <p className="error" role="alert">{docsError}</p>}
-            {!docsError && docPages.length === 0 && <p className="empty">Aucune doc trouvée. Lancez un scan pour peupler la liste.</p>}
+            {!docsError && docPages.length === 0 && <p className="empty">Aucune doc trouvée. Lancez un scan ou créez une fiche onboarding.</p>}
             {docPages.map((page) => (
-              <article className="item doc-page" key={page.id}>
-                <strong>{page.title}</strong>
+              <article className={page.pageType === 'onboarding' ? 'item doc-page doc-page-onboarding' : 'item doc-page'} key={page.id}>
+                <span className="item-title"><strong>{page.title}</strong>{page.pageType === 'onboarding' && <span className="onboarding-badge">Onboarding</span>}</span>
                 <span className="integrations">{page.sourceProject} · {page.path}</span>
               </article>
             ))}

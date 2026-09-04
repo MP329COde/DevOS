@@ -85,7 +85,7 @@ Fichiers : `backend/prisma/schema.prisma` (champ `required Boolean @default(fals
 
 ## I. Fiche de formation / onboarding
 
-- [ ] Clarifier le contenu attendu (checklist d'arrivée sur un projet ? documentation d'un service à consulter avant intervention ?) — probablement une extension du module Docs (`backend/src/tasks/docs-service.ts`) avec un type de page dédié plutôt qu'un nouveau module
+- [x] Clarifier le contenu attendu (checklist d'arrivée sur un projet ? documentation d'un service à consulter avant intervention ?) — **réponse utilisateur : extension du module Docs** avec un type de page dédié (le service réel vit dans `backend/src/docs/docs-service.ts`, pas `tasks/`) ; implémenté : `pageType` sur `DocPage`, formulaire de création titre + contenu Markdown, badge distinct dans le panel Docs
 
 ---
 
