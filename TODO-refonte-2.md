@@ -61,14 +61,14 @@
 
 ## AB. Thèmes et apparence — approfondissement
 
-- [ ] Historique/undo sur la dernière couleur personnalisée modifiée
-- [ ] Presets de couleurs personnalisés (paire clair/sombre) sauvegardables
-- [ ] Bascule automatique clair/sombre selon horaire configurable (avec on/off)
-- [ ] Transition fade douce au changement de thème
-- [ ] 5-6 thèmes préconfigurés (palettes cohérentes, ex. thème bleu)
-- [ ] Réorganiser Paramètres → Apparence en sous-zones distinctes (disposition / thème clair-sombre / couleurs / thèmes préconfigurés / fond animé)
-- [ ] Fonds d'écran animés au choix (7-8 propositions, légers, dans le profil utilisateur)
-- [ ] Vérifier Playwright
+- [x] Historique/undo sur la dernière couleur personnalisée modifiée
+- [x] Presets de couleurs personnalisés (paire clair/sombre) sauvegardables
+- [x] Bascule automatique clair/sombre selon horaire configurable (avec on/off)
+- [x] Transition fade douce au changement de thème
+- [x] 5-6 thèmes préconfigurés (palettes cohérentes, ex. thème bleu)
+- [x] Réorganiser Paramètres → Apparence en sous-zones distinctes (disposition / thème clair-sombre / couleurs / thèmes préconfigurés / fond animé)
+- [x] Fonds d'écran animés au choix (7-8 propositions, légers, dans le profil utilisateur)
+- [x] Vérifier Playwright
 
 ## AC. Profils, comptes, rôles et permissions
 
