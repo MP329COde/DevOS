@@ -29,8 +29,8 @@
 
 ## W. Comptes GitHub/GitLab dédiés à la plateforme
 
-- [ ] Permettre de configurer un compte GitHub et un compte GitLab appartenant à DevOS lui-même (pas à un utilisateur), utilisés pour la création de dépôts/versioning/sauvegardes autonomes — nouvelle section Paramètres, réutilise `SettingsService`
-- [ ] Vérifier Playwright
+- [x] Permettre de configurer un compte GitHub et un compte GitLab appartenant à DevOS lui-même (pas à un utilisateur), utilisés pour la création de dépôts/versioning/sauvegardes autonomes — nouvelle section Paramètres, réutilise `SettingsService`
+- [x] Vérifier Playwright
 
 ## X. Travail — fusionner les onglets fractionnés
 
