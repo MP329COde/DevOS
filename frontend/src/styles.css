@@ -38,6 +38,7 @@ body { margin: 0; min-width: 320px; }
 .sidebar.collapsed .nav-link { justify-content: center; padding: 10px; }
 .nav-link:hover { background: rgba(73, 99, 76, .12); }
 .nav-link.active { color: #fffdf4; background: #49634c; }
+.nav-link:focus-visible, .sidebar-collapse:focus-visible { outline: 2px solid #a34f31; outline-offset: 2px; }
 .nav-link svg { flex-shrink: 0; }
 .nav-label { flex: 1; }
 .nav-badge { padding: 1px 7px; border-radius: 999px; background: rgba(23, 33, 27, .15); font: 700 11px sans-serif; }
