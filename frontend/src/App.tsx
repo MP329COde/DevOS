@@ -49,6 +49,8 @@ function StatusBadge({ state, label }: { state: 'ok' | 'warn' | 'off'; label: st
   );
 }
 
+const CRITICAL_WAZUH_LEVEL = 12;
+
 const homeWidgetDefs: Record<string, { title: string; icon: string }> = {
   pipelines: { title: 'Pipelines en cours', icon: 'network' },
   alerts: { title: 'Alertes actives', icon: 'gear' },
@@ -122,6 +124,7 @@ export function App() {
   const [networkError, setNetworkError] = useState('');
   const [calendarEvents, setCalendarEvents] = useState<Array<{ uid: string; title: string; start: string; end?: string; allDay: boolean; source: 'personal' | 'professional' }>>([]);
   const [calendarError, setCalendarError] = useState('');
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => (typeof Notification === 'undefined' ? 'denied' : Notification.permission));
   const titleInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -136,6 +139,26 @@ export function App() {
   }, []);
 
   useEffect(() => { localStorage.setItem('devos.sidebarCollapsed', sidebarCollapsed ? '1' : '0'); }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (notificationPermission !== 'granted') return;
+    const notifiedKey = 'devos.notifiedIds';
+    const notifiedSet = new Set<string>(JSON.parse(localStorage.getItem(notifiedKey) ?? '[]'));
+    const now = Date.now();
+    const overdue = items.filter((item) => item.dueAt && item.status !== 'done' && new Date(item.dueAt).getTime() < now && !notifiedSet.has(`item:${item.id}`));
+    const critical = (wazuhAlerts ?? []).filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL && !notifiedSet.has(`wazuh:${alert.id}`));
+    if (overdue.length === 0 && critical.length === 0) return;
+
+    const dispatch = (title: string, message: string) => {
+      new Notification(title, { body: message });
+      void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/notifications/trigger`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title, message }),
+      }).catch(() => undefined);
+    };
+    for (const item of overdue) { dispatch('Échéance dépassée', item.title); notifiedSet.add(`item:${item.id}`); }
+    for (const alert of critical) { dispatch('Alerte critique', alert.ruleDescription); notifiedSet.add(`wazuh:${alert.id}`); }
+    localStorage.setItem(notifiedKey, JSON.stringify([...notifiedSet]));
+  }, [items, wazuhAlerts, notificationPermission]);
   useEffect(() => { localStorage.setItem('devos.homeWidgets', JSON.stringify(homeWidgets)); }, [homeWidgets]);
 
   const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null);
@@ -713,6 +736,17 @@ export function App() {
                 <button className={navLayout === 'sidebar' ? 'filter active' : 'filter'} type="button" onClick={() => setNavLayout('sidebar')}>Barre latérale</button>
                 <button className={navLayout === 'topbar' ? 'filter active' : 'filter'} type="button" onClick={() => setNavLayout('topbar')}>Barre du haut</button>
               </div>
+            </section>
+            <section className="widget-card">
+              <h3>Notifications</h3>
+              <p className="empty">Notification navigateur locale sur échéance dépassée ou alerte critique (Wazuh, niveau ≥ {CRITICAL_WAZUH_LEVEL}).</p>
+              {notificationPermission === 'granted' ? (
+                <p className="empty">Notifications activées ✓</p>
+              ) : notificationPermission === 'denied' ? (
+                <p className="error" role="alert">Notifications bloquées par le navigateur.</p>
+              ) : (
+                <button type="button" onClick={() => void Notification.requestPermission().then(setNotificationPermission)}>Activer les notifications navigateur</button>
+              )}
             </section>
             <SecretsPanel />
             {settingsError && <p className="error" role="alert">{settingsError}</p>}

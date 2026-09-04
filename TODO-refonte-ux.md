@@ -80,8 +80,8 @@ Fichiers : `backend/prisma/schema.prisma` (champ `required Boolean @default(fals
 
 ## H. Notifications
 
-- [ ] Clarifier le canal visé (notification navigateur Web Push ? email ? webhook sortant générique ?) avec l'utilisateur avant de coder — item sous-spécifié
-- [ ] Une fois clarifié : commencer par le cas le plus simple (notification navigateur locale sur échéance dépassée / alerte critique), pas de système de notification distribué complexe sans besoin confirmé
+- [x] Clarifier le canal visé (notification navigateur Web Push ? email ? webhook sortant générique ?) avec l'utilisateur avant de coder — **réponse utilisateur : les trois canaux** (navigateur + email + webhook), avec `nodemailer` explicitement accepté comme nouvelle dépendance pour l'email
+- [x] Une fois clarifié : notification navigateur locale sur échéance dépassée / alerte critique (Wazuh niveau ≥ 12) côté client, fan-out best-effort vers email (SMTP) et webhook générique côté serveur via `POST /api/notifications/trigger`
 
 ## I. Fiche de formation / onboarding
 
