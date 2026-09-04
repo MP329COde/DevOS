@@ -20,6 +20,7 @@ export interface UpdateItemInput {
   parentId?: string | null;
   mergeRequestState?: string | null;
   pipelineStatus?: string | null;
+  required?: boolean;
 }
 
 export class ItemService {
@@ -59,6 +60,7 @@ export class ItemService {
         ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
         ...(input.mergeRequestState === undefined ? {} : { mergeRequestState: input.mergeRequestState }),
         ...(input.pipelineStatus === undefined ? {} : { pipelineStatus: input.pipelineStatus }),
+        ...(input.required === undefined ? {} : { required: input.required }),
       },
     });
   }

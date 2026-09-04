@@ -33,3 +33,15 @@ test('passes markdown content through on create and update for doc items', async
   await handleItemRequest('PATCH', '/api/items/doc-1', { content: '# Updated' }, service);
   assert.deepEqual(receivedUpdate, { content: '# Updated' });
 });
+
+test('passes the required flag through on update', async () => {
+  let receivedUpdate: unknown;
+  const service = {
+    async list() { return []; },
+    async create() { return {}; },
+    async update(_id: string, input: unknown) { receivedUpdate = input; return {}; },
+    async delete() { return {}; },
+  };
+  await handleItemRequest('PATCH', '/api/items/item-1', { required: true }, service);
+  assert.deepEqual(receivedUpdate, { required: true });
+});

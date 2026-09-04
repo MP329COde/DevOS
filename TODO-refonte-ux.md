@@ -75,7 +75,7 @@ Contexte : Vault est déjà intégré côté backend (`backend/src/infrastructur
 
 Fichiers : `backend/prisma/schema.prisma` (champ `required Boolean @default(false)` sur `Item`), migration additive, `backend/src/tasks/item-service.ts` (`UpdateItemInput`), `backend/src/tasks/item-http.ts` (exposer dans `parseUpdate`, celui-ci contrairement aux champs GitLab internes doit être modifiable via l'API publique), `frontend/src/App.tsx` (case à cocher ou badge sur la carte d'item, filtre dédié)
 
-- [ ] Champ + migration + service + endpoint + tests backend
+- [x] Champ + migration + service + endpoint + tests backend
 - [ ] UI : indicateur visuel distinct (pas juste du texte) sur les cartes d'items marqués obligatoires, cohérent avec la palette de `Design.md`
 
 ## H. Notifications

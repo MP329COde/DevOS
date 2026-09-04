@@ -60,5 +60,6 @@ function parseUpdate(body: unknown) {
     ...(typeof input.description === 'string' ? { description: input.description } : {}),
     ...(typeof input.content === 'string' ? { content: input.content } : {}),
     ...(typeof input.status === 'string' ? { status: input.status } : {}),
+    ...(typeof input.required === 'boolean' ? { required: input.required } : {}),
   };
 }

@@ -49,6 +49,7 @@ model Item {
   description String?   @db.Text
   content     String?   @db.Text
   status      String    @default("backlog") @db.VarChar(50)
+  required    Boolean   @default(false)
   dueAt       DateTime? @map("due_at")
   triage      TriageStatus @default(none)
   mergeRequestState String? @map("merge_request_state") @db.VarChar(20)

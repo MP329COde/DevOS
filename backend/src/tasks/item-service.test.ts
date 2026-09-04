@@ -55,6 +55,30 @@ test('leaves GitLab merge request and pipeline status untouched when absent from
   assert.deepEqual(receivedData, { status: 'in_progress' });
 });
 
+test('persists the required flag when provided', async () => {
+  let receivedData: unknown;
+  const database = {
+    item: {
+      update: async ({ data }: { data: unknown }) => { receivedData = data; return {}; },
+    },
+  } as never;
+
+  await new ItemService(database).update('item-1', { required: true });
+  assert.deepEqual(receivedData, { required: true });
+});
+
+test('leaves the required flag untouched when absent from the update', async () => {
+  let receivedData: unknown;
+  const database = {
+    item: {
+      update: async ({ data }: { data: unknown }) => { receivedData = data; return {}; },
+    },
+  } as never;
+
+  await new ItemService(database).update('item-1', { status: 'in_progress' });
+  assert.deepEqual(receivedData, { status: 'in_progress' });
+});
+
 test('persists markdown content when creating a doc item', async () => {
   let receivedContent: unknown;
   const database = {
