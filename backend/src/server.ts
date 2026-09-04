@@ -10,6 +10,8 @@ import { handleSettingsRequest, type SettingsHttpService } from './settings/sett
 import { SettingsService } from './settings/settings-service.js';
 import { handleItemRequest, type ItemHttpService } from './tasks/item-http.js';
 import { ItemService } from './tasks/item-service.js';
+import { handleCommentRequest, type CommentHttpService } from './tasks/comment-http.js';
+import { CommentService } from './tasks/comment-service.js';
 import { handleCycleRequest, type CycleService } from './tasks/cycle-http.js';
 import { PrismaCycleService } from './tasks/cycle-service.js';
 import { handleTriageRequest, type TriageService } from './tasks/triage-http.js';
@@ -67,6 +69,7 @@ import { listRunningPipelines } from './integrations/gitlab-pipelines.js';
 import { AlertmanagerClient } from './integrations/alertmanager.js';
 import { buildDashboardWidgets } from './tasks/dashboard-widgets.js';
 import { handleIntegrationBuilderRequest, type IntegrationBuilderHttpService, type SavedIntegration } from './catalog/integration-builder-http.js';
+import { handleCustomWidgetsRequest, type CustomWidgetsHttpService, type CustomWidget } from './catalog/custom-widgets-http.js';
 import { testIntegration } from './integrations/integration-builder.js';
 import { handleSecretsRequest, type SecretsHttpService } from './tasks/secrets-http.js';
 import { SecretsService } from './tasks/secrets-service.js';
@@ -97,6 +100,8 @@ export function createServer(
   secrets?: SecretsHttpService,
   calendar?: CalendarHttpService,
   notifications?: NotificationsHttpService,
+  customWidgets?: CustomWidgetsHttpService,
+  comments?: CommentHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -128,6 +133,13 @@ export function createServer(
     if (request.url === '/api/coder/templates' || (request.url?.startsWith('/api/items/') && request.url.endsWith('/workspace'))) {
       if (!workspace) { writeJson(response, 503, { error: 'Coder integration is not configured' }); return; }
       const result = await handleWorkspaceRequest(request.method ?? 'GET', request.url, workspace);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/items/') && request.url.endsWith('/comments')) {
+      if (!comments) { writeJson(response, 503, { error: 'Comments are not configured' }); return; }
+      const result = await handleCommentRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), comments);
       writeJson(response, result.status, result.body);
       return;
     }
@@ -207,7 +219,7 @@ export function createServer(
 
     if (request.url?.startsWith('/api/catalog')) {
       if (!catalog) { writeJson(response, 503, { error: 'Catalog is not configured' }); return; }
-      const result = await handleCatalogRequest(request.method ?? 'GET', request.url, catalog);
+      const result = await handleCatalogRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), catalog);
       writeJson(response, result.status, result.body);
       return;
     }
@@ -246,6 +258,14 @@ export function createServer(
     if (request.url === '/api/integrations' || request.url === '/api/integrations/test') {
       if (!integrationBuilder) { writeJson(response, 503, { error: 'Integration builder is not configured' }); return; }
       const result = await handleIntegrationBuilderRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), integrationBuilder);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/custom-widgets')) {
+      if (!customWidgets) { writeJson(response, 503, { error: 'Custom widgets are not configured' }); return; }
+      const result = await handleCustomWidgetsRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), customWidgets);
+      if (result.status === 204) { response.writeHead(204); response.end(); return; }
       writeJson(response, result.status, result.body);
       return;
     }
@@ -304,7 +324,7 @@ if (require.main === module) {
     const dashboard = new DashboardService(database);
     const haproxy = buildHAProxyServiceFromEnv(database);
     const catalog = buildCatalogServiceFromEnv(database);
-    const infra = buildInfraServiceFromEnv();
+    const infra = buildInfraServiceFromEnv(database);
     const docs = buildDocsServiceFromEnv(database);
     await new DocsService(database).ensureDefaultOnboardingPages();
     const workspace = coder ? buildWorkspaceServiceFromEnv(database, coder) : undefined;
@@ -314,7 +334,9 @@ if (require.main === module) {
     const secrets = await buildSecretsServiceFromEnv();
     const calendar = buildCalendarServiceFromEnv();
     const notifications: NotificationsHttpService = buildNotificationsServiceFromEnv();
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const customWidgets = buildCustomWidgetsServiceFromEnv(settingsService);
+    const comments = buildCommentsServiceFromEnv(database);
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -333,6 +355,29 @@ function buildIntegrationBuilderServiceFromEnv(settings: SettingsService): Integ
       const current: SavedIntegration[] = raw ? JSON.parse(raw) : [];
       const next = [...current.filter((existing) => existing.name !== integration.name), integration];
       await settings.set(CUSTOM_INTEGRATIONS_SETTINGS_KEY, JSON.stringify(next));
+    },
+  };
+}
+
+const CUSTOM_WIDGETS_SETTINGS_KEY = 'CUSTOM_WIDGETS';
+
+/** Widgets custom du Dashboard (section R) : persistés comme un tableau JSON via SettingsService, jamais d'exécution de code côté serveur. */
+function buildCustomWidgetsServiceFromEnv(settings: SettingsService): CustomWidgetsHttpService {
+  return {
+    async list() {
+      const raw = await settings.get(CUSTOM_WIDGETS_SETTINGS_KEY);
+      return raw ? (JSON.parse(raw) as CustomWidget[]) : [];
+    },
+    async save(widget) {
+      const raw = await settings.get(CUSTOM_WIDGETS_SETTINGS_KEY);
+      const current: CustomWidget[] = raw ? JSON.parse(raw) : [];
+      const next = [...current.filter((existing) => existing.id !== widget.id), widget];
+      await settings.set(CUSTOM_WIDGETS_SETTINGS_KEY, JSON.stringify(next));
+    },
+    async remove(id) {
+      const raw = await settings.get(CUSTOM_WIDGETS_SETTINGS_KEY);
+      const current: CustomWidget[] = raw ? JSON.parse(raw) : [];
+      await settings.set(CUSTOM_WIDGETS_SETTINGS_KEY, JSON.stringify(current.filter((existing) => existing.id !== id)));
     },
   };
 }
@@ -701,7 +746,7 @@ function buildDocsServiceFromEnv(database: PrismaClient): DocsHttpService {
   };
 }
 
-function buildInfraServiceFromEnv(): InfraHttpService | undefined {
+function buildInfraServiceFromEnv(database: PrismaClient): InfraHttpService | undefined {
   const k8sApiServer = process.env.K8S_API_SERVER;
   const k8sToken = process.env.K8S_TOKEN;
   const argoBaseUrl = process.env.ARGOCD_BASE_URL;
@@ -744,9 +789,30 @@ function buildInfraServiceFromEnv(): InfraHttpService | undefined {
           );
           const zones = await dnsClient.listZones();
           const recordSets = (await Promise.all(zones.map((zone) => dnsClient.getZoneRecords(zone.id)))).flat();
-          return buildNetworkTopology({ proxmoxNodes: nodes, proxmoxVMsByNode: vmsByNode, dnsRecords: recordSets });
+          const catalogRows = await database.catalogEntity.findMany({ select: { name: true, annotations: true } });
+          const catalogServices = catalogRows.map((row) => ({
+            name: row.name,
+            host: (row.annotations as Record<string, string> | null)?.['devos.io/host'],
+          }));
+          return buildNetworkTopology({ proxmoxNodes: nodes, proxmoxVMsByNode: vmsByNode, dnsRecords: recordSets, catalogServices });
         }
       : undefined,
+  };
+}
+
+/**
+ * Commentaires sur un item, propagés vers GitLab (note sur l'issue) quand l'item est lié
+ * (`GitLabIssueLink`) et que GITLAB_BASE_URL/GITLAB_TOKEN sont configurés. Fonctionne aussi sans
+ * GitLab configuré : les commentaires restent alors purement locaux (jamais propagés).
+ */
+function buildCommentsServiceFromEnv(database: PrismaClient): CommentHttpService {
+  const baseUrl = process.env.GITLAB_BASE_URL;
+  const token = process.env.GITLAB_TOKEN;
+  const gitlab = baseUrl && token ? new GitLabClient({ baseUrl, tokenProvider: { async getToken() { return token; } } }) : undefined;
+  const service = new CommentService(database, gitlab);
+  return {
+    list: (itemId) => service.list(itemId),
+    create: (itemId, body, author) => service.create(itemId, body, author),
   };
 }
 
@@ -764,6 +830,7 @@ function buildCatalogServiceFromEnv(database: PrismaClient): CatalogHttpService 
       await service.sync(result.entities);
       return { scanned: result.entities.length, errors: result.errors };
     },
+    createFromTemplate: (templateKind, templateName, input) => service.createFromTemplate(templateKind, templateName, input),
   };
 }
 

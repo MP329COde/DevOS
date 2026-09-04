@@ -159,9 +159,9 @@ Contexte : le module Infra HAProxy est jugé peu avancé, l'intégration Proxmox
 
 Contexte : les widgets doivent être personnalisables et il doit être possible d'en créer de nouveaux à partir d'un template (ou de code), avec des variables configurables.
 
-- [ ] Définir un format de widget "custom" simple (JSON : titre, source de données parmi `/api/extras/*` existants, template d'affichage) persisté via `SettingsService`
-- [ ] UI de création de widget custom dans le panel Widgets/Paramètres : choix d'une source existante + variables (clé à afficher, libellé), pas d'exécution de code arbitraire côté serveur pour rester sûr
-- [ ] Vérifier Playwright : création d'un widget custom, apparition dans le Dashboard
+- [x] Définir un format de widget "custom" simple (JSON : titre, source de données parmi `/api/extras/*` existants, template d'affichage) persisté via `SettingsService`
+- [x] UI de création de widget custom dans le panel Widgets/Paramètres : choix d'une source existante + variables (clé à afficher, libellé), pas d'exécution de code arbitraire côté serveur pour rester sûr
+- [x] Vérifier Playwright : création d'un widget custom, apparition dans le Dashboard
 
 ## S. Intégrations — page dédiée dans Paramètres, sections au lieu d'un bloc unique
 
