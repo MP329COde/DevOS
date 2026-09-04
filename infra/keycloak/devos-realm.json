@@ -1,0 +1,43 @@
+{
+  "realm": "devos",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "clients": [
+    {
+      "clientId": "devos",
+      "enabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "secret": "devos-local-only-backend-secret",
+      "redirectUris": [
+        "http://localhost:5173/auth/callback",
+        "http://localhost:8080/auth/callback",
+        "http://localhost:3000/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:8080"
+      ],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "devos-admin",
+      "enabled": true,
+      "email": "admin@devos.local",
+      "emailVerified": true,
+      "firstName": "DevOS",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "devos-local-only",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

@@ -3,7 +3,11 @@ import { createServer as createHttpServer, type IncomingMessage, type ServerResp
 import { PrismaClient } from '@prisma/client';
 
 import { handleAuthCallback } from './infrastructure/keycloak-http.js';
-import type { KeycloakAuthService } from './infrastructure/keycloak-auth.js';
+import { KeycloakAuthService, RedisSessionStore, type KeycloakSecretReader } from './infrastructure/keycloak-auth.js';
+import { createKeycloakOidcConfig } from './infrastructure/keycloak.js';
+import { createRedisClients } from './infrastructure/redis.js';
+import { handleSettingsRequest, type SettingsHttpService } from './settings/settings-http.js';
+import { SettingsService } from './settings/settings-service.js';
 import { handleItemRequest, type ItemHttpService } from './tasks/item-http.js';
 import { ItemService } from './tasks/item-service.js';
 import { handleCycleRequest, type CycleService } from './tasks/cycle-http.js';
@@ -78,6 +82,7 @@ export function createServer(
   docs?: DocsHttpService,
   workspace?: WorkspaceHttpService,
   extras?: ExtrasHttpService,
+  settings?: SettingsHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -212,6 +217,18 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/settings')) {
+      if (!settings) { writeJson(response, 503, { error: 'Settings are not configured' }); return; }
+      const result = await handleSettingsRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), settings);
+      if (result.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -228,21 +245,57 @@ export function createServer(
 }
 
 if (require.main === module) {
-  const database = new PrismaClient();
-  const rawItems = new ItemService(database);
-  const coder = buildCoderClientFromEnv();
-  const items = coder ? wrapItemsWithAutoStop(rawItems, database, coder) : rawItems;
-  const cycles = new PrismaCycleService(database);
-  const triage = new PrismaTriageService(database);
-  const time = new PrismaTimeService(database);
-  const dashboard = new DashboardService(database);
-  const haproxy = buildHAProxyServiceFromEnv(database);
-  const catalog = buildCatalogServiceFromEnv(database);
-  const infra = buildInfraServiceFromEnv();
-  const docs = buildDocsServiceFromEnv(database);
-  const workspace = coder ? buildWorkspaceServiceFromEnv(database, coder) : undefined;
-  const extras = buildExtrasServiceFromEnv(rawItems);
-  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+  void (async () => {
+    const database = new PrismaClient();
+    const settingsService = new SettingsService(database);
+    await applyStoredSettingsToEnv(settingsService);
+    const rawItems = new ItemService(database);
+    const coder = buildCoderClientFromEnv();
+    const items = coder ? wrapItemsWithAutoStop(rawItems, database, coder) : rawItems;
+    const cycles = new PrismaCycleService(database);
+    const triage = new PrismaTriageService(database);
+    const time = new PrismaTimeService(database);
+    const dashboard = new DashboardService(database);
+    const haproxy = buildHAProxyServiceFromEnv(database);
+    const catalog = buildCatalogServiceFromEnv(database);
+    const infra = buildInfraServiceFromEnv();
+    const docs = buildDocsServiceFromEnv(database);
+    const workspace = coder ? buildWorkspaceServiceFromEnv(database, coder) : undefined;
+    const extras = buildExtrasServiceFromEnv(rawItems);
+    const auth = await buildAuthServiceFromEnv();
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+  })();
+}
+
+/** Loads integration settings persisted via the Settings screen into process.env, without overriding variables already set (env vars always win). */
+async function applyStoredSettingsToEnv(settings: SettingsService): Promise<void> {
+  const stored = await settings.list();
+  for (const [key, value] of Object.entries(stored)) {
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+/**
+ * Builds the Keycloak login flow when configured. `KEYCLOAK_CLIENT_SECRET` is a direct-value
+ * fallback for local/dev setups without a real Vault deployment (e.g. docker-compose); the
+ * production path (a Vault-backed KeycloakSecretReader) is intentionally not implemented here
+ * since it needs a real Vault + Kubernetes ServiceAccount, out of scope for local dev.
+ */
+async function buildAuthServiceFromEnv(): Promise<Pick<KeycloakAuthService, 'completeLogin'> | undefined> {
+  const directSecret = process.env.KEYCLOAK_CLIENT_SECRET;
+  const redisUrl = process.env.REDIS_URL;
+  if (!directSecret || !redisUrl) return undefined;
+  let config;
+  try {
+    config = createKeycloakOidcConfig(process.env);
+  } catch {
+    return undefined;
+  }
+  const secretReader: KeycloakSecretReader = { async readKv2() { return { client_secret: directSecret }; } };
+  const redis = createRedisClients(redisUrl).cache;
+  await redis.connect();
+  const sessions = new RedisSessionStore(redis);
+  return new KeycloakAuthService(config, secretReader, sessions);
 }
 
 function buildExtrasServiceFromEnv(items: ItemService): ExtrasHttpService {
@@ -615,7 +668,7 @@ function applyCors(request: IncomingMessage, response: ServerResponse): void {
   // Credentials are only allowed once FRONTEND_ORIGIN is explicitly configured; reflecting an
   // arbitrary request origin with credentials enabled would let any site read a signed-in session.
   if (configuredOrigin) response.setHeader('access-control-allow-credentials', 'true');
-  response.setHeader('access-control-allow-methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  response.setHeader('access-control-allow-methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   response.setHeader('access-control-allow-headers', 'content-type');
   response.setHeader('vary', 'origin');
 }

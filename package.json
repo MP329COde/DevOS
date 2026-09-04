@@ -13,6 +13,7 @@
     "typecheck": "npm --workspace backend run typecheck && npm --workspace frontend run typecheck",
     "lint": "npm run typecheck",
     "test": "npm --workspace backend test",
-    "build": "npm --workspace backend run build && npm --workspace frontend run build"
+    "build": "npm --workspace backend run build && npm --workspace frontend run build",
+    "setup": "node scripts/setup.mjs"
   }
 }

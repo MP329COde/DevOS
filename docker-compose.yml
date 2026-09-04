@@ -20,6 +20,22 @@ services:
     ports:
       - "6379:6379"
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: devos-local-only
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./infra/keycloak/devos-realm.json:/opt/keycloak/data/import/devos-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: .
@@ -28,6 +44,12 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://devos:devos-local-only@postgres:5432/devos?schema=public
       REDIS_URL: redis://redis:6379
+      KEYCLOAK_ISSUER_URL: http://keycloak:8080/realms/devos
+      KEYCLOAK_CLIENT_ID: devos
+      KEYCLOAK_CLIENT_SECRET: devos-local-only-backend-secret
+      KEYCLOAK_CLIENT_SECRET_VAULT_PATH: secret/devos/keycloak
+      KEYCLOAK_REDIRECT_URI: http://localhost:5173/auth/callback
+      FRONTEND_ORIGIN: http://localhost:5173
     ports:
       - "3000:3000"
     depends_on:
@@ -35,6 +57,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      keycloak:
+        condition: service_healthy
 
   frontend:
     build:

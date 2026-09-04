@@ -51,3 +51,9 @@ test('answers an OPTIONS preflight without routing it to a handler', async () =>
   assert.equal(result.status, 204);
   assert.equal(result.headers.get('access-control-allow-origin'), 'http://localhost:5173');
 });
+
+test('allows PUT in the CORS preflight response (used by the settings routes)', async () => {
+  const server = createServer();
+  const result = await request(server, 'OPTIONS', '/api/settings/FOO', undefined, { origin: 'http://localhost:5173' });
+  assert.match(result.headers.get('access-control-allow-methods') ?? '', /PUT/);
+});
