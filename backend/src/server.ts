@@ -306,6 +306,7 @@ if (require.main === module) {
     const catalog = buildCatalogServiceFromEnv(database);
     const infra = buildInfraServiceFromEnv();
     const docs = buildDocsServiceFromEnv(database);
+    await new DocsService(database).ensureDefaultOnboardingPages();
     const workspace = coder ? buildWorkspaceServiceFromEnv(database, coder) : undefined;
     const extras = buildExtrasServiceFromEnv(rawItems);
     const auth = await buildAuthServiceFromEnv();

@@ -116,6 +116,7 @@ export function App() {
   const [k8sNodes, setK8sNodes] = useState<Array<{ name: string; ready: boolean }>>([]);
   const [argoApps, setArgoApps] = useState<Array<{ name: string; syncStatus: string; healthStatus: string }>>([]);
   const [docPages, setDocPages] = useState<Array<{ id: string; title: string; sourceProject: string; path: string; pageType?: 'scanned' | 'onboarding' }>>([]);
+  const [docsFilter, setDocsFilter] = useState<'all' | 'onboarding' | 'scanned'>('all');
   const [onboardingTitle, setOnboardingTitle] = useState('');
   const [onboardingContent, setOnboardingContent] = useState('');
   const [docsError, setDocsError] = useState('');
@@ -699,6 +700,12 @@ export function App() {
         ) : panel === 'docs' ? (
           <div className="items docs-panel">
             <div className="filters" aria-label="Actions docs"><button type="button" onClick={() => void scanDocs()}>Scanner les dépôts GitLab</button></div>
+            <p className="empty">Documentation DevOS uniquement — les pages scannées proviennent des dossiers <code>docs/</code> des dépôts GitLab du homelab (pas de contenu hors sujet).</p>
+            <div className="filters" aria-label="Filtrer les pages Docs">
+              <button className={docsFilter === 'all' ? 'filter active' : 'filter'} type="button" onClick={() => setDocsFilter('all')}>Toutes ({docPages.length})</button>
+              <button className={docsFilter === 'onboarding' ? 'filter active' : 'filter'} type="button" onClick={() => setDocsFilter('onboarding')}>Onboarding ({docPages.filter((p) => p.pageType === 'onboarding').length})</button>
+              <button className={docsFilter === 'scanned' ? 'filter active' : 'filter'} type="button" onClick={() => setDocsFilter('scanned')}>Dépôts scannés ({docPages.filter((p) => p.pageType !== 'onboarding').length})</button>
+            </div>
             <form className="new-item onboarding-form" onSubmit={(event) => void createOnboardingPage(event)}>
               <input aria-label="Titre de la fiche onboarding" placeholder="Titre (ex: Arrivée sur le projet DevOS)" value={onboardingTitle} onChange={(event) => setOnboardingTitle(event.target.value)} />
               <button type="submit">Créer une fiche onboarding</button>
@@ -708,7 +715,7 @@ export function App() {
             )}
             {docsError && <p className="error" role="alert">{docsError}</p>}
             {!docsError && docPages.length === 0 && <p className="empty">Aucune doc trouvée. Lancez un scan ou créez une fiche onboarding.</p>}
-            {docPages.map((page) => (
+            {docPages.filter((page) => docsFilter === 'all' || (docsFilter === 'onboarding' ? page.pageType === 'onboarding' : page.pageType !== 'onboarding')).map((page) => (
               <article className={page.pageType === 'onboarding' ? 'item doc-page doc-page-onboarding' : 'item doc-page'} key={page.id}>
                 <span className="item-title"><strong>{page.title}</strong>{page.pageType === 'onboarding' && <span className="onboarding-badge">Onboarding</span>}</span>
                 <span className="integrations">{page.sourceProject} · {page.path}</span>

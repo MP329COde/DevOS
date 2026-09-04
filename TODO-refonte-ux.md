@@ -116,9 +116,9 @@ Contexte : actuellement l'état (panel actif, filtres, item ouvert) n'est pas re
 
 Contexte : la documentation doit se limiter à la documentation de DevOS lui-même (pas de contenu hors sujet), et il manque des guides opérationnels : comment configurer un reverse proxy HAProxy par service, quel logiciel/dépôt/version installer selon le contexte, recommandations de sécurité.
 
-- [ ] Créer/lister dans le module Docs des pages d'onboarding dédiées (réutiliser `pageType` déjà ajouté en section I) : "Configurer un backend HAProxy pour un nouveau service", "Choisir un dépôt/version de logiciel", "Bonnes pratiques de sécurité"
-- [ ] Vérifier que le panel Docs ne mélange pas de contenu hors périmètre DevOS (filtrage/label dédié si nécessaire)
-- [ ] Vérifier Playwright : pages visibles et accessibles depuis le panel Docs
+- [x] Créer/lister dans le module Docs des pages d'onboarding dédiées (réutiliser `pageType` déjà ajouté en section I) : "Configurer un backend HAProxy pour un nouveau service", "Choisir un dépôt/version de logiciel", "Bonnes pratiques de sécurité"
+- [x] Vérifier que le panel Docs ne mélange pas de contenu hors périmètre DevOS (filtrage/label dédié si nécessaire)
+- [x] Vérifier Playwright : pages visibles et accessibles depuis le panel Docs
 
 ## N. Tâches — vue du jour + intégration GitLab enrichie (commentaires depuis l'interface)
 

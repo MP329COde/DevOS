@@ -34,6 +34,37 @@ test('linkedItemIds returns the item ids linked to a doc page', async () => {
   assert.deepEqual(await new DocsService(database).linkedItemIds('doc-1'), ['item-1', 'item-2']);
 });
 
+test('ensureDefaultOnboardingPages upserts the three operational guides idempotently', async () => {
+  const upserts: Array<{ where: unknown; create: { title: string; pageType: string } }> = [];
+  const database = { docPage: { upsert: async (args: unknown) => { upserts.push(args as typeof upserts[number]); return {}; } } } as never;
+
+  const pages = await new DocsService(database).ensureDefaultOnboardingPages();
+
+  assert.equal(pages.length, 3);
+  assert.equal(upserts.length, 3);
+  const titles = upserts.map((u) => u.create.title);
+  assert.deepEqual(titles, [
+    'Configurer un backend HAProxy pour un nouveau service',
+    'Choisir un dépôt/version de logiciel',
+    'Bonnes pratiques de sécurité',
+  ]);
+  for (const upsert of upserts) {
+    assert.equal(upsert.create.pageType, 'onboarding');
+    assert.match((upsert.where as { sourceProject_path: { path: string } }).sourceProject_path.path, /^onboarding\//);
+  }
+});
+
+test('ensureDefaultOnboardingPages uses a stable path (no timestamp) so re-running never duplicates', async () => {
+  const wheres: unknown[] = [];
+  const database = { docPage: { upsert: async (args: { where: unknown }) => { wheres.push(args.where); return {}; } } } as never;
+  const service = new DocsService(database);
+
+  await service.ensureDefaultOnboardingPages();
+  await service.ensureDefaultOnboardingPages();
+
+  assert.deepEqual(wheres.slice(0, 3), wheres.slice(3, 6));
+});
+
 test('createOnboardingPage persists a page with pageType "onboarding" and a slugified path', async () => {
   let createArgs: unknown;
   const database = { docPage: { create: async (args: unknown) => { createArgs = args; return {}; } } } as never;
