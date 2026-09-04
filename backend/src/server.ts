@@ -52,6 +52,11 @@ import { parseTerraformState } from './catalog/terraform-state.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CoderClient } from './integrations/coder.js';
+import { summarizeFileShareMetrics } from './catalog/file-shares.js';
+import { SuricataClient, summarizeWireGuardMetrics } from './catalog/network-security.js';
+import { N8nClient, NatsMonitorClient } from './integrations/nats-n8n.js';
+import { NexusClient, VerdaccioClient } from './integrations/artifact-registries.js';
+import { MeilisearchClient } from './integrations/meilisearch.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -334,6 +339,61 @@ function buildExtrasServiceFromEnv(items: ItemService): ExtrasHttpService {
   const terraformStatePath = process.env.TERRAFORM_STATE_PATH;
   if (terraformStatePath) {
     extras.readTerraformState = async () => parseTerraformState(readFileSync(terraformStatePath, 'utf8'));
+  }
+
+  const sambaExporterBaseUrl = process.env.SAMBA_EXPORTER_BASE_URL;
+  if (sambaExporterBaseUrl) {
+    const exporter = new PrometheusExporterClient({ baseUrl: sambaExporterBaseUrl });
+    extras.getFileShareStatus = async () => summarizeFileShareMetrics(await exporter.getMetrics());
+  }
+
+  const wireguardExporterBaseUrl = process.env.WIREGUARD_EXPORTER_BASE_URL;
+  if (wireguardExporterBaseUrl) {
+    const exporter = new PrometheusExporterClient({ baseUrl: wireguardExporterBaseUrl });
+    extras.getWireGuardStatus = async () => summarizeWireGuardMetrics(await exporter.getMetrics());
+  }
+
+  const suricataBaseUrl = process.env.SURICATA_BASE_URL;
+  if (suricataBaseUrl) {
+    const suricata = new SuricataClient({ baseUrl: suricataBaseUrl });
+    extras.getSuricataAlertCount = () => suricata.getAlertCount();
+  }
+
+  const natsBaseUrl = process.env.NATS_MONITOR_BASE_URL;
+  if (natsBaseUrl) {
+    const nats = new NatsMonitorClient({ baseUrl: natsBaseUrl });
+    extras.getNatsStatus = () => nats.getVarz();
+    extras.listNatsConnections = () => nats.listConnections();
+  }
+
+  const n8nBaseUrl = process.env.N8N_BASE_URL;
+  const n8nApiKey = process.env.N8N_API_KEY;
+  if (n8nBaseUrl && n8nApiKey) {
+    const n8n = new N8nClient({ baseUrl: n8nBaseUrl, apiKey: n8nApiKey });
+    extras.listN8nWorkflows = () => n8n.listWorkflows();
+    extras.listN8nExecutions = (workflowId) => n8n.listExecutions(workflowId);
+  }
+
+  const verdaccioBaseUrl = process.env.VERDACCIO_BASE_URL;
+  if (verdaccioBaseUrl) {
+    const verdaccio = new VerdaccioClient({ baseUrl: verdaccioBaseUrl, token: process.env.VERDACCIO_TOKEN });
+    extras.getVerdaccioPackage = (packageName) => verdaccio.getPackage(packageName);
+  }
+
+  const nexusBaseUrl = process.env.NEXUS_BASE_URL;
+  const nexusUsername = process.env.NEXUS_USERNAME;
+  const nexusPassword = process.env.NEXUS_PASSWORD;
+  if (nexusBaseUrl && nexusUsername && nexusPassword) {
+    const nexus = new NexusClient({ baseUrl: nexusBaseUrl, username: nexusUsername, password: nexusPassword });
+    extras.listNexusRepositories = () => nexus.listRepositories();
+  }
+
+  const meilisearchBaseUrl = process.env.MEILISEARCH_BASE_URL;
+  const meilisearchApiKey = process.env.MEILISEARCH_API_KEY;
+  if (meilisearchBaseUrl && meilisearchApiKey) {
+    const meilisearch = new MeilisearchClient({ baseUrl: meilisearchBaseUrl, apiKey: meilisearchApiKey });
+    extras.listMeilisearchIndexes = () => meilisearch.listIndexes();
+    extras.searchMeilisearch = (indexUid, query) => meilisearch.search(indexUid, query);
   }
 
   extras.checkForUpdate = async () => {

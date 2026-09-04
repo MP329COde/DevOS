@@ -48,6 +48,40 @@ test('runs the update checker', async () => {
   assert.deepEqual(result.body, { current: '1.0.0', latest: '1.1.0', status: 'update-available' });
 });
 
+test('reads file share status', async () => {
+  const service = { async getFileShareStatus() { return { activeConnections: 3, freeSpacePercent: 42 }; } };
+  const result = await handleExtrasRequest('GET', '/api/extras/file-shares/status', service as never);
+  assert.deepEqual(result.body, { activeConnections: 3, freeSpacePercent: 42 });
+});
+
+test('reads WireGuard and Suricata status', async () => {
+  const service = { async getWireGuardStatus() { return { peerCount: 4 }; }, async getSuricataAlertCount() { return 7; } };
+  assert.deepEqual((await handleExtrasRequest('GET', '/api/extras/wireguard/status', service as never)).body, { peerCount: 4 });
+  assert.deepEqual((await handleExtrasRequest('GET', '/api/extras/suricata/alert-count', service as never)).body, 7);
+});
+
+test('lists n8n executions for a given workflow', async () => {
+  let requestedId = '';
+  const service = { async listN8nExecutions(workflowId: string) { requestedId = workflowId; return []; } };
+  await handleExtrasRequest('GET', '/api/extras/n8n/workflows/wf-1/executions', service as never);
+  assert.equal(requestedId, 'wf-1');
+});
+
+test('reads a Verdaccio package', async () => {
+  let requestedName = '';
+  const service = { async getVerdaccioPackage(name: string) { requestedName = name; return { name, 'dist-tags': { latest: '1.0.0' }, versions: {}, latestVersion: '1.0.0' }; } };
+  const result = await handleExtrasRequest('GET', '/api/extras/verdaccio/devos-lib', service as never);
+  assert.equal(requestedName, 'devos-lib');
+  assert.equal(result.status, 200);
+});
+
+test('searches a Meilisearch index using the q query param', async () => {
+  let receivedQuery = '';
+  const service = { async searchMeilisearch(indexUid: string, query: string) { receivedQuery = query; return { hits: [], estimatedTotalHits: 0, processingTimeMs: 1 }; } };
+  await handleExtrasRequest('GET', '/api/extras/meilisearch/docs/search?q=homelab', service as never);
+  assert.equal(receivedQuery, 'homelab');
+});
+
 test('rejects unknown extras routes', async () => {
   const result = await handleExtrasRequest('GET', '/api/extras/unknown', {});
   assert.equal(result.status, 404);

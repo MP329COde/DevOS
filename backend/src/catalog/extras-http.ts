@@ -11,6 +11,11 @@ import type { MinioBucket } from './minio.js';
 import type { RabbitMQNode, RabbitMQQueue } from './rabbitmq.js';
 import type { PowerDNSZone } from './dns-server.js';
 import type { TerraformResourceSummary } from './terraform-state.js';
+import type { FileShareSummary } from './file-shares.js';
+import type { WireGuardSummary } from './network-security.js';
+import type { NatsConnection, NatsVarz, N8nExecution, N8nWorkflow } from '../integrations/nats-n8n.js';
+import type { NexusRepository, VerdaccioPackage } from '../integrations/artifact-registries.js';
+import type { MeilisearchIndex, MeilisearchSearchResult } from '../integrations/meilisearch.js';
 
 /**
  * Every method is optional: only the services configured via environment variables are
@@ -37,6 +42,17 @@ export interface ExtrasHttpService {
   listOllamaModels?(): Promise<OllamaModel[]>;
   readTerraformState?(): Promise<TerraformResourceSummary[]>;
   checkForUpdate?(): Promise<UpdateCheckResult>;
+  getFileShareStatus?(): Promise<FileShareSummary>;
+  getWireGuardStatus?(): Promise<WireGuardSummary>;
+  getSuricataAlertCount?(): Promise<number>;
+  getNatsStatus?(): Promise<NatsVarz>;
+  listNatsConnections?(): Promise<NatsConnection[]>;
+  listN8nWorkflows?(): Promise<N8nWorkflow[]>;
+  listN8nExecutions?(workflowId: string): Promise<N8nExecution[]>;
+  getVerdaccioPackage?(packageName: string): Promise<VerdaccioPackage>;
+  listNexusRepositories?(): Promise<NexusRepository[]>;
+  listMeilisearchIndexes?(): Promise<MeilisearchIndex[]>;
+  searchMeilisearch?(indexUid: string, query: string): Promise<MeilisearchSearchResult>;
 }
 
 export interface ExtrasHttpResponse {
@@ -92,6 +108,27 @@ export async function handleExtrasRequest(method: string, url: string, service: 
     if (path === '/api/extras/terraform/state') return call(service.readTerraformState, 'Terraform', () => service.readTerraformState!());
 
     if (path === '/api/extras/update-check') return call(service.checkForUpdate, 'Update checker', () => service.checkForUpdate!());
+
+    if (path === '/api/extras/file-shares/status') return call(service.getFileShareStatus, 'File shares', () => service.getFileShareStatus!());
+
+    if (path === '/api/extras/wireguard/status') return call(service.getWireGuardStatus, 'WireGuard', () => service.getWireGuardStatus!());
+    if (path === '/api/extras/suricata/alert-count') return call(service.getSuricataAlertCount, 'Suricata', () => service.getSuricataAlertCount!());
+
+    if (path === '/api/extras/nats/status') return call(service.getNatsStatus, 'NATS', () => service.getNatsStatus!());
+    if (path === '/api/extras/nats/connections') return call(service.listNatsConnections, 'NATS', () => service.listNatsConnections!());
+
+    if (path === '/api/extras/n8n/workflows') return call(service.listN8nWorkflows, 'n8n', () => service.listN8nWorkflows!());
+    const n8nExecutions = path.match(/^\/api\/extras\/n8n\/workflows\/([^/]+)\/executions$/);
+    if (n8nExecutions) return call(service.listN8nExecutions, 'n8n', () => service.listN8nExecutions!(decodeURIComponent(n8nExecutions[1])));
+
+    const verdaccioPackage = path.match(/^\/api\/extras\/verdaccio\/([^/]+)$/);
+    if (verdaccioPackage) return call(service.getVerdaccioPackage, 'Verdaccio', () => service.getVerdaccioPackage!(decodeURIComponent(verdaccioPackage[1])));
+
+    if (path === '/api/extras/nexus/repositories') return call(service.listNexusRepositories, 'Nexus', () => service.listNexusRepositories!());
+
+    if (path === '/api/extras/meilisearch/indexes') return call(service.listMeilisearchIndexes, 'Meilisearch', () => service.listMeilisearchIndexes!());
+    const meilisearchQuery = path.match(/^\/api\/extras\/meilisearch\/([^/]+)\/search$/);
+    if (meilisearchQuery) return call(service.searchMeilisearch, 'Meilisearch', () => service.searchMeilisearch!(decodeURIComponent(meilisearchQuery[1]), params.get('q') ?? ''));
 
     return { status: 404, body: { error: 'Not found' } };
   } catch (error) {
