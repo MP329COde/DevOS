@@ -416,7 +416,6 @@ export function App() {
     <div className={`shell layout-${navLayout}`}>
       <header className="topbar">
         <div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">{navItems.find((n) => n.id === panel)?.label ?? 'Dashboard'}</h1></div>
-        <button type="button" className="login" onClick={signIn}>Connexion SSO</button>
       </header>
       {navLayout === 'sidebar' && (
         <nav className={collapsed ? 'sidebar collapsed' : 'sidebar'} aria-label="Navigation">
