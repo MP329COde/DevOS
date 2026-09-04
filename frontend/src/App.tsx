@@ -9,8 +9,50 @@ const oidcConfig = {
   redirectUri: `${window.location.origin}/auth/callback`,
 };
 
+const iconPaths: Record<string, string> = {
+  home: 'M3 10.5 10 4l7 6.5M5 9.5V17h10V9.5',
+  tasks: 'M4 6h12M4 10h12M4 14h8M4 6l0 0M3.5 6l1 1 1.5-1.7M3.5 10l1 1 1.5-1.7',
+  inbox: 'M3 5h14v7l-2.5 4h-9L3 12V5Z M3 12h4l1 2h4l1-2h4',
+  clock: 'M10 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12Zm0 3v3.2l2.2 1.3',
+  network: 'M10 3v4M4.5 16h11M10 7 5 12M10 7l5 5M4.5 16v-3M15.5 16v-3',
+  layers: 'M10 3 3 7l7 4 7-4-7-4Zm-7 7 7 4 7-4M3 13l7 4 7-4',
+  doc: 'M6 3h6l3 3v11H6V3Zm6 0v3h3M8 10h5M8 13h5',
+  widget: 'M4 4h5v5H4V4Zm7 0h5v5h-5V4ZM4 11h5v5H4v-5Zm7 0h5v5h-5v-5Z',
+  gear: 'M10 6.5A3.5 3.5 0 1 0 10 13.5 3.5 3.5 0 0 0 10 6.5ZM10 2v2M10 16v2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M2 10h2M16 10h2M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4',
+  pencil: 'M13.5 3.5 16.5 6.5 7 16H4v-3L13.5 3.5Z',
+  chevron: 'M7 5l6 5-6 5',
+  plus: 'M10 4v12M4 10h12',
+  up: 'M5 12l5-5 5 5',
+  down: 'M5 8l5 5 5-5',
+  x: 'M5 5l10 10M15 5 5 15',
+  dot: 'M10 10',
+};
+
+function Icon({ name, size = 16 }: { name: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={iconPaths[name] ?? ''} />
+    </svg>
+  );
+}
+
+function StatusBadge({ state, label }: { state: 'ok' | 'warn' | 'off'; label: string }) {
+  return (
+    <span className={`status-badge status-badge-${state}`}>
+      <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><circle cx="4" cy="4" r="4" fill="currentColor" /></svg>
+      {label}
+    </span>
+  );
+}
+
+const homeWidgetDefs: Record<string, { title: string; icon: string }> = {
+  pipelines: { title: 'Pipelines en cours', icon: 'network' },
+  alerts: { title: 'Alertes actives', icon: 'gear' },
+  wazuh: { title: 'Sécurité (Wazuh)', icon: 'layers' },
+};
+
 export function App() {
-  const [status, setStatus] = useState('Prêt pour une session sécurisée.');
+  const [status, setStatus] = useState('');
   const [items, setItems] = useState<Array<{ id: string; title: string; type: string; status: string; dueAt?: string | null; mergeRequestState?: string | null; pipelineStatus?: string | null; coderWorkspaceName?: string | null; coderWorkspaceStatus?: string | null }>>([]);
   const [workspaceLinks, setWorkspaceLinks] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('all');
@@ -22,6 +64,12 @@ export function App() {
   const [itemsError, setItemsError] = useState('');
   const [panel, setPanel] = useState<'home' | 'items' | 'today' | 'triage' | 'haproxy' | 'catalog' | 'docs' | 'widgets' | 'settings'>('home');
   const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('devos.sidebarCollapsed') === '1');
+  const [homeEditMode, setHomeEditMode] = useState(false);
+  const [homeWidgets, setHomeWidgets] = useState<Array<{ id: string; visible: boolean }>>(() => {
+    const saved = localStorage.getItem('devos.homeWidgets');
+    return saved ? JSON.parse(saved) : [{ id: 'pipelines', visible: true }, { id: 'alerts', visible: true }, { id: 'wazuh', visible: true }];
+  });
   const [wazuhAlerts, setWazuhAlerts] = useState<Array<{ id: string; ruleDescription: string; level: number; timestamp: string }> | null>(null);
   const [content, setContent] = useState('');
   const [dashboardDay, setDashboardDay] = useState<'today' | 'tomorrow'>('today');
@@ -63,6 +111,21 @@ export function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  useEffect(() => { localStorage.setItem('devos.sidebarCollapsed', sidebarCollapsed ? '1' : '0'); }, [sidebarCollapsed]);
+  useEffect(() => { localStorage.setItem('devos.homeWidgets', JSON.stringify(homeWidgets)); }, [homeWidgets]);
+
+  const moveHomeWidget = (id: string, direction: -1 | 1) => {
+    setHomeWidgets((current) => {
+      const index = current.findIndex((w) => w.id === id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+  const toggleHomeWidget = (id: string) => setHomeWidgets((current) => current.map((w) => (w.id === id ? { ...w, visible: !w.visible } : w)));
 
   useEffect(() => {
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/items`)
@@ -323,20 +386,28 @@ export function App() {
     return groups;
   }, {});
   const statusCounts = items.reduce<Record<string, number>>((acc, item) => { acc[item.status] = (acc[item.status] ?? 0) + 1; return acc; }, {});
-  const navItems: Array<{ id: typeof panel; label: string; badge?: number }> = [
-    { id: 'home', label: 'Dashboard' },
-    { id: 'items', label: 'Tâches' },
-    { id: 'triage', label: 'Triage', badge: triage.length },
-    { id: 'today', label: 'Aujourd’hui' },
-    { id: 'catalog', label: 'Catalogue' },
-    { id: 'haproxy', label: 'Infra HAProxy' },
-    { id: 'docs', label: 'Docs' },
-    { id: 'widgets', label: 'Widgets' },
-    { id: 'settings', label: 'Paramètres' },
+  const navItems: Array<{ id: typeof panel; label: string; badge?: number; icon: string; group: string }> = [
+    { id: 'home', label: 'Dashboard', icon: 'home', group: 'Vue d’ensemble' },
+    { id: 'items', label: 'Tâches', icon: 'tasks', group: 'Travail' },
+    { id: 'triage', label: 'Triage', badge: triage.length, icon: 'inbox', group: 'Travail' },
+    { id: 'today', label: 'Aujourd’hui', icon: 'clock', group: 'Travail' },
+    { id: 'catalog', label: 'Catalogue', icon: 'layers', group: 'Infrastructure' },
+    { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: 'Infrastructure' },
+    { id: 'widgets', label: 'Widgets', icon: 'widget', group: 'Infrastructure' },
+    { id: 'settings', label: 'Paramètres', icon: 'gear', group: 'Autres' },
+    { id: 'docs', label: 'Docs', icon: 'doc', group: 'Autres' },
   ];
+  const navGroups = navItems.reduce<Array<{ group: string; items: typeof navItems }>>((groups, item) => {
+    const existing = groups.find((g) => g.group === item.group);
+    if (existing) existing.items.push(item); else groups.push({ group: item.group, items: [item] });
+    return groups;
+  }, []);
+  const collapsed = navLayout === 'sidebar' && sidebarCollapsed;
   const navButton = (item: (typeof navItems)[number]) => (
-    <button key={item.id} className={panel === item.id ? 'nav-link active' : 'nav-link'} type="button" onClick={() => setPanel(item.id)}>
-      {item.label}{item.badge ? <span className="nav-badge">{item.badge}</span> : null}
+    <button key={item.id} className={panel === item.id ? 'nav-link active' : 'nav-link'} type="button" title={collapsed ? item.label : undefined} onClick={() => setPanel(item.id)}>
+      <Icon name={item.icon} />
+      {!collapsed && <span className="nav-label">{item.label}</span>}
+      {item.badge ? <span className="nav-badge">{item.badge}</span> : null}
     </button>
   );
   const itemCard = (item: typeof items[number]) =><article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}{item.coderWorkspaceStatus && ` · Workspace ${item.coderWorkspaceStatus}`}</span><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><span className="item-actions">{item.type === 'task' && <button className="open-workspace" type="button" onClick={() => void openWorkspace(item)}>{item.coderWorkspaceName ? 'Ouvrir dans VS Code' : 'Ouvrir un environnement'}</button>}<button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></span></article>;
@@ -347,7 +418,19 @@ export function App() {
         <div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">{navItems.find((n) => n.id === panel)?.label ?? 'Dashboard'}</h1></div>
         <button type="button" className="login" onClick={signIn}>Connexion SSO</button>
       </header>
-      {navLayout === 'sidebar' && <nav className="sidebar" aria-label="Navigation">{navItems.map(navButton)}</nav>}
+      {navLayout === 'sidebar' && (
+        <nav className={collapsed ? 'sidebar collapsed' : 'sidebar'} aria-label="Navigation">
+          <button type="button" className="sidebar-collapse" aria-label={collapsed ? 'Déplier la navigation' : 'Replier la navigation'} onClick={() => setSidebarCollapsed((c) => !c)}>
+            <Icon name="chevron" />
+          </button>
+          {navGroups.map((g) => (
+            <div className="nav-group" key={g.group}>
+              {!collapsed && <div className="nav-group-label">{g.group}</div>}
+              {g.items.map(navButton)}
+            </div>
+          ))}
+        </nav>
+      )}
       <main className="workspace" aria-labelledby="items-title">
         {navLayout === 'topbar' && <nav className="views topnav" aria-label="Navigation">{navItems.map(navButton)}</nav>}
         {panel === 'home' ? (
@@ -358,19 +441,32 @@ export function App() {
               <div className="stat-card"><span className="stat-value">{statusCounts.blocked ?? 0}</span><span className="stat-label">Bloqués</span></div>
               <div className="stat-card"><span className="stat-value">{statusCounts.done ?? 0}</span><span className="stat-label">Terminés</span></div>
             </div>
+            <div className="widget-toolbar">
+              <button type="button" className={homeEditMode ? 'edit-toggle active' : 'edit-toggle'} aria-label="Modifier le dashboard" title="Modifier le dashboard" onClick={() => setHomeEditMode((m) => !m)}>
+                <Icon name="pencil" />
+              </button>
+            </div>
             <div className="widget-grid">
-              <section className="widget-card">
-                <h3>Pipelines en cours</h3>
-                {widgetData ? (widgetData.pipelines.items.length > 0 ? widgetData.pipelines.items.map((p) => <p key={p.id} className="empty">#{p.id} · {p.ref} · {p.status}</p>) : <p className="empty">Aucun pipeline en cours.</p>) : <p className="empty">Non configuré.</p>}
-              </section>
-              <section className="widget-card">
-                <h3>Alertes actives</h3>
-                {widgetData ? (widgetData.alerts.items.length > 0 ? widgetData.alerts.items.map((a) => <p key={a.fingerprint} className="empty">{a.labels.alertname ?? a.fingerprint} · {a.status.state}</p>) : <p className="empty">Aucune alerte active.</p>) : <p className="empty">Non configuré.</p>}
-              </section>
-              <section className="widget-card">
-                <h3>Sécurité (Wazuh)</h3>
-                {wazuhAlerts ? (wazuhAlerts.length > 0 ? wazuhAlerts.slice(0, 5).map((a) => <p key={a.id} className="empty">{a.ruleDescription} · niveau {a.level}</p>) : <p className="empty">Aucune alerte Wazuh.</p>) : <p className="empty">Non configuré.</p>}
-              </section>
+              {homeWidgets.filter((w) => homeEditMode || w.visible).map((w) => {
+                const def = homeWidgetDefs[w.id];
+                const body = w.id === 'pipelines'
+                  ? (widgetData ? (widgetData.pipelines.items.length > 0 ? widgetData.pipelines.items.map((p) => <p key={p.id} className="empty">#{p.id} · {p.ref} · {p.status}</p>) : <p className="empty">Aucun pipeline en cours.</p>) : <StatusBadge state="off" label="Non configuré" />)
+                  : w.id === 'alerts'
+                  ? (widgetData ? (widgetData.alerts.items.length > 0 ? widgetData.alerts.items.map((a) => <p key={a.fingerprint} className="empty">{a.labels.alertname ?? a.fingerprint} · {a.status.state}</p>) : <p className="empty">Aucune alerte active.</p>) : <StatusBadge state="off" label="Non configuré" />)
+                  : (wazuhAlerts ? (wazuhAlerts.length > 0 ? wazuhAlerts.slice(0, 5).map((a) => <p key={a.id} className="empty">{a.ruleDescription} · niveau {a.level}</p>) : <p className="empty">Aucune alerte Wazuh.</p>) : <StatusBadge state="off" label="Non configuré" />);
+                return (
+                  <section className={`widget-card${!w.visible ? ' widget-hidden' : ''}`} key={w.id}>
+                    <h3><Icon name={def.icon} /> {def.title}{homeEditMode && (
+                      <span className="widget-controls">
+                        <button type="button" aria-label="Monter" onClick={() => moveHomeWidget(w.id, -1)}><Icon name="up" size={14} /></button>
+                        <button type="button" aria-label="Descendre" onClick={() => moveHomeWidget(w.id, 1)}><Icon name="down" size={14} /></button>
+                        <button type="button" aria-label={w.visible ? 'Masquer' : 'Afficher'} onClick={() => toggleHomeWidget(w.id)}><Icon name={w.visible ? 'x' : 'plus'} size={14} /></button>
+                      </span>
+                    )}</h3>
+                    {body}
+                  </section>
+                );
+              })}
             </div>
           </div>
         ) : panel === 'items' ? (<>
@@ -509,7 +605,7 @@ export function App() {
           </div>
         ) : panel === 'triage' ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div> : null}
       </main>
-      <span className="status" role="status">{status}</span>
+      {status && <span className="status" role="status">{status}</span>}
       <Command.Dialog open={paletteOpen} onOpenChange={setPaletteOpen} label="Palette de commandes">
         <Command.Input placeholder="Rechercher une commande..." />
         <Command.List>
