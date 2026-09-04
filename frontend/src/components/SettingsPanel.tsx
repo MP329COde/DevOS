@@ -42,7 +42,7 @@ const SETTINGS_SECTIONS: Array<{ id: string; label: string; keys: string[] }> = 
   { id: 'haproxy', label: 'HAProxy', keys: ['HAPROXY_DATA_PLANE_URL', 'HAPROXY_USERNAME', 'HAPROXY_PASSWORD'] },
   { id: 'coder', label: 'Coder', keys: ['CODER_BASE_URL', 'CODER_TOKEN', 'CODER_ORGANIZATION_ID', 'CODER_OWNER', 'CODER_DEFAULT_TEMPLATE_ID'] },
   { id: 'proxmox', label: 'Proxmox', keys: ['PROXMOX_BASE_URL', 'PROXMOX_API_TOKEN'] },
-  { id: 'k8s', label: 'Kubernetes / ArgoCD', keys: ['K8S_API_SERVER', 'K8S_TOKEN', 'ARGOCD_BASE_URL', 'ARGOCD_TOKEN'] },
+  { id: 'k8s', label: 'Kubernetes / ArgoCD', keys: ['K8S_API_SERVER', 'K8S_TOKEN', 'ARGOCD_BASE_URL', 'ARGOCD_TOKEN', 'DEPLOYMENT_CENTRAL_REPO_URL'] },
   { id: 'monitoring', label: 'Monitoring & alerting', keys: ['GRAFANA_BASE_URL', 'GRAFANA_API_KEY', 'ALERTMANAGER_BASE_URL', 'PROMETHEUS_EXPORTERS', 'WAZUH_BASE_URL', 'WAZUH_TOKEN'] },
   { id: 'reseau', label: 'Réseau (DNS/sécurité)', keys: ['POWERDNS_BASE_URL', 'POWERDNS_API_KEY', 'POWERDNS_SERVER_ID', 'SURICATA_BASE_URL', 'WIREGUARD_EXPORTER_BASE_URL', 'NATS_MONITOR_BASE_URL'] },
   { id: 'stockage', label: 'Stockage & registres', keys: ['MINIO_BASE_URL', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY', 'HARBOR_BASE_URL', 'HARBOR_USERNAME', 'HARBOR_PASSWORD', 'NEXUS_BASE_URL', 'NEXUS_USERNAME', 'NEXUS_PASSWORD', 'VERDACCIO_BASE_URL', 'VERDACCIO_TOKEN'] },

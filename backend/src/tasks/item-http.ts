@@ -61,5 +61,6 @@ function parseUpdate(body: unknown) {
     ...(typeof input.content === 'string' ? { content: input.content } : {}),
     ...(typeof input.status === 'string' ? { status: input.status } : {}),
     ...(typeof input.required === 'boolean' ? { required: input.required } : {}),
+    ...('releaseId' in input ? { releaseId: (input.releaseId as string | null) ?? null } : {}),
   };
 }

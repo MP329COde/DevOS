@@ -1,5 +1,4 @@
 # Prompt à coller dans Claude Code pour continuer la refonte
-
 ---
 
 Tu reprends le projet DevOS (`phase-*`/`main`, monorepo `backend/`+`frontend/`). Le fichier `TODO-refonte-ux.md` à la racine du dépôt liste précisément tout ce qui reste à faire suite aux retours utilisateur les plus récents sur la navigation, le Dashboard et le module Infrastructure. Lis-le en entier avant de commencer.

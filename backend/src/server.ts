@@ -43,7 +43,6 @@ import { ArgoCDClient } from './catalog/argocd.js';
 import { HarborTrivyClient } from './catalog/harbor-trivy.js';
 import { handleDocsRequest, type DocsHttpService } from './docs/docs-http.js';
 import { DocsService } from './docs/docs-service.js';
-import { scanDocsFromGitLab } from './docs/docs-scan.js';
 import { handleWorkspaceRequest, type WorkspaceHttpService } from './tasks/workspace-http.js';
 import { applyAutoStop, openEnvironment } from './tasks/workspace-service.js';
 import { handleExtrasRequest, type ExtrasHttpService } from './catalog/extras-http.js';
@@ -208,6 +207,16 @@ export function createServer(
       return;
     }
 
+    // Doit être vérifié avant le bloc générique /api/dev-projects (section AC) : les permissions
+    // par projet vivent sous /api/dev-projects/:id/permissions mais sont gérées par le module Profils.
+    if (request.url?.match(/^\/api\/dev-projects\/[^/]+\/permissions(\/[^/]+)?(\?|$)/)) {
+      if (!profiles) { writeJson(response, 503, { error: 'Profiles/permissions module is not configured' }); return; }
+      const result = await handleProfileRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), profiles);
+      if (result.status === 204) { response.writeHead(204); response.end(); return; }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.url?.startsWith('/api/dev-projects')) {
       if (!devProjects) { writeJson(response, 503, { error: 'Development projects are not configured' }); return; }
       const result = await handleDevProjectRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), devProjects);
@@ -216,6 +225,14 @@ export function createServer(
         response.end();
         return;
       }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/profiles') || request.url?.startsWith('/api/roles')) {
+      if (!profiles) { writeJson(response, 503, { error: 'Profiles module is not configured' }); return; }
+      const result = await handleProfileRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), profiles);
+      if (result.status === 204) { response.writeHead(204); response.end(); return; }
       writeJson(response, result.status, result.body);
       return;
     }
@@ -491,7 +508,10 @@ if (require.main === module) {
     const cicd = buildCiCdServiceFromEnv();
     const releases: ReleaseHttpService = new ReleaseService(database);
     const environments: EnvironmentHttpService = new EnvironmentService(database);
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp, roadmap, devProjects, devTemplates, deployment, bugs, workflow, cicd, devActivity, releases, environments).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const profileService = new ProfileService(database);
+    await profileService.ensureSystemRoles();
+    const profiles: ProfileHttpService = profileService;
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp, roadmap, devProjects, devTemplates, deployment, bugs, workflow, cicd, devActivity, releases, environments, profiles).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -914,15 +934,6 @@ function buildDocsServiceFromEnv(database: PrismaClient): DocsHttpService {
     link: (docPageId, itemId) => service.link(docPageId, itemId),
     unlink: (docPageId, itemId) => service.unlink(docPageId, itemId),
     createOnboardingPage: (title, content) => service.createOnboardingPage(title, content),
-    async scan() {
-      const baseUrl = process.env.GITLAB_BASE_URL;
-      const token = process.env.GITLAB_TOKEN;
-      if (!baseUrl || !token) throw new Error('GITLAB_BASE_URL and GITLAB_TOKEN must be set to scan docs');
-      const gitlab = new GitLabClient({ baseUrl, tokenProvider: { async getToken() { return token; } } });
-      const result = await scanDocsFromGitLab(gitlab, process.env.DOCS_PATH);
-      await service.sync(result.pages);
-      return { scanned: result.pages.length, errors: result.errors };
-    },
   };
 }
 

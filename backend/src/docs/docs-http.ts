@@ -1,7 +1,6 @@
 export interface DocsHttpService {
   list(): Promise<unknown>;
   get(id: string): Promise<unknown>;
-  scan(): Promise<unknown>;
   link(docPageId: string, itemId: string): Promise<unknown>;
   unlink(docPageId: string, itemId: string): Promise<unknown>;
   createOnboardingPage(title: string, content: string): Promise<unknown>;
@@ -15,7 +14,6 @@ export interface DocsHttpResponse {
 export async function handleDocsRequest(method: string, path: string, body: unknown, service: DocsHttpService): Promise<DocsHttpResponse> {
   try {
     if (method === 'GET' && path === '/api/docs') return { status: 200, body: await service.list() };
-    if (method === 'POST' && path === '/api/docs/scan') return { status: 202, body: await service.scan() };
     if (method === 'POST' && path === '/api/docs/onboarding') {
       const { title, content } = parseOnboardingPage(body);
       return { status: 201, body: await service.createOnboardingPage(title, content) };

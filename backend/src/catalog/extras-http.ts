@@ -18,6 +18,7 @@ import type { NexusRepository, VerdaccioPackage } from '../integrations/artifact
 import type { MeilisearchIndex, MeilisearchSearchResult } from '../integrations/meilisearch.js';
 import type { RedpandaBroker, RedpandaPartition, RedpandaTopic } from '../integrations/redpanda.js';
 import type { DashboardWidgetData } from '../tasks/dashboard-widgets.js';
+import type { DevRepoBranch, DevRepoDetail, DevRepoProvider, DevRepoSummary } from './dev-repos.js';
 
 /**
  * Every method is optional: only the services configured via environment variables are
@@ -59,6 +60,9 @@ export interface ExtrasHttpService {
   listRedpandaTopics?(): Promise<RedpandaTopic[]>;
   getRedpandaTopicPartitions?(topic: string): Promise<RedpandaPartition[]>;
   getDashboardWidgets?(): Promise<DashboardWidgetData>;
+  listDevRepos?(): Promise<DevRepoSummary[]>;
+  getDevRepoDetail?(provider: DevRepoProvider, id: string): Promise<DevRepoDetail>;
+  listDevRepoBranches?(provider: DevRepoProvider, id: string): Promise<DevRepoBranch[]>;
 }
 
 export interface ExtrasHttpResponse {
@@ -142,6 +146,12 @@ export async function handleExtrasRequest(method: string, url: string, service: 
     if (redpandaPartitions) return call(service.getRedpandaTopicPartitions, 'Redpanda', () => service.getRedpandaTopicPartitions!(decodeURIComponent(redpandaPartitions[1])));
 
     if (path === '/api/extras/dashboard/widgets') return call(service.getDashboardWidgets, 'Dashboard widgets', () => service.getDashboardWidgets!());
+
+    if (path === '/api/extras/dev/repos') return call(service.listDevRepos, 'Dépôts dev', () => service.listDevRepos!());
+    const devRepoBranches = path.match(/^\/api\/extras\/dev\/repos\/([^/]+)\/([^/]+)\/branches$/);
+    if (devRepoBranches) return call(service.listDevRepoBranches, 'Dépôts dev', () => service.listDevRepoBranches!(decodeURIComponent(devRepoBranches[1]) as DevRepoProvider, decodeURIComponent(devRepoBranches[2])));
+    const devRepoDetail = path.match(/^\/api\/extras\/dev\/repos\/([^/]+)\/([^/]+)$/);
+    if (devRepoDetail) return call(service.getDevRepoDetail, 'Dépôts dev', () => service.getDevRepoDetail!(decodeURIComponent(devRepoDetail[1]) as DevRepoProvider, decodeURIComponent(devRepoDetail[2])));
 
     return { status: 404, body: { error: 'Not found' } };
   } catch (error) {

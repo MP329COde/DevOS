@@ -519,3 +519,73 @@ html[data-bg="nebula"]::before {
 .dev-repo-tabs button.active { color: var(--surface); background: var(--accent); }
 .dev-repo-changes, .dev-repo-commits, .dev-repo-branches ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .dev-repo-changes li, .dev-repo-commits li, .dev-repo-branches li { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }
+
+/* ===== Section AA — Identité visuelle et animations ===== */
+
+/* Icônes animées au survol, généralisées à tous les boutons/liens de l'app (au-delà de la
+   sidebar déjà animée sur .active) : léger scale + easing, désactivé si prefers-reduced-motion. */
+button svg, .nav-link svg, a svg { transition: transform .15s ease; }
+button:hover svg, .nav-link:hover svg, a:hover svg { transform: scale(1.14); }
+.sidebar-collapse:hover svg { transform: scale(1.14) rotate(0deg); }
+.sidebar.collapsed .sidebar-collapse:hover svg { transform: scale(1.14) rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  button svg, .nav-link svg, a svg { transition: none; }
+  button:hover svg, .nav-link:hover svg, a:hover svg { transform: none; }
+}
+
+/* Direction "liquid glass" : verre dépoli cohérent avec la palette existante (mêmes fonds rgba(--rgb-surface))
+   sur les surfaces flottantes/superposées — sidebar, cartes de widgets, panneaux modaux, palette de commandes.
+   Reste léger : backdrop-filter seul, pas de nouvelles couleurs ni de dépendance. */
+.sidebar,
+.widget-card,
+.panel,
+.detail-panel,
+.proxmox-confirm-panel,
+[cmdk-root] {
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+.widget-card { border-color: rgba(var(--rgb-text), .08); }
+
+/* Transitions de page/panneaux cohérentes : chaque panel (Dashboard, Travail, Notes, Paramètres...)
+   est un enfant direct de <main class="workspace"> monté/démonté à la navigation — un fondu discret
+   à chaque montage donne une sensation homogène sans dépendre d'un routeur dédié. */
+main.workspace > * { animation: devos-panel-in .22s ease both; }
+@keyframes devos-panel-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { main.workspace > * { animation: none; } }
+
+/* Adaptation grands écrans / ultra-wide : au-delà de 1600px déjà géré pour le shell, on exploite
+   davantage l'espace horizontal des grilles de widgets/cartes plutôt que de laisser des colonnes vides. */
+@media (min-width: 1600px) {
+  .widget-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+  .dev-dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+}
+@media (min-width: 2200px) {
+  .shell.layout-sidebar { max-width: 2200px; }
+  .shell.layout-topbar .workspace, .shell.layout-topbar .topbar { max-width: 1700px; }
+  .widget-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+}
+
+/* Sous-vue "Tâches & bugs" du module Développement (section AM.5) : formulaire de bug + liste,
+   et éditeur simple du workflow de statuts configurable. Réutilise .filter/.badge/.hint/.error. */
+.dev-bugs-toolbar { margin: 10px 0; }
+.dev-bug-form, .dev-workflow-form { display: grid; gap: 10px; max-width: 520px; margin: 10px 0 18px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: rgba(var(--rgb-text), .02); }
+.dev-bug-form label, .dev-workflow-form label { display: grid; gap: 4px; font-size: 13px; color: rgba(var(--rgb-text), .75); }
+.dev-bug-form label.checkbox, .dev-workflow-form label.checkbox { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+.dev-bug-form input, .dev-bug-form select, .dev-bug-form textarea,
+.dev-workflow-form input, .dev-workflow-form select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
+.dev-bug-form textarea { min-height: 60px; resize: vertical; }
+.dev-bug-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.dev-bug-item { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--surface); }
+.dev-bug-item-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dev-bug-item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; font-size: 12.5px; color: rgba(var(--rgb-text), .65); }
+.dev-bug-item-meta select { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+.dev-bug-repro { margin: 8px 0 0; padding: 8px 10px; background: rgba(var(--rgb-text), .04); border-radius: 8px; font-size: 12.5px; white-space: pre-wrap; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); }
+.badge.severity-low { color: #2f855a; }
+.badge.severity-medium { color: #b7791f; }
+.badge.severity-high { color: #c05621; }
+.badge.severity-critical { color: #c53030; border-color: #c53030; }
+.dev-workflow-list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; max-width: 520px; }
+.dev-workflow-list li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.dev-workflow-list code { font-size: 12px; color: rgba(var(--rgb-text), .6); }

@@ -96,6 +96,37 @@ test('reads aggregated dashboard widgets', async () => {
   assert.deepEqual(result.body, data);
 });
 
+test('lists unified dev repos', async () => {
+  const service = { async listDevRepos() { return [{ key: 'gitlab:1', provider: 'gitlab', id: '1', name: 'devos', webUrl: '', defaultBranch: 'main', lastActivityAt: null, lastCommit: null, latestRelease: null, pipeline: null, branchCount: 2, openChangeCount: 1 }]; } };
+  const result = await handleExtrasRequest('GET', '/api/extras/dev/repos', service as never);
+  assert.equal(result.status, 200);
+  assert.equal((result.body as Array<{ key: string }>)[0].key, 'gitlab:1');
+});
+
+test('reads dev repo detail for a given provider/id', async () => {
+  let requestedProvider = '';
+  let requestedId = '';
+  const service = {
+    async getDevRepoDetail(provider: string, id: string) {
+      requestedProvider = provider;
+      requestedId = id;
+      return { recentCommits: [], changes: [] };
+    },
+  };
+  const result = await handleExtrasRequest('GET', '/api/extras/dev/repos/github/owner%2Frepo', service as never);
+  assert.equal(requestedProvider, 'github');
+  assert.equal(requestedId, 'owner/repo');
+  assert.equal(result.status, 200);
+});
+
+test('lists dev repo branches for a given provider/id', async () => {
+  let requestedId = '';
+  const service = { async listDevRepoBranches(_provider: string, id: string) { requestedId = id; return []; } };
+  const result = await handleExtrasRequest('GET', '/api/extras/dev/repos/gitlab/1/branches', service as never);
+  assert.equal(requestedId, '1');
+  assert.equal(result.status, 200);
+});
+
 test('rejects unknown extras routes', async () => {
   const result = await handleExtrasRequest('GET', '/api/extras/unknown', {});
   assert.equal(result.status, 404);

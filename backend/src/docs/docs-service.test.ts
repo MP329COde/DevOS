@@ -3,16 +3,13 @@ import test from 'node:test';
 
 import { DocsService } from './docs-service.js';
 
-test('sync upserts each page by sourceProject and path', async () => {
-  const upserts: unknown[] = [];
-  const database = { docPage: { upsert: async (args: unknown) => { upserts.push(args); return {}; } } } as never;
+test('list scopes the global handbook to DevOS onboarding pages', async () => {
+  let args: unknown;
+  const database = { docPage: { findMany: async (input: unknown) => { args = input; return []; } } } as never;
 
-  await new DocsService(database).sync([{ sourceProject: 'root/devos', path: 'docs/intro.md', title: 'Introduction', content: '# Introduction' }]);
+  await new DocsService(database).list();
 
-  assert.equal(upserts.length, 1);
-  const call = upserts[0] as { where: unknown; create: { title: string } };
-  assert.deepEqual(call.where, { sourceProject_path: { sourceProject: 'root/devos', path: 'docs/intro.md' } });
-  assert.equal(call.create.title, 'Introduction');
+  assert.deepEqual(args, { where: { sourceProject: 'onboarding' }, orderBy: { title: 'asc' } });
 });
 
 test('link upserts a doc-item association idempotently', async () => {

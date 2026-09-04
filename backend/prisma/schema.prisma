@@ -152,21 +152,22 @@ model Item {
  * libre, à faire évoluer plus tard vers de vraies relations utilisateur (section AC).
  */
 model DevProject {
-  id             String           @id @default(uuid()) @db.Uuid
-  name           String           @db.VarChar(200)
-  description    String?          @db.Text
-  status         DevProjectStatus @default(planning)
-  owner          String?          @db.VarChar(200)
-  members        String[]         @default([])
-  plannedStartAt DateTime?        @map("planned_start_at")
-  plannedEndAt   DateTime?        @map("planned_end_at")
-  deliveryGoal   String?          @map("delivery_goal") @db.Text
+  id             String              @id @default(uuid()) @db.Uuid
+  name           String              @db.VarChar(200)
+  description    String?             @db.Text
+  status         DevProjectStatus    @default(planning)
+  owner          String?             @db.VarChar(200)
+  members        String[]            @default([])
+  plannedStartAt DateTime?           @map("planned_start_at")
+  plannedEndAt   DateTime?           @map("planned_end_at")
+  deliveryGoal   String?             @map("delivery_goal") @db.Text
   items          Item[]
   bugs           Bug[]
   releases       Release[]
   environments   Environment[]
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
+  permissions    ProjectPermission[]
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
 
   @@index([status])
   @@map("dev_projects")
@@ -523,4 +524,86 @@ model Bug {
   @@index([itemId])
   @@index([devProjectId])
   @@map("bugs")
+}
+
+enum AvailabilityStatus {
+  available
+  busy
+  away
+  do_not_disturb
+  vacation
+  offline
+}
+
+/**
+ * Section AC (TODO-refonte-2.md) : modélisation d'un vrai profil utilisateur, en l'absence d'un
+ * système d'authentification réel (le projet n'a aujourd'hui qu'un header dev `x-devos-role`,
+ * voir `auth/permissions.ts`). Ce modèle ne remplace pas la future intégration Keycloak/session ;
+ * il permet de démontrer et faire fonctionner l'UI de profil/rôles dès maintenant, avec des
+ * données persistées et réalistes. `email` sert de clé d'identification simple côté démo.
+ */
+model UserProfile {
+  id                 String              @id @default(uuid()) @db.Uuid
+  email              String              @unique @db.VarChar(320)
+  displayName        String              @map("display_name") @db.VarChar(150)
+  avatarEmoji        String?             @map("avatar_emoji") @db.VarChar(16)
+  avatarColor        String?             @map("avatar_color") @db.VarChar(20)
+  statusEmoji        String?             @map("status_emoji") @db.VarChar(16)
+  statusMessage      String?             @map("status_message") @db.VarChar(200)
+  availability       AvailabilityStatus  @default(available)
+  availabilityUntil  DateTime?           @map("availability_until")
+  themeMode          String?             @map("theme_mode") @db.VarChar(20)
+  themeColors        Json?               @map("theme_colors")
+  profileBackground  String?             @map("profile_background") @db.VarChar(40)
+  roleId             String?             @map("role_id") @db.Uuid
+  role               Role?               @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  projectPermissions ProjectPermission[]
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  @@map("user_profiles")
+}
+
+/**
+ * Rôle configurable (section AC), au-delà des trois rôles historiques câblés en dur dans
+ * `auth/permissions.ts` (Admin/Contributeur/Lecteur). `permissions` reprend le même vocabulaire
+ * d'actions (`Action` dans permissions.ts) sous forme de tableau JSON, pour rester lisible/éditable
+ * depuis l'UI sans migration à chaque nouveau rôle métier (ex. Réseau, Testeur). `isSystem`
+ * protège les trois rôles historiques d'une suppression accidentelle.
+ */
+model Role {
+  id                 String              @id @default(uuid()) @db.Uuid
+  name               String              @unique @db.VarChar(100)
+  description        String?             @db.Text
+  color              String?             @db.VarChar(20)
+  icon               String?             @db.VarChar(40)
+  permissions        String[]            @default([])
+  isSystem           Boolean             @default(false) @map("is_system")
+  profiles           UserProfile[]
+  projectPermissions ProjectPermission[]
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+/**
+ * Accès d'un profil à un `DevProject` donné, avec un rôle qui peut différer du rôle global du
+ * profil (ex. Lecteur global mais Contributeur sur un projet précis). Section AC.
+ */
+model ProjectPermission {
+  id            String      @id @default(uuid()) @db.Uuid
+  devProjectId  String      @map("dev_project_id") @db.Uuid
+  devProject    DevProject  @relation(fields: [devProjectId], references: [id], onDelete: Cascade)
+  userProfileId String      @map("user_profile_id") @db.Uuid
+  userProfile   UserProfile @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  roleId        String      @map("role_id") @db.Uuid
+  role          Role        @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@unique([devProjectId, userProfileId])
+  @@index([devProjectId])
+  @@index([userProfileId])
+  @@map("project_permissions")
 }

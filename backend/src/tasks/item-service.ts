@@ -21,6 +21,7 @@ export interface UpdateItemInput {
   mergeRequestState?: string | null;
   pipelineStatus?: string | null;
   required?: boolean;
+  releaseId?: string | null;
 }
 
 export class ItemService {
@@ -65,6 +66,7 @@ export class ItemService {
         ...(input.mergeRequestState === undefined ? {} : { mergeRequestState: input.mergeRequestState }),
         ...(input.pipelineStatus === undefined ? {} : { pipelineStatus: input.pipelineStatus }),
         ...(input.required === undefined ? {} : { required: input.required }),
+        ...(input.releaseId === undefined ? {} : { releaseId: input.releaseId }),
       },
     });
   }

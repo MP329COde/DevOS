@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { DevActivityPanel } from './DevActivityPanel.js';
 import { DevReposPanel } from './DevReposPanel.js';
 import { DevCiCdPanel } from './DevCiCdPanel.js';
+import { DevTasksPanel } from './DevTasksPanel.js';
 
 export interface DevProject {
   id: string;
@@ -66,9 +67,9 @@ const WIZARD_STEP_LABELS: Record<WizardStep, string> = {
  * CI/CD AM.7, doc/architecture/membres AM.8) sans restructurer ce composant : chaque nouvel
  * onglet s'ajoute à `DEV_TABS` et à son rendu conditionnel, exactement comme les onglets déjà
  * présents. */
-const DEV_TABS = ['overview', 'new', 'dashboard', 'repos', 'activity', 'cicd'] as const;
+const DEV_TABS = ['overview', 'new', 'dashboard', 'repos', 'tasks', 'activity', 'cicd'] as const;
 type DevTab = (typeof DEV_TABS)[number];
-const DEV_TAB_LABELS: Record<DevTab, string> = { overview: 'Vue globale', new: 'Nouveau projet', dashboard: 'Dashboard projet', repos: 'Dépôts', activity: 'Activité & recherche', cicd: 'CI/CD & sécurité' };
+const DEV_TAB_LABELS: Record<DevTab, string> = { overview: 'Vue globale', new: 'Nouveau projet', dashboard: 'Dashboard projet', repos: 'Dépôts', tasks: 'Tâches & bugs', activity: 'Activité & recherche', cicd: 'CI/CD & sécurité' };
 
 export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
   const [tab, setTab] = useState<DevTab>('overview');
@@ -145,6 +146,8 @@ export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
       )}
 
       {tab === 'repos' && <DevReposPanel apiBase={apiBase} />}
+
+      {tab === 'tasks' && <DevTasksPanel apiBase={apiBase} devProjectId={selectedProjectId} />}
 
       {tab === 'activity' && <DevActivityPanel apiBase={apiBase} />}
 

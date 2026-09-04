@@ -34,8 +34,8 @@
 
 ## X. Travail — fusionner les onglets fractionnés
 
-- [ ] Fusionner Tâches/Triage/Aujourd'hui (ou le sous-ensemble concerné) en un seul onglet cohérent avec sous-vues internes plutôt que des panels séparés, sans perdre de fonctionnalité
-- [ ] Vérifier Playwright
+- [x] Fusionner Tâches/Triage/Aujourd'hui (ou le sous-ensemble concerné) en un seul onglet cohérent avec sous-vues internes plutôt que des panels séparés, sans perdre de fonctionnalité
+- [x] Vérifier Playwright
 
 ## Y. Notifications et erreurs — header dédié
 

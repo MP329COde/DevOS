@@ -1,7 +1,5 @@
 import type { DocPage, PrismaClient } from '@prisma/client';
 
-import type { ScannedDocPage } from './docs-scan.js';
-
 const DEFAULT_ONBOARDING_PAGES: ReadonlyArray<{ slug: string; title: string; content: string }> = [
   {
     slug: 'configurer-un-backend-haproxy-pour-un-nouveau-service',
@@ -111,24 +109,16 @@ se paramètrent depuis Paramètres → Intégrations, jamais en dur dans le code
 export class DocsService {
   public constructor(private readonly database: PrismaClient) {}
 
-  /** Upserts every scanned page by (sourceProject, path). */
-  public async sync(pages: readonly ScannedDocPage[]): Promise<DocPage[]> {
-    return Promise.all(pages.map((page) => this.database.docPage.upsert({
-      where: { sourceProject_path: { sourceProject: page.sourceProject, path: page.path } },
-      create: page,
-      update: { title: page.title, content: page.content },
-    })));
-  }
-
   public list(): Promise<DocPage[]> {
-    return this.database.docPage.findMany({ orderBy: { title: 'asc' } });
+    // The global Docs area is deliberately limited to DevOS guides. Project documentation
+    // lives under its development project and must never leak into this platform handbook.
+    return this.database.docPage.findMany({ where: { sourceProject: 'onboarding' }, orderBy: { title: 'asc' } });
   }
 
   /**
    * Onboarding pages (checklists, service runbooks to read before intervening) live in the
-   * same DocPage model as scanned GitLab docs, distinguished by pageType — a dedicated page
-   * type on the existing Docs module rather than a new one, since the content shape (title +
-   * markdown) is identical.
+   * same DocPage model as the rest of the application, while remaining scoped to the platform
+   * handbook by its stable `onboarding` source.
    */
   public createOnboardingPage(title: string, content: string): Promise<DocPage> {
     const path = `onboarding/${slugify(title)}`;

@@ -6,7 +6,6 @@ import { handleDocsRequest } from './docs-http.js';
 const service = {
   async list() { return [{ id: 'doc-1' }]; },
   async get(id: string) { return id === 'doc-1' ? { id: 'doc-1' } : null; },
-  async scan() { return { scanned: 1, errors: [] }; },
   async link() {},
   async unlink() {},
   async createOnboardingPage(title: string, content: string) { return { id: 'doc-2', title, content, pageType: 'onboarding' }; },
@@ -25,11 +24,6 @@ test('gets a single doc page', async () => {
 test('returns 404 for an unknown doc page', async () => {
   const result = await handleDocsRequest('GET', '/api/docs/missing', null, service);
   assert.equal(result.status, 404);
-});
-
-test('triggers a scan', async () => {
-  const result = await handleDocsRequest('POST', '/api/docs/scan', null, service);
-  assert.deepEqual(result, { status: 202, body: { scanned: 1, errors: [] } });
 });
 
 test('links a doc page to an item', async () => {

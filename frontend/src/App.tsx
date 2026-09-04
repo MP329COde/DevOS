@@ -277,8 +277,7 @@ export function App() {
   const [templateError, setTemplateError] = useState('');
   const [k8sNodes, setK8sNodes] = useState<Array<{ name: string; ready: boolean }>>([]);
   const [argoApps, setArgoApps] = useState<Array<{ name: string; syncStatus: string; healthStatus: string }>>([]);
-  const [docPages, setDocPages] = useState<Array<{ id: string; title: string; sourceProject: string; path: string; pageType?: 'scanned' | 'onboarding' }>>([]);
-  const [docsFilter, setDocsFilter] = useState<'all' | 'onboarding' | 'scanned'>('all');
+  const [docPages, setDocPages] = useState<Array<{ id: string; title: string; sourceProject: string; path: string; pageType?: 'onboarding' }>>([]);
   const [onboardingTitle, setOnboardingTitle] = useState('');
   const [onboardingContent, setOnboardingContent] = useState('');
   const [docsError, setDocsError] = useState('');
@@ -588,7 +587,10 @@ export function App() {
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/docs`)
       .then(async (response) => {
         if (!response.ok) throw new Error(response.status === 503 ? 'Les docs ne sont pas configurées sur ce backend.' : 'Impossible de charger les docs.');
-        setDocPages(await response.json());
+        // Defense in depth: an older API instance may still contain historical pages imported
+        // from Git repositories. The platform handbook must never render those project pages.
+        const pages = await response.json() as Array<{ id: string; title: string; sourceProject: string; path: string; pageType?: 'onboarding' }>;
+        setDocPages(pages.filter((page) => page.sourceProject === 'onboarding'));
         setDocsError('');
       })
       .catch((error: Error) => setDocsError(error.message));
@@ -1096,11 +1098,6 @@ export function App() {
         ) : panel === 'docs' ? (
           <div className="items docs-panel">
             <p className="empty">Documentation DevOS uniquement — guides d'usage et de fonctionnement de la plateforme (pas de contenu de dépôts externes).</p>
-            <div className="filters" aria-label="Filtrer les pages Docs">
-              <button className={docsFilter === 'all' ? 'filter active' : 'filter'} type="button" onClick={() => setDocsFilter('all')}>Toutes ({docPages.length})</button>
-              <button className={docsFilter === 'onboarding' ? 'filter active' : 'filter'} type="button" onClick={() => setDocsFilter('onboarding')}>Onboarding ({docPages.filter((p) => p.pageType === 'onboarding').length})</button>
-              <button className={docsFilter === 'scanned' ? 'filter active' : 'filter'} type="button" onClick={() => setDocsFilter('scanned')}>Autres pages ({docPages.filter((p) => p.pageType !== 'onboarding').length})</button>
-            </div>
             <form className="new-item onboarding-form" onSubmit={(event) => void createOnboardingPage(event)}>
               <input aria-label="Titre de la fiche onboarding" placeholder="Titre (ex: Arrivée sur le projet DevOS)" value={onboardingTitle} onChange={(event) => setOnboardingTitle(event.target.value)} />
               <button type="submit">Créer une fiche onboarding</button>
@@ -1110,7 +1107,7 @@ export function App() {
             )}
             {docsError && <p className="error" role="alert">{docsError}</p>}
             {!docsError && docPages.length === 0 && <p className="empty">Aucune doc trouvée. Créez une fiche onboarding pour commencer.</p>}
-            {docPages.filter((page) => docsFilter === 'all' || (docsFilter === 'onboarding' ? page.pageType === 'onboarding' : page.pageType !== 'onboarding')).map((page) => (
+            {docPages.map((page) => (
               <article className={page.pageType === 'onboarding' ? 'item doc-page doc-page-onboarding' : 'item doc-page'} key={page.id}>
                 <span className="item-title"><strong>{page.title}</strong>{page.pageType === 'onboarding' && <span className="onboarding-badge">Onboarding</span>}</span>
                 <span className="integrations">{page.sourceProject} · {page.path}</span>
