@@ -34,6 +34,23 @@ import { DocsService } from './docs/docs-service.js';
 import { scanDocsFromGitLab } from './docs/docs-scan.js';
 import { handleWorkspaceRequest, type WorkspaceHttpService } from './tasks/workspace-http.js';
 import { applyAutoStop, openEnvironment } from './tasks/workspace-service.js';
+import { handleExtrasRequest, type ExtrasHttpService } from './catalog/extras-http.js';
+import { GitHubClient } from './integrations/github.js';
+import { buildMcpToolDefinitions } from './integrations/mcp-server.js';
+import { OllamaClient } from './integrations/ollama.js';
+import { WoodpeckerClient } from './integrations/woodpecker.js';
+import { checkForUpdate, readCurrentVersion } from './integrations/update-checker.js';
+import { GrafanaClient } from './catalog/grafana.js';
+import { HarborClient } from './catalog/harbor.js';
+import { ProxmoxClient } from './catalog/proxmox.js';
+import { WazuhClient } from './catalog/wazuh.js';
+import { PrometheusExporterClient } from './catalog/prometheus-metrics.js';
+import { MinioClient } from './catalog/minio.js';
+import { RabbitMQClient } from './catalog/rabbitmq.js';
+import { PowerDNSClient } from './catalog/dns-server.js';
+import { parseTerraformState } from './catalog/terraform-state.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { CoderClient } from './integrations/coder.js';
 
 export function createServer(
@@ -51,6 +68,7 @@ export function createServer(
   infra?: InfraHttpService,
   docs?: DocsHttpService,
   workspace?: WorkspaceHttpService,
+  extras?: ExtrasHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -178,6 +196,13 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/extras')) {
+      if (!extras) { writeJson(response, 503, { error: 'Extras integrations are not configured' }); return; }
+      const result = await handleExtrasRequest(request.method ?? 'GET', request.url, extras);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -207,7 +232,141 @@ if (require.main === module) {
   const infra = buildInfraServiceFromEnv();
   const docs = buildDocsServiceFromEnv(database);
   const workspace = coder ? buildWorkspaceServiceFromEnv(database, coder) : undefined;
-  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+  const extras = buildExtrasServiceFromEnv(rawItems);
+  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+}
+
+function buildExtrasServiceFromEnv(items: ItemService): ExtrasHttpService {
+  const extras: ExtrasHttpService = {};
+
+  const githubToken = process.env.GITHUB_TOKEN;
+  if (githubToken) {
+    const github = new GitHubClient({ baseUrl: process.env.GITHUB_BASE_URL ?? 'https://api.github.com', token: githubToken });
+    extras.listGitHubIssues = async (owner, repo) => {
+      const issues = [];
+      for await (const issue of github.listIssues(owner, repo)) issues.push(issue);
+      return issues;
+    };
+  }
+
+  extras.listMcpTools = async () => buildMcpToolDefinitions(items).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+
+  const grafanaBaseUrl = process.env.GRAFANA_BASE_URL;
+  const grafanaApiKey = process.env.GRAFANA_API_KEY;
+  if (grafanaBaseUrl && grafanaApiKey) {
+    const grafana = new GrafanaClient({ baseUrl: grafanaBaseUrl, apiKey: grafanaApiKey });
+    extras.listGrafanaDashboards = () => grafana.listDashboards();
+  }
+
+  const harborBaseUrl = process.env.HARBOR_BASE_URL;
+  const harborUsername = process.env.HARBOR_USERNAME;
+  const harborPassword = process.env.HARBOR_PASSWORD;
+  if (harborBaseUrl && harborUsername && harborPassword) {
+    const harbor = new HarborClient({ baseUrl: harborBaseUrl, username: harborUsername, password: harborPassword });
+    extras.listHarborProjects = () => harbor.listProjects();
+    extras.listHarborRepositories = (project) => harbor.listRepositories(project);
+  }
+
+  const proxmoxBaseUrl = process.env.PROXMOX_BASE_URL;
+  const proxmoxApiToken = process.env.PROXMOX_API_TOKEN;
+  if (proxmoxBaseUrl && proxmoxApiToken) {
+    const proxmox = new ProxmoxClient({ baseUrl: proxmoxBaseUrl, apiToken: proxmoxApiToken });
+    extras.listProxmoxNodes = () => proxmox.listNodes();
+    extras.listProxmoxVMs = (node) => proxmox.listVirtualMachines(node);
+    extras.listProxmoxContainers = (node) => proxmox.listContainers(node);
+  }
+
+  const wazuhBaseUrl = process.env.WAZUH_BASE_URL;
+  const wazuhToken = process.env.WAZUH_TOKEN;
+  if (wazuhBaseUrl && wazuhToken) {
+    const wazuh = new WazuhClient({ baseUrl: wazuhBaseUrl, token: wazuhToken });
+    extras.listWazuhAlerts = (limit) => wazuh.listAlerts(limit);
+  }
+
+  const exporterMap = parseExporterMap(process.env.PROMETHEUS_EXPORTERS);
+  if (exporterMap) {
+    extras.getMetrics = async (exporter) => {
+      const baseUrl = exporterMap[exporter];
+      if (!baseUrl) throw new Error(`Unknown Prometheus exporter: ${exporter}`);
+      const metrics = await new PrometheusExporterClient({ baseUrl }).getMetrics();
+      return Object.fromEntries(metrics);
+    };
+  }
+
+  const minioBaseUrl = process.env.MINIO_BASE_URL;
+  const minioAccessKey = process.env.MINIO_ACCESS_KEY;
+  const minioSecretKey = process.env.MINIO_SECRET_KEY;
+  if (minioBaseUrl && minioAccessKey && minioSecretKey) {
+    const minio = new MinioClient({ baseUrl: minioBaseUrl, accessKey: minioAccessKey, secretKey: minioSecretKey });
+    extras.listMinioBuckets = () => minio.listBuckets();
+  }
+
+  const rabbitmqBaseUrl = process.env.RABBITMQ_BASE_URL;
+  const rabbitmqUsername = process.env.RABBITMQ_USERNAME;
+  const rabbitmqPassword = process.env.RABBITMQ_PASSWORD;
+  if (rabbitmqBaseUrl && rabbitmqUsername && rabbitmqPassword) {
+    const rabbitmq = new RabbitMQClient({ baseUrl: rabbitmqBaseUrl, username: rabbitmqUsername, password: rabbitmqPassword });
+    extras.listRabbitMQQueues = () => rabbitmq.listQueues();
+    extras.listRabbitMQNodes = () => rabbitmq.listNodes();
+  }
+
+  const dnsBaseUrl = process.env.POWERDNS_BASE_URL;
+  const dnsApiKey = process.env.POWERDNS_API_KEY;
+  if (dnsBaseUrl && dnsApiKey) {
+    const dns = new PowerDNSClient({ baseUrl: dnsBaseUrl, apiKey: dnsApiKey, serverId: process.env.POWERDNS_SERVER_ID });
+    extras.listDnsZones = () => dns.listZones();
+  }
+
+  const woodpeckerBaseUrl = process.env.WOODPECKER_BASE_URL;
+  const woodpeckerToken = process.env.WOODPECKER_TOKEN;
+  if (woodpeckerBaseUrl && woodpeckerToken) {
+    const woodpecker = new WoodpeckerClient({ baseUrl: woodpeckerBaseUrl, token: woodpeckerToken });
+    extras.listWoodpeckerRepos = () => woodpecker.listRepos();
+    extras.listWoodpeckerBuilds = (repoId) => woodpecker.listBuilds(repoId);
+  }
+
+  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL;
+  if (ollamaBaseUrl) {
+    const ollama = new OllamaClient({ baseUrl: ollamaBaseUrl });
+    extras.listOllamaModels = () => ollama.listModels();
+  }
+
+  const terraformStatePath = process.env.TERRAFORM_STATE_PATH;
+  if (terraformStatePath) {
+    extras.readTerraformState = async () => parseTerraformState(readFileSync(terraformStatePath, 'utf8'));
+  }
+
+  extras.checkForUpdate = async () => {
+    const packageJsonPath = process.env.DEVOS_PACKAGE_JSON_PATH ?? join(__dirname, '../../../package.json');
+    const gitlabBaseUrl = process.env.GITLAB_BASE_URL;
+    const gitlabToken = process.env.GITLAB_TOKEN;
+    const gitlabProjectId = process.env.GITLAB_PROJECT_ID;
+    if (!gitlabBaseUrl || !gitlabToken || !gitlabProjectId) {
+      const current = readCurrentVersion(packageJsonPath);
+      return { current, latest: null, status: 'unknown' as const };
+    }
+    return checkForUpdate(packageJsonPath, {
+      async getLatestReleaseTag() {
+        const response = await fetch(`${gitlabBaseUrl}/projects/${encodeURIComponent(gitlabProjectId)}/releases`, { headers: { 'private-token': gitlabToken } });
+        if (!response.ok) return null;
+        const releases = (await response.json()) as Array<{ tag_name?: string }>;
+        return releases[0]?.tag_name ?? null;
+      },
+    });
+  };
+
+  return extras;
+}
+
+function parseExporterMap(raw: string | undefined): Record<string, string> | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object') return parsed as Record<string, string>;
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function buildCoderClientFromEnv(): CoderClient | undefined {
