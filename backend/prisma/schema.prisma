@@ -25,6 +25,11 @@ enum ItemLinkType {
   is_blocked_by
 }
 
+enum DocPageType {
+  scanned
+  onboarding
+}
+
 enum TriageStatus {
   none
   pending
@@ -131,11 +136,12 @@ model AuditLog {
 }
 
 model DocPage {
-  id            String   @id @default(uuid()) @db.Uuid
-  sourceProject String   @db.VarChar(200) @map("source_project")
-  path          String   @db.VarChar(500)
-  title         String   @db.VarChar(300)
-  content       String   @db.Text
+  id            String      @id @default(uuid()) @db.Uuid
+  sourceProject String      @db.VarChar(200) @map("source_project")
+  path          String      @db.VarChar(500)
+  title         String      @db.VarChar(300)
+  content       String      @db.Text
+  pageType      DocPageType @default(scanned) @map("page_type")
   links         DocLink[]
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")

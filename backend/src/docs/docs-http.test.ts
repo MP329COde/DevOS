@@ -9,6 +9,7 @@ const service = {
   async scan() { return { scanned: 1, errors: [] }; },
   async link() {},
   async unlink() {},
+  async createOnboardingPage(title: string, content: string) { return { id: 'doc-2', title, content, pageType: 'onboarding' }; },
 };
 
 test('lists doc pages', async () => {
@@ -48,4 +49,14 @@ test('unlinks a doc page from an item', async () => {
   const result = await handleDocsRequest('DELETE', '/api/docs/doc-1/links/item-1', null, { ...service, async unlink(docPageId: string, itemId: string) { unlinked = { docPageId, itemId }; } });
   assert.equal(result.status, 204);
   assert.deepEqual(unlinked, { docPageId: 'doc-1', itemId: 'item-1' });
+});
+
+test('creates an onboarding page', async () => {
+  const result = await handleDocsRequest('POST', '/api/docs/onboarding', { title: 'Arrivée sur DevOS', content: '# Checklist' }, service);
+  assert.deepEqual(result, { status: 201, body: { id: 'doc-2', title: 'Arrivée sur DevOS', content: '# Checklist', pageType: 'onboarding' } });
+});
+
+test('rejects an onboarding page without content', async () => {
+  const result = await handleDocsRequest('POST', '/api/docs/onboarding', { title: 'Arrivée sur DevOS' }, service);
+  assert.equal(result.status, 400);
 });

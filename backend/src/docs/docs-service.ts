@@ -18,6 +18,19 @@ export class DocsService {
     return this.database.docPage.findMany({ orderBy: { title: 'asc' } });
   }
 
+  /**
+   * Onboarding pages (checklists, service runbooks to read before intervening) live in the
+   * same DocPage model as scanned GitLab docs, distinguished by pageType — a dedicated page
+   * type on the existing Docs module rather than a new one, since the content shape (title +
+   * markdown) is identical.
+   */
+  public createOnboardingPage(title: string, content: string): Promise<DocPage> {
+    const path = `onboarding/${slugify(title)}`;
+    return this.database.docPage.create({
+      data: { sourceProject: 'onboarding', path, title, content, pageType: 'onboarding' },
+    });
+  }
+
   public get(id: string): Promise<DocPage | null> {
     return this.database.docPage.findUnique({ where: { id } });
   }
@@ -37,4 +50,9 @@ export class DocsService {
   public linkedItemIds(docPageId: string): Promise<string[]> {
     return this.database.docLink.findMany({ where: { docPageId }, select: { itemId: true } }).then((rows) => rows.map((row) => row.itemId));
   }
+}
+
+function slugify(title: string): string {
+  const base = title.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `${base || 'page'}-${Date.now().toString(36)}`;
 }

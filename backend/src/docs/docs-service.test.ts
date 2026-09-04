@@ -33,3 +33,16 @@ test('linkedItemIds returns the item ids linked to a doc page', async () => {
   const database = { docLink: { findMany: async () => [{ itemId: 'item-1' }, { itemId: 'item-2' }] } } as never;
   assert.deepEqual(await new DocsService(database).linkedItemIds('doc-1'), ['item-1', 'item-2']);
 });
+
+test('createOnboardingPage persists a page with pageType "onboarding" and a slugified path', async () => {
+  let createArgs: unknown;
+  const database = { docPage: { create: async (args: unknown) => { createArgs = args; return {}; } } } as never;
+
+  await new DocsService(database).createOnboardingPage('Arrivée sur le projet DevOS', '# Checklist\n- [ ] Lire INFO.md');
+
+  const call = (createArgs as { data: { sourceProject: string; path: string; title: string; content: string; pageType: string } }).data;
+  assert.equal(call.sourceProject, 'onboarding');
+  assert.match(call.path, /^onboarding\/arrivee-sur-le-projet-devos-[a-z0-9]+$/);
+  assert.equal(call.title, 'Arrivée sur le projet DevOS');
+  assert.equal(call.pageType, 'onboarding');
+});

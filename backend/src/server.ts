@@ -687,6 +687,7 @@ function buildDocsServiceFromEnv(database: PrismaClient): DocsHttpService {
     get: (id) => service.get(id),
     link: (docPageId, itemId) => service.link(docPageId, itemId),
     unlink: (docPageId, itemId) => service.unlink(docPageId, itemId),
+    createOnboardingPage: (title, content) => service.createOnboardingPage(title, content),
     async scan() {
       const baseUrl = process.env.GITLAB_BASE_URL;
       const token = process.env.GITLAB_TOKEN;

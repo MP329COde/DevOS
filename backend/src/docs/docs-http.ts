@@ -4,6 +4,7 @@ export interface DocsHttpService {
   scan(): Promise<unknown>;
   link(docPageId: string, itemId: string): Promise<unknown>;
   unlink(docPageId: string, itemId: string): Promise<unknown>;
+  createOnboardingPage(title: string, content: string): Promise<unknown>;
 }
 
 export interface DocsHttpResponse {
@@ -15,6 +16,10 @@ export async function handleDocsRequest(method: string, path: string, body: unkn
   try {
     if (method === 'GET' && path === '/api/docs') return { status: 200, body: await service.list() };
     if (method === 'POST' && path === '/api/docs/scan') return { status: 202, body: await service.scan() };
+    if (method === 'POST' && path === '/api/docs/onboarding') {
+      const { title, content } = parseOnboardingPage(body);
+      return { status: 201, body: await service.createOnboardingPage(title, content) };
+    }
 
     const page = path.match(/^\/api\/docs\/([^/]+)$/);
     if (method === 'GET' && page) {
@@ -38,6 +43,14 @@ export async function handleDocsRequest(method: string, path: string, body: unkn
   } catch (error) {
     return { status: 400, body: { error: error instanceof Error ? error.message : 'Invalid docs request' } };
   }
+}
+
+function parseOnboardingPage(body: unknown): { title: string; content: string } {
+  if (!body || typeof body !== 'object') throw new Error('Missing onboarding page payload');
+  const b = body as Record<string, unknown>;
+  if (typeof b.title !== 'string' || !b.title.trim()) throw new Error('"title" is required');
+  if (typeof b.content !== 'string' || !b.content.trim()) throw new Error('"content" is required');
+  return { title: b.title, content: b.content };
 }
 
 function parseItemId(body: unknown): string {
