@@ -57,6 +57,10 @@ import { SuricataClient, summarizeWireGuardMetrics } from './catalog/network-sec
 import { N8nClient, NatsMonitorClient } from './integrations/nats-n8n.js';
 import { NexusClient, VerdaccioClient } from './integrations/artifact-registries.js';
 import { MeilisearchClient } from './integrations/meilisearch.js';
+import { RedpandaClient } from './integrations/redpanda.js';
+import { listRunningPipelines } from './integrations/gitlab-pipelines.js';
+import { AlertmanagerClient } from './integrations/alertmanager.js';
+import { buildDashboardWidgets } from './tasks/dashboard-widgets.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -394,6 +398,29 @@ function buildExtrasServiceFromEnv(items: ItemService): ExtrasHttpService {
     const meilisearch = new MeilisearchClient({ baseUrl: meilisearchBaseUrl, apiKey: meilisearchApiKey });
     extras.listMeilisearchIndexes = () => meilisearch.listIndexes();
     extras.searchMeilisearch = (indexUid, query) => meilisearch.search(indexUid, query);
+  }
+
+  const redpandaBaseUrl = process.env.REDPANDA_BASE_URL;
+  if (redpandaBaseUrl) {
+    const redpanda = new RedpandaClient({ baseUrl: redpandaBaseUrl, token: process.env.REDPANDA_TOKEN });
+    extras.listRedpandaBrokers = () => redpanda.listBrokers();
+    extras.listRedpandaTopics = () => redpanda.listTopics();
+    extras.getRedpandaTopicPartitions = (topic) => redpanda.getTopicPartitions(topic);
+  }
+
+  const widgetsGitlabBaseUrl = process.env.GITLAB_BASE_URL;
+  const widgetsGitlabToken = process.env.GITLAB_TOKEN;
+  const widgetsGitlabProjectId = process.env.GITLAB_PROJECT_ID;
+  const alertmanagerBaseUrl = process.env.ALERTMANAGER_BASE_URL;
+  if ((widgetsGitlabBaseUrl && widgetsGitlabToken && widgetsGitlabProjectId) || alertmanagerBaseUrl) {
+    const alertmanager = alertmanagerBaseUrl ? new AlertmanagerClient({ baseUrl: alertmanagerBaseUrl }) : undefined;
+    extras.getDashboardWidgets = async () => {
+      const pipelines = widgetsGitlabBaseUrl && widgetsGitlabToken && widgetsGitlabProjectId
+        ? await listRunningPipelines({ baseUrl: widgetsGitlabBaseUrl, tokenProvider: { async getToken() { return widgetsGitlabToken; } } }, widgetsGitlabProjectId)
+        : [];
+      const alerts = alertmanager ? await alertmanager.listActiveAlerts() : [];
+      return buildDashboardWidgets(pipelines, alerts);
+    };
   }
 
   extras.checkForUpdate = async () => {

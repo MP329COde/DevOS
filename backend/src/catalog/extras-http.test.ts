@@ -82,6 +82,20 @@ test('searches a Meilisearch index using the q query param', async () => {
   assert.equal(receivedQuery, 'homelab');
 });
 
+test('lists Redpanda topic partitions for a given topic', async () => {
+  let requestedTopic = '';
+  const service = { async getRedpandaTopicPartitions(topic: string) { requestedTopic = topic; return []; } };
+  await handleExtrasRequest('GET', '/api/extras/redpanda/topics/orders/partitions', service as never);
+  assert.equal(requestedTopic, 'orders');
+});
+
+test('reads aggregated dashboard widgets', async () => {
+  const data = { pipelines: { running: 1, items: [] }, alerts: { active: 0, critical: 0, items: [] } };
+  const service = { async getDashboardWidgets() { return data; } };
+  const result = await handleExtrasRequest('GET', '/api/extras/dashboard/widgets', service as never);
+  assert.deepEqual(result.body, data);
+});
+
 test('rejects unknown extras routes', async () => {
   const result = await handleExtrasRequest('GET', '/api/extras/unknown', {});
   assert.equal(result.status, 404);

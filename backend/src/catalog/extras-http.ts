@@ -16,6 +16,8 @@ import type { WireGuardSummary } from './network-security.js';
 import type { NatsConnection, NatsVarz, N8nExecution, N8nWorkflow } from '../integrations/nats-n8n.js';
 import type { NexusRepository, VerdaccioPackage } from '../integrations/artifact-registries.js';
 import type { MeilisearchIndex, MeilisearchSearchResult } from '../integrations/meilisearch.js';
+import type { RedpandaBroker, RedpandaPartition, RedpandaTopic } from '../integrations/redpanda.js';
+import type { DashboardWidgetData } from '../tasks/dashboard-widgets.js';
 
 /**
  * Every method is optional: only the services configured via environment variables are
@@ -53,6 +55,10 @@ export interface ExtrasHttpService {
   listNexusRepositories?(): Promise<NexusRepository[]>;
   listMeilisearchIndexes?(): Promise<MeilisearchIndex[]>;
   searchMeilisearch?(indexUid: string, query: string): Promise<MeilisearchSearchResult>;
+  listRedpandaBrokers?(): Promise<RedpandaBroker[]>;
+  listRedpandaTopics?(): Promise<RedpandaTopic[]>;
+  getRedpandaTopicPartitions?(topic: string): Promise<RedpandaPartition[]>;
+  getDashboardWidgets?(): Promise<DashboardWidgetData>;
 }
 
 export interface ExtrasHttpResponse {
@@ -129,6 +135,13 @@ export async function handleExtrasRequest(method: string, url: string, service: 
     if (path === '/api/extras/meilisearch/indexes') return call(service.listMeilisearchIndexes, 'Meilisearch', () => service.listMeilisearchIndexes!());
     const meilisearchQuery = path.match(/^\/api\/extras\/meilisearch\/([^/]+)\/search$/);
     if (meilisearchQuery) return call(service.searchMeilisearch, 'Meilisearch', () => service.searchMeilisearch!(decodeURIComponent(meilisearchQuery[1]), params.get('q') ?? ''));
+
+    if (path === '/api/extras/redpanda/brokers') return call(service.listRedpandaBrokers, 'Redpanda', () => service.listRedpandaBrokers!());
+    if (path === '/api/extras/redpanda/topics') return call(service.listRedpandaTopics, 'Redpanda', () => service.listRedpandaTopics!());
+    const redpandaPartitions = path.match(/^\/api\/extras\/redpanda\/topics\/([^/]+)\/partitions$/);
+    if (redpandaPartitions) return call(service.getRedpandaTopicPartitions, 'Redpanda', () => service.getRedpandaTopicPartitions!(decodeURIComponent(redpandaPartitions[1])));
+
+    if (path === '/api/extras/dashboard/widgets') return call(service.getDashboardWidgets, 'Dashboard widgets', () => service.getDashboardWidgets!());
 
     return { status: 404, body: { error: 'Not found' } };
   } catch (error) {

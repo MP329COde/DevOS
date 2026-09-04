@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "npm run typecheck",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "mcp:start": "node dist/mcp-entrypoint.js"
   },
   "dependencies": {
     "@prisma/client": "^6.16.0",
