@@ -17,7 +17,7 @@ import { THEME_COLOR_SETTINGS, THEME_PRESETS, type ThemeMode } from './theme.js'
 // TODO(AM.1/AM.2) : 'dev-templates' est un panel autonome temporaire (catalogue de templates,
 // section AM.3) en attendant le panel racine "Développement" avec sous-navigation. À rattacher
 // comme sous-vue de ce module une fois posé, plutôt que de rester une entrée de nav séparée.
-const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'settings', 'network', 'dev-templates', 'development', 'deployment'] as const;
+const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'settings', 'network', 'dev-templates', 'development', 'deployment', 'login'] as const;
 
 // Sous-onglets internes du panel "Travail" (section X) : fusionne les anciens panels séparés
 // Tâches/Triage/Aujourd'hui en un seul onglet cohérent, sans perdre de fonctionnalité — seule
@@ -292,9 +292,14 @@ export function App() {
   const [calendarEvents, setCalendarEvents] = useState<Array<{ uid: string; title: string; start: string; end?: string; allDay: boolean; source: 'personal' | 'professional' }>>([]);
   const [calendarError, setCalendarError] = useState('');
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => (typeof Notification === 'undefined' ? 'denied' : Notification.permission));
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [language, setLanguage] = useState<'fr' | 'en'>(() => (localStorage.getItem('devos.language') as 'fr' | 'en' | null) ?? 'fr');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginMessage, setLoginMessage] = useState('');
   const titleInput = useRef<HTMLInputElement>(null);
 
   useUrlState(panel, setPanel, PANEL_IDS, filter, setFilter);
+  useEffect(() => { localStorage.setItem('devos.language', language); }, [language]);
 
   // Garde le sous-onglet du panel Travail synchronisé avec `?sub=`, sur le même principe que
   // `useUrlState` pour panel/filter (deep links, retour arrière navigateur).
@@ -644,6 +649,13 @@ export function App() {
     window.location.assign(request.url);
   }
 
+  function requestEmailLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!loginEmail.trim() || !loginEmail.includes('@')) { setLoginMessage(language === 'fr' ? 'Saisissez une adresse e-mail valide.' : 'Enter a valid email address.'); return; }
+    localStorage.setItem('devos.loginEmail', loginEmail.trim());
+    setLoginMessage(language === 'fr' ? `Lien de connexion envoyé à ${loginEmail.trim()} (mode aperçu).` : `Sign-in link sent to ${loginEmail.trim()} (preview mode).`);
+  }
+
   async function createItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!title.trim()) return;
@@ -774,19 +786,19 @@ export function App() {
   }, {});
   const statusCounts = items.reduce<Record<string, number>>((acc, item) => { acc[item.status] = (acc[item.status] ?? 0) + 1; return acc; }, {});
   const navItems: Array<{ id: typeof panel; label: string; badge?: number; icon: string; group: string }> = [
-    { id: 'home', label: 'Dashboard', icon: 'home', group: 'Vue d’ensemble' },
-    { id: 'work', label: 'Travail', badge: triage.length, icon: 'tasks', group: 'Travail' },
-    { id: 'notes', label: 'Notes', icon: 'doc', group: 'Travail' },
-    { id: 'dev-templates', label: 'Templates dev', icon: 'layers', group: 'Travail' },
-    { id: 'development', label: 'Développement', icon: 'layers', group: 'Développement' },
-    { id: 'catalog', label: 'Catalogue', icon: 'layers', group: 'Infrastructure' },
-    { id: 'network', label: 'Topologie réseau', icon: 'network', group: 'Infrastructure' },
-    { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: 'Infrastructure' },
-    { id: 'proxmox', label: 'VMs Proxmox', icon: 'network', group: 'Infrastructure' },
-    { id: 'widgets', label: 'Widgets', icon: 'widget', group: 'Infrastructure' },
-    { id: 'deployment', label: 'Déploiement', icon: 'layers', group: 'Infrastructure' },
-    { id: 'settings', label: 'Paramètres', icon: 'gear', group: 'Autres' },
-    { id: 'docs', label: 'Docs', icon: 'doc', group: 'Autres' },
+    { id: 'home', label: language === 'fr' ? 'Dashboard' : 'Dashboard', icon: 'home', group: language === 'fr' ? 'Vue d’ensemble' : 'Overview' },
+    { id: 'work', label: language === 'fr' ? 'Travail' : 'Work', badge: triage.length, icon: 'tasks', group: language === 'fr' ? 'Travail' : 'Work' },
+    { id: 'notes', label: language === 'fr' ? 'Notes' : 'Notes', icon: 'doc', group: language === 'fr' ? 'Travail' : 'Work' },
+    { id: 'dev-templates', label: language === 'fr' ? 'Templates dev' : 'Dev templates', icon: 'layers', group: language === 'fr' ? 'Travail' : 'Work' },
+    { id: 'development', label: language === 'fr' ? 'Développement' : 'Development', icon: 'layers', group: language === 'fr' ? 'Développement' : 'Development' },
+    { id: 'catalog', label: language === 'fr' ? 'Catalogue' : 'Catalog', icon: 'layers', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
+    { id: 'network', label: language === 'fr' ? 'Topologie réseau' : 'Network topology', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
+    { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
+    { id: 'proxmox', label: language === 'fr' ? 'VMs Proxmox' : 'Proxmox VMs', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
+    { id: 'widgets', label: 'Widgets', icon: 'widget', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
+    { id: 'deployment', label: language === 'fr' ? 'Déploiement' : 'Deployment', icon: 'layers', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
+    { id: 'settings', label: language === 'fr' ? 'Paramètres' : 'Settings', icon: 'gear', group: language === 'fr' ? 'Autres' : 'Other' },
+    { id: 'docs', label: 'Docs', icon: 'doc', group: language === 'fr' ? 'Autres' : 'Other' },
   ];
   const navGroups = navItems.reduce<Array<{ group: string; items: typeof navItems }>>((groups, item) => {
     const existing = groups.find((g) => g.group === item.group);
@@ -808,8 +820,23 @@ export function App() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true"><Icon name="network" size={18} /></span>
-          <div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">{navItems.find((n) => n.id === panel)?.label ?? 'Dashboard'}</h1></div>
+          <div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">{navItems.find((n) => n.id === panel)?.label ?? (panel === 'login' ? (language === 'fr' ? 'Connexion' : 'Sign in') : 'Dashboard')}</h1></div>
         </div>
+        <div className="header-actions">
+          <button type="button" className="header-icon-button" aria-label={language === 'fr' ? 'Notifications' : 'Notifications'} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}>
+            <Icon name="inbox" />
+            {(triage.length + (wazuhAlerts?.filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).length ?? 0)) > 0 && <span className="header-notification-badge">{triage.length + (wazuhAlerts?.filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).length ?? 0)}</span>}
+          </button>
+          <button type="button" className="header-language" aria-label={language === 'fr' ? 'Changer de langue' : 'Change language'} onClick={() => setLanguage((current) => current === 'fr' ? 'en' : 'fr')}>{language.toUpperCase()}</button>
+          <button type="button" className="header-profile" onClick={() => setPanel('login')}>{profileName ? profileName.slice(0, 2).toUpperCase() : '??'}</button>
+        </div>
+        {notificationsOpen && <aside className="notification-popover" aria-label="Centre de notifications">
+          <h3>{language === 'fr' ? 'Notifications' : 'Notifications'}</h3>
+          {triage.length === 0 && !(wazuhAlerts?.some((alert) => alert.level >= CRITICAL_WAZUH_LEVEL)) && <p className="empty">{language === 'fr' ? 'Aucune notification urgente.' : 'No urgent notifications.'}</p>}
+          {triage.slice(0, 5).map((item) => <button type="button" className="notification-entry" key={item.id} onClick={() => { setPanel('work'); setWorkTab('triage'); setNotificationsOpen(false); }}>Triage : {item.title}</button>)}
+          {(wazuhAlerts ?? []).filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).slice(0, 5).map((alert) => <button type="button" className="notification-entry critical" key={alert.id} onClick={() => { setPanel('home'); setNotificationsOpen(false); }}>Sécurité : {alert.ruleDescription}</button>)}
+          <button type="button" className="filter" onClick={() => { setPanel('settings'); setNotificationsOpen(false); }}>{language === 'fr' ? 'Configurer dans Administration' : 'Configure in Administration'}</button>
+        </aside>}
       </header>
       {navLayout === 'sidebar' && (
         <nav className={collapsed ? 'sidebar collapsed' : 'sidebar'} aria-label="Navigation">
@@ -1166,6 +1193,14 @@ export function App() {
             notificationPermission={notificationPermission}
             onRequestNotificationPermission={() => void Notification.requestPermission().then(setNotificationPermission)}
           />
+        ) : panel === 'login' ? (
+          <section className="login-panel widget-card">
+            <span className="kicker">DEVOS ACCESS</span><h2>{language === 'fr' ? 'Connexion' : 'Sign in'}</h2>
+            <p className="empty">{language === 'fr' ? 'Connectez-vous avec votre adresse e-mail. Keycloak reste optionnel.' : 'Sign in with your email address. Keycloak remains optional.'}</p>
+            <form className="new-item" onSubmit={requestEmailLogin}><input aria-label="Adresse e-mail" type="email" autoComplete="email" placeholder="vous@example.com" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} required /><button type="submit">{language === 'fr' ? 'Recevoir un lien' : 'Send sign-in link'}</button></form>
+            {loginMessage && <p className="status" role="status">{loginMessage}</p>}
+            <button type="button" className="filter" onClick={() => void signIn()}>{language === 'fr' ? 'Continuer avec Keycloak' : 'Continue with Keycloak'}</button>
+          </section>
         ) : panel === 'notes' ? (
           <NotesPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
         ) : panel === 'dev-templates' ? (

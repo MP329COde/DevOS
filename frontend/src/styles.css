@@ -108,6 +108,19 @@ body { margin: 0; min-width: 320px; }
 .shell.layout-topbar .topbar { max-width: 1120px; margin: 0 auto 32px; }
 
 .topbar, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: .55rem; position: relative; }
+.header-icon-button, .header-language, .header-profile { border: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 72%, transparent); color: var(--text); border-radius: 999px; min-height: 2.15rem; cursor: pointer; transition: transform .2s ease, border-color .2s ease; }
+.header-icon-button { width: 2.15rem; display: grid; place-items: center; position: relative; }
+.header-icon-button:hover, .header-language:hover, .header-profile:hover { transform: translateY(-1px); border-color: var(--accent); }
+.header-language { padding: 0 .65rem; font-size: .72rem; font-weight: 700; }
+.header-profile { width: 2.15rem; font-size: .68rem; font-weight: 800; }
+.header-notification-badge { position: absolute; top: -.3rem; right: -.3rem; min-width: 1rem; height: 1rem; border-radius: 999px; background: #ef476f; color: white; font-size: .62rem; display: grid; place-items: center; }
+.notification-popover { position: absolute; right: 1rem; top: 4.25rem; z-index: 20; width: min(24rem, calc(100vw - 2rem)); padding: 1rem; border: 1px solid var(--border); border-radius: 1rem; background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: 0 1rem 3rem #0004; backdrop-filter: blur(18px); animation: devos-panel-in .2s ease-out; }
+.notification-popover h3 { margin: 0 0 .65rem; }
+.notification-entry { display: block; width: 100%; padding: .55rem .6rem; border: 0; border-radius: .55rem; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.notification-entry:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.notification-entry.critical { color: #ef476f; }
+.login-panel { max-width: 34rem; margin: 2rem auto; padding: 1.5rem; animation: devos-panel-in .3s ease-out; }
 .brand { display: flex; align-items: center; gap: 12px; }
 /* Logo animé au survol (section AA) — la page en soit ; l'icône d'onglet du navigateur
    (favicon.svg) ne peut techniquement pas réagir au survol, aucune API navigateur ne le permet. */

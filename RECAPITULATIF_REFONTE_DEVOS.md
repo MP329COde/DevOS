@@ -34,3 +34,21 @@
 - `npm run build` : réussi.
 - `npm test` : 576 tests réussis, 3 ignorés, 0 échec.
 - Contrôle Playwright dans Chrome : Dashboard, Développement, Docs, Notes et réduction de la navigation.
+
+## Vague complémentaire
+
+- Header enrichi avec centre de notifications (triage et alertes critiques), raccourci Administration,
+  profil et changement de langue.
+- Parcours de connexion par e-mail en mode aperçu, avec option Keycloak conservée.
+- Navigation traduite FR/EN et langue persistée localement.
+- Contrôle Playwright complémentaire : bascule anglaise, navigation traduite, formulaire e-mail et
+  message de confirmation.
+
+## Limites restantes
+
+Les intégrations réelles suivantes nécessitent encore une connexion et des contrats externes avant de
+pouvoir être déclarées terminées : domaine/DNS/SEO, certificats HAProxy et liaison Traefik, console
+VM Proxmox, synchronisation GitHub/GitLab en écriture, scans qualité/sécurité/tests, artefacts et
+dépendances par projet, assistant/agent IA avec permissions, architecture projet, permissions par
+environnement, et synchronisation temps réel/performance avancée. Les écrans affichent explicitement
+leur état non configuré au lieu de simuler ces données.
