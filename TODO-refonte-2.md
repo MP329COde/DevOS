@@ -8,18 +8,18 @@
 
 ## T. Dashboard — finitions
 
-- [ ] Message d'accueil personnalisé "Bonjour, {nom}" en haut du Dashboard (utiliser le nom disponible côté session/profil ; fallback générique si aucun nom résolu)
-- [ ] Corriger l'affichage/comportement de la barre d'outils (toolbar d'édition des widgets) en disposition non-horizontale (barre latérale) — actuellement illisible
-- [ ] Repositionner/finaliser la flèche de réduction de la barre latérale (`.sidebar-collapse`)
-- [ ] Icône Paramètres : remplacer le soleil actuel par un engrenage
-- [ ] Vérifier Playwright
+- [x] Message d'accueil personnalisé "Bonjour, {nom}" en haut du Dashboard (utiliser le nom disponible côté session/profil ; fallback générique si aucun nom résolu)
+- [x] Corriger l'affichage/comportement de la barre d'outils (toolbar d'édition des widgets) en disposition non-horizontale (barre latérale) — actuellement illisible
+- [x] Repositionner/finaliser la flèche de réduction de la barre latérale (`.sidebar-collapse`)
+- [x] Icône Paramètres : remplacer le soleil actuel par un engrenage
+- [x] Vérifier Playwright
 
 ## U. Docs — recentrer sur DevOS uniquement
 
-- [ ] Retirer le scan de dépôts GitLab de la page Docs (bouton + logique dans le panel Docs) — la doc doit être 100% DevOS (usage/fonctionnalités de la plateforme), pas du contenu de dépôts externes
-- [ ] Retirer le bouton "Scanner les dépôts GitLab" de toutes les pages où il apparaît hors de son emplacement légitime (Catalogue notamment) ; centraliser cette action dans les Intégrations/Paramètres si elle reste utile ailleurs (catalogue applicatif, pas doc)
-- [ ] Repenser le contenu de la page Docs autour de vraies pages d'aide DevOS (déjà amorcé en section M/I avec `pageType: onboarding` — étendre)
-- [ ] Vérifier Playwright
+- [x] Retirer le scan de dépôts GitLab de la page Docs (bouton + logique dans le panel Docs) — la doc doit être 100% DevOS (usage/fonctionnalités de la plateforme), pas du contenu de dépôts externes
+- [x] Retirer le bouton "Scanner les dépôts GitLab" de toutes les pages où il apparaît hors de son emplacement légitime (Catalogue notamment) ; centraliser cette action dans les Intégrations/Paramètres si elle reste utile ailleurs (catalogue applicatif, pas doc)
+- [x] Repenser le contenu de la page Docs autour de vraies pages d'aide DevOS (déjà amorcé en section M/I avec `pageType: onboarding` — étendre)
+- [x] Vérifier Playwright
 
 ## V. Notes — module indépendant
 
