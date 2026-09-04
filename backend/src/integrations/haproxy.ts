@@ -28,6 +28,19 @@ export interface HAProxyServer {
   check?: 'enabled' | 'disabled';
 }
 
+export interface HAProxyAcl {
+  /** Position of this ACL rule within its parent frontend/backend (returned by the API, required to delete a rule). */
+  index: number;
+  aclName: string;
+  criterion: string;
+  value: string;
+}
+
+export interface HAProxyCertificate {
+  storageName: string;
+  description?: string;
+}
+
 /**
  * Client for the HAProxy Data Plane API (structured config changes require the
  * current configuration version on every write, per the API's optimistic-locking model).
@@ -78,6 +91,34 @@ export class HAProxyClient {
 
   public async reload(): Promise<void> {
     await this.request('/v3/services/haproxy/reloads', { method: 'POST' });
+  }
+
+  /** ACL rules attached to a frontend or backend (used for guided routing rule editing). */
+  public async listAcls(parentType: 'frontend' | 'backend', parentName: string): Promise<HAProxyAcl[]> {
+    const response = await this.request(`/v3/services/haproxy/configuration/acl?parent_type=${parentType}&parent_name=${encodeURIComponent(parentName)}`);
+    const rows = (await response.json()) as Array<{ index: number; acl_name: string; criterion: string; value: string }>;
+    return rows.map((row) => ({ index: row.index, aclName: row.acl_name, criterion: row.criterion, value: row.value }));
+  }
+
+  public async addAcl(parentType: 'frontend' | 'backend', parentName: string, acl: Omit<HAProxyAcl, 'index'>): Promise<void> {
+    const version = await this.getVersion();
+    await this.request(`/v3/services/haproxy/configuration/acl?parent_type=${parentType}&parent_name=${encodeURIComponent(parentName)}&version=${version}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ acl_name: acl.aclName, criterion: acl.criterion, value: acl.value }),
+    });
+  }
+
+  public async deleteAcl(parentType: 'frontend' | 'backend', parentName: string, index: number): Promise<void> {
+    const version = await this.getVersion();
+    await this.request(`/v3/services/haproxy/configuration/acl/${index}?parent_type=${parentType}&parent_name=${encodeURIComponent(parentName)}&version=${version}`, { method: 'DELETE' });
+  }
+
+  /** Read-only listing of TLS certificates stored for HAProxy (Data Plane API storage endpoint) — creating/renewing certificates stays a manual, out-of-band operation. */
+  public async listCertificates(): Promise<HAProxyCertificate[]> {
+    const response = await this.request('/v3/services/haproxy/storage/ssl_certificates');
+    const rows = (await response.json()) as Array<{ storage_name: string; description?: string }>;
+    return rows.map((row) => ({ storageName: row.storage_name, description: row.description }));
   }
 
   private async request(path: string, init?: RequestInit): Promise<Response> {

@@ -3,13 +3,14 @@ import { Command } from 'cmdk';
 
 import { createAuthorizationRequest } from './auth/oidc.js';
 import { NetworkGraph, type NetworkGraphEdge, type NetworkGraphNode } from './components/NetworkGraph.js';
+import { ProxmoxPanel } from './components/ProxmoxPanel.js';
 import { CustomWidgetsPanel, type CustomWidget } from './components/CustomWidgetsPanel.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
 import { TaskDetailPanel } from './components/TaskDetailPanel.js';
 import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js';
 import { THEME_COLOR_SETTINGS } from './theme.js';
 
-const PANEL_IDS = ['home', 'items', 'today', 'triage', 'haproxy', 'catalog', 'docs', 'widgets', 'settings', 'network'] as const;
+const PANEL_IDS = ['home', 'items', 'today', 'triage', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'settings', 'network'] as const;
 
 const oidcConfig = {
   issuerUrl: import.meta.env.VITE_KEYCLOAK_ISSUER_URL ?? 'https://keycloak.example.internal/realms/devos',
@@ -190,6 +191,10 @@ export function App() {
   const [haproxyBackends, setHaproxyBackends] = useState<Array<{ name: string; mode?: string }>>([]);
   const [haproxyServers, setHaproxyServers] = useState<Record<string, Array<{ name: string; address: string; port: number }>>>({});
   const [haproxyError, setHaproxyError] = useState('');
+  const [haproxyFrontends, setHaproxyFrontends] = useState<Array<{ name: string; mode?: string; bind?: string }>>([]);
+  const [haproxyAcls, setHaproxyAcls] = useState<Record<string, Array<{ index: number; aclName: string; criterion: string; value: string }>>>({});
+  const [haproxyCertificates, setHaproxyCertificates] = useState<Array<{ storageName: string; description?: string }>>([]);
+  const [aclDraft, setAclDraft] = useState<Record<string, { aclName: string; criterion: string; value: string }>>({});
   const [catalogEntities, setCatalogEntities] = useState<Array<{ kind: string; name: string; type: string; owner: string; sourceProject: string }>>([]);
   const [catalogGraph, setCatalogGraph] = useState<{ nodes: Array<{ id: string; known: boolean }>; edges: Array<{ from: string; to: string }> }>({ nodes: [], edges: [] });
   const [catalogError, setCatalogError] = useState('');
@@ -399,7 +404,45 @@ export function App() {
         }
       })
       .catch((error: Error) => setHaproxyError(error.message));
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/frontends`)
+      .then(async (response) => {
+        if (!response.ok) return;
+        const frontends = await response.json();
+        setHaproxyFrontends(frontends);
+        for (const frontend of frontends as Array<{ name: string }>) {
+          void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/frontends/${encodeURIComponent(frontend.name)}/acls`)
+            .then(async (response) => { if (!response.ok) return; const acls = await response.json(); setHaproxyAcls((current) => ({ ...current, [frontend.name]: acls })); })
+            .catch(() => undefined);
+        }
+      })
+      .catch(() => undefined);
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/certificates`)
+      .then(async (response) => { if (response.ok) setHaproxyCertificates(await response.json()); })
+      .catch(() => undefined);
   }, [panel]);
+
+  async function addHaproxyAcl(frontendName: string) {
+    const draft = aclDraft[frontendName];
+    if (!draft?.aclName || !draft.criterion || !draft.value) return;
+    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/frontends/${encodeURIComponent(frontendName)}/acls`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-devos-role': 'Admin' },
+      body: JSON.stringify(draft),
+    });
+    if (!response.ok) { setHaproxyError('L’ajout de la règle ACL a échoué.'); return; }
+    const acls = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/frontends/${encodeURIComponent(frontendName)}/acls`).then((r) => r.json());
+    setHaproxyAcls((current) => ({ ...current, [frontendName]: acls }));
+    setAclDraft((current) => ({ ...current, [frontendName]: { aclName: '', criterion: '', value: '' } }));
+  }
+
+  async function deleteHaproxyAcl(frontendName: string, index: number) {
+    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/frontends/${encodeURIComponent(frontendName)}/acls/${index}`, {
+      method: 'DELETE',
+      headers: { 'x-devos-role': 'Admin' },
+    });
+    if (!response.ok) { setHaproxyError('La suppression de la règle ACL a échoué.'); return; }
+    setHaproxyAcls((current) => ({ ...current, [frontendName]: (current[frontendName] ?? []).filter((acl) => acl.index !== index) }));
+  }
 
   useEffect(() => {
     if (panel !== 'catalog') return;
@@ -622,6 +665,7 @@ export function App() {
     { id: 'catalog', label: 'Catalogue', icon: 'layers', group: 'Infrastructure' },
     { id: 'network', label: 'Topologie réseau', icon: 'network', group: 'Infrastructure' },
     { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: 'Infrastructure' },
+    { id: 'proxmox', label: 'VMs Proxmox', icon: 'network', group: 'Infrastructure' },
     { id: 'widgets', label: 'Widgets', icon: 'widget', group: 'Infrastructure' },
     { id: 'settings', label: 'Paramètres', icon: 'gear', group: 'Autres' },
     { id: 'docs', label: 'Docs', icon: 'doc', group: 'Autres' },
@@ -785,7 +829,35 @@ export function App() {
         ) : panel === 'haproxy' ? (
           <div className="items haproxy-panel">
             {haproxyError && <p className="error" role="alert">{haproxyError}</p>}
-            {!haproxyError && haproxyBackends.length === 0 && <p className="empty">Aucun backend HAProxy à afficher.</p>}
+            {!haproxyError && haproxyBackends.length === 0 && haproxyFrontends.length === 0 && <p className="empty">Aucune configuration HAProxy à afficher.</p>}
+
+            {haproxyFrontends.length > 0 && (
+              <section className="view-group">
+                <h3>Frontends</h3>
+                {haproxyFrontends.map((frontend) => (
+                  <section className="view-group haproxy-frontend" key={frontend.name}>
+                    <h4>{frontend.name}{frontend.mode ? ` (${frontend.mode})` : ''}{frontend.bind ? ` · ${frontend.bind}` : ''}</h4>
+                    <div className="haproxy-acls">
+                      {(haproxyAcls[frontend.name] ?? []).map((acl) => (
+                        <article className="item haproxy-acl" key={acl.index}>
+                          <strong>{acl.aclName}</strong>
+                          <span>{acl.criterion} {acl.value}</span>
+                          <button className="delete" type="button" aria-label={`Supprimer la règle ACL ${acl.aclName}`} onClick={() => void deleteHaproxyAcl(frontend.name, acl.index)}>×</button>
+                        </article>
+                      ))}
+                      {(haproxyAcls[frontend.name] ?? []).length === 0 && <p className="empty">Aucune règle ACL sur ce frontend.</p>}
+                    </div>
+                    <form className="new-item" onSubmit={(event) => { event.preventDefault(); void addHaproxyAcl(frontend.name); }}>
+                      <input aria-label="Nom de la règle ACL" placeholder="Nom (ex: is_api)" value={aclDraft[frontend.name]?.aclName ?? ''} onChange={(event) => setAclDraft((current) => ({ ...current, [frontend.name]: { ...(current[frontend.name] ?? { criterion: '', value: '' }), aclName: event.target.value } }))} />
+                      <input aria-label="Critère de la règle ACL" placeholder="Critère (ex: path_beg)" value={aclDraft[frontend.name]?.criterion ?? ''} onChange={(event) => setAclDraft((current) => ({ ...current, [frontend.name]: { ...(current[frontend.name] ?? { aclName: '', value: '' }), criterion: event.target.value } }))} />
+                      <input aria-label="Valeur de la règle ACL" placeholder="Valeur (ex: /api)" value={aclDraft[frontend.name]?.value ?? ''} onChange={(event) => setAclDraft((current) => ({ ...current, [frontend.name]: { ...(current[frontend.name] ?? { aclName: '', criterion: '' }), value: event.target.value } }))} />
+                      <button type="submit">Ajouter la règle</button>
+                    </form>
+                  </section>
+                ))}
+              </section>
+            )}
+
             {haproxyBackends.map((backend) => (
               <section className="view-group" key={backend.name}>
                 <h3>{backend.name}{backend.mode ? ` (${backend.mode})` : ''}</h3>
@@ -798,7 +870,17 @@ export function App() {
                 {(haproxyServers[backend.name] ?? []).length === 0 && <p className="empty">Aucun serveur pour ce backend.</p>}
               </section>
             ))}
+
+            <section className="view-group">
+              <h3>Certificats TLS</h3>
+              {haproxyCertificates.map((cert) => (
+                <p className="empty" key={cert.storageName}>{cert.storageName}{cert.description ? ` — ${cert.description}` : ''}</p>
+              ))}
+              {haproxyCertificates.length === 0 && <p className="empty">Aucun certificat TLS listé (Data Plane API non configurée ou magasin vide).</p>}
+            </section>
           </div>
+        ) : panel === 'proxmox' ? (
+          <ProxmoxPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
         ) : panel === 'catalog' ? (
           <div className="items catalog-panel">
             <div className="filters" aria-label="Actions catalogue"><button type="button" onClick={() => void scanCatalog()}>Scanner les dépôts GitLab</button></div>

@@ -23,6 +23,7 @@ import { DashboardService } from './tasks/dashboard-service.js';
 import { verifyAndParseWebhook, type WebhookSecretProvider } from './integrations/gitlab-webhook.js';
 import { processGitLabIssueWebhook, processGitLabMergeRequestWebhook, processGitLabPipelineWebhook, type GitLabStatusSync, type GitLabWebhookSync } from './integrations/gitlab-sync.js';
 import { handleHAProxyRequest, type HAProxyHttpService } from './tasks/haproxy-http.js';
+import { handleProxmoxRequest, type ProxmoxHttpService } from './catalog/proxmox-http.js';
 import { HAProxyClient } from './integrations/haproxy.js';
 import { addServerWithHistory, deleteServerWithHistory, rollbackChange } from './integrations/haproxy-history.js';
 import { PrismaHAProxyHistoryRepository } from './integrations/haproxy-history-repository.js';
@@ -102,6 +103,7 @@ export function createServer(
   notifications?: NotificationsHttpService,
   customWidgets?: CustomWidgetsHttpService,
   comments?: CommentHttpService,
+  proxmox?: ProxmoxHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -206,6 +208,14 @@ export function createServer(
         response.end();
         return;
       }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/proxmox')) {
+      if (!proxmox) { writeJson(response, 503, { error: 'Proxmox VM control is not configured' }); return; }
+      const role = parseRole(headerValue(request.headers['x-devos-role']));
+      const result = await handleProxmoxRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, proxmox);
       writeJson(response, result.status, result.body);
       return;
     }
@@ -336,7 +346,8 @@ if (require.main === module) {
     const notifications: NotificationsHttpService = buildNotificationsServiceFromEnv();
     const customWidgets = buildCustomWidgetsServiceFromEnv(settingsService);
     const comments = buildCommentsServiceFromEnv(database);
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const proxmoxHttp = buildProxmoxHttpServiceFromEnv();
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -834,6 +845,16 @@ function buildCatalogServiceFromEnv(database: PrismaClient): CatalogHttpService 
   };
 }
 
+function buildProxmoxHttpServiceFromEnv(): ProxmoxHttpService | undefined {
+  const baseUrl = process.env.PROXMOX_BASE_URL;
+  const apiToken = process.env.PROXMOX_API_TOKEN;
+  if (!baseUrl || !apiToken) return undefined;
+  const client = new ProxmoxClient({ baseUrl, apiToken });
+  return {
+    controlVirtualMachine: (node, vmid, action) => client.controlVirtualMachine(node, vmid, action),
+  };
+}
+
 function buildHAProxyServiceFromEnv(database: PrismaClient): HAProxyHttpService | undefined {
   const baseUrl = process.env.HAPROXY_DATA_PLANE_URL;
   const username = process.env.HAPROXY_USERNAME;
@@ -850,6 +871,10 @@ function buildHAProxyServiceFromEnv(database: PrismaClient): HAProxyHttpService 
     reload: () => client.reload(),
     listHistory: () => history.list(),
     rollback: (id) => rollbackChange(id, history, client),
+    listAcls: (parentType, parentName) => client.listAcls(parentType, parentName),
+    addAcl: (parentType, parentName, acl) => client.addAcl(parentType, parentName, acl),
+    deleteAcl: (parentType, parentName, index) => client.deleteAcl(parentType, parentName, index),
+    listCertificates: () => client.listCertificates(),
   };
 }
 

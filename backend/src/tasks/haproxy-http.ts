@@ -1,5 +1,5 @@
 import { assertCan, type Role } from '../auth/permissions.js';
-import type { HAProxyBackend, HAProxyFrontend, HAProxyServer } from '../integrations/haproxy.js';
+import type { HAProxyAcl, HAProxyBackend, HAProxyCertificate, HAProxyFrontend, HAProxyServer } from '../integrations/haproxy.js';
 import type { HAProxyChangeRecord } from '../integrations/haproxy-history.js';
 
 export interface HAProxyHttpService {
@@ -11,6 +11,10 @@ export interface HAProxyHttpService {
   reload(role: Role): Promise<void>;
   listHistory(): Promise<HAProxyChangeRecord[]>;
   rollback(id: string, role: Role): Promise<void>;
+  listAcls(parentType: 'frontend' | 'backend', parentName: string): Promise<HAProxyAcl[]>;
+  addAcl(parentType: 'frontend' | 'backend', parentName: string, acl: Omit<HAProxyAcl, 'index'>, role: Role): Promise<void>;
+  deleteAcl(parentType: 'frontend' | 'backend', parentName: string, index: number, role: Role): Promise<void>;
+  listCertificates(): Promise<HAProxyCertificate[]>;
 }
 
 export interface HAProxyHttpResponse {
@@ -49,6 +53,21 @@ export async function handleHAProxyRequest(method: string, path: string, body: u
       return { status: 200, body: { accepted: true } };
     }
 
+    const acls = path.match(/^\/api\/haproxy\/(frontends|backends)\/([^/]+)\/acls$/);
+    if (method === 'GET' && acls) return { status: 200, body: await service.listAcls(parentType(acls[1]), decodeURIComponent(acls[2])) };
+    if (method === 'POST' && acls) {
+      await service.addAcl(parentType(acls[1]), decodeURIComponent(acls[2]), parseAcl(body), requireRole(role));
+      return { status: 201, body: { accepted: true } };
+    }
+
+    const acl = path.match(/^\/api\/haproxy\/(frontends|backends)\/([^/]+)\/acls\/(\d+)$/);
+    if (method === 'DELETE' && acl) {
+      await service.deleteAcl(parentType(acl[1]), decodeURIComponent(acl[2]), Number(acl[3]), requireRole(role));
+      return { status: 204, body: null };
+    }
+
+    if (method === 'GET' && path === '/api/haproxy/certificates') return { status: 200, body: await service.listCertificates() };
+
     return { status: 404, body: { error: 'Not found' } };
   } catch (error) {
     return { status: 400, body: { error: error instanceof Error ? error.message : 'Invalid HAProxy request' } };
@@ -68,4 +87,17 @@ function parseServer(body: unknown): HAProxyServer {
     throw new Error('Server name, address and port are required');
   }
   return { name: input.name, address: input.address, port: input.port };
+}
+
+function parentType(segment: string): 'frontend' | 'backend' {
+  return segment === 'frontends' ? 'frontend' : 'backend';
+}
+
+function parseAcl(body: unknown): Omit<HAProxyAcl, 'index'> {
+  if (!body || typeof body !== 'object') throw new Error('Invalid ACL payload');
+  const input = body as Record<string, unknown>;
+  if (typeof input.aclName !== 'string' || typeof input.criterion !== 'string' || typeof input.value !== 'string') {
+    throw new Error('ACL name, criterion and value are required');
+  }
+  return { aclName: input.aclName, criterion: input.criterion, value: input.value };
 }

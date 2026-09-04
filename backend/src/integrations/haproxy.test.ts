@@ -51,3 +51,39 @@ test('triggers a reload via the reloads endpoint', async () => {
   assert.equal(calledUrl, 'https://haproxy.test:5555/v3/services/haproxy/reloads');
   assert.equal(calledMethod, 'POST');
 });
+
+test('lists ACL rules for a frontend', async () => {
+  let requestedUrl = '';
+  const acls = await client(async (input) => {
+    requestedUrl = String(input);
+    return new Response(JSON.stringify([{ index: 0, acl_name: 'is_api', criterion: 'path_beg', value: '/api' }]), { status: 200 });
+  }).listAcls('frontend', 'main-frontend');
+  assert.equal(requestedUrl, 'https://haproxy.test:5555/v3/services/haproxy/configuration/acl?parent_type=frontend&parent_name=main-frontend');
+  assert.deepEqual(acls, [{ index: 0, aclName: 'is_api', criterion: 'path_beg', value: '/api' }]);
+});
+
+test('reads the configuration version before adding an ACL, and includes it in the write', async () => {
+  const calls: string[] = [];
+  await client(async (input) => {
+    calls.push(String(input));
+    if (String(input).endsWith('/version')) return new Response('9', { status: 200 });
+    return new Response('{}', { status: 200 });
+  }).addAcl('frontend', 'main-frontend', { aclName: 'is_api', criterion: 'path_beg', value: '/api' });
+  assert.equal(calls[0], 'https://haproxy.test:5555/v3/services/haproxy/configuration/version');
+  assert.equal(calls[1], 'https://haproxy.test:5555/v3/services/haproxy/configuration/acl?parent_type=frontend&parent_name=main-frontend&version=9');
+});
+
+test('deletes an ACL rule by index, versioned', async () => {
+  const calls: string[] = [];
+  await client(async (input) => {
+    calls.push(String(input));
+    if (String(input).endsWith('/version')) return new Response('4', { status: 200 });
+    return new Response('{}', { status: 200 });
+  }).deleteAcl('frontend', 'main-frontend', 0);
+  assert.equal(calls[1], 'https://haproxy.test:5555/v3/services/haproxy/configuration/acl/0?parent_type=frontend&parent_name=main-frontend&version=4');
+});
+
+test('lists stored TLS certificates', async () => {
+  const certs = await client(async () => new Response(JSON.stringify([{ storage_name: 'coder-mpcode.duckdns.org.pem', description: 'Coder' }]), { status: 200 })).listCertificates();
+  assert.deepEqual(certs, [{ storageName: 'coder-mpcode.duckdns.org.pem', description: 'Coder' }]);
+});

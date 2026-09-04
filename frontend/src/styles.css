@@ -180,6 +180,24 @@ input { flex: 1; min-width: 0; }
 .comment-form textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: rgba(var(--rgb-surface), .82); font: 14px Arial, sans-serif; resize: vertical; }
 .comment-form button { align-self: flex-end; }
 .haproxy-server { grid-template-columns: 1fr auto; }
+.haproxy-frontend { padding: 12px 14px; border-radius: 10px; background: rgba(var(--rgb-surface), .6); border: 1px solid var(--border); }
+.haproxy-frontend h4 { margin: 0 0 8px; font: 700 13px Arial, sans-serif; color: var(--text); }
+.haproxy-acls { display: grid; gap: 6px; margin-bottom: 8px; }
+.haproxy-acl { grid-template-columns: 1fr 1fr auto; }
+
+/* Panel Proxmox — même identité "infra critique" que le module Réseau (voir Design.md) :
+   confirmation explicite systématique avant toute action de contrôle sur une VM réelle. */
+.proxmox-node h3 { display: flex; align-items: center; gap: 8px; }
+.proxmox-vm { grid-template-columns: 1fr auto auto; }
+.proxmox-action { padding: 6px 10px; color: var(--accent-2); background: rgba(var(--rgb-accent2), .1); border: 1px solid rgba(var(--rgb-accent2), .3); }
+.proxmox-action:hover { background: rgba(var(--rgb-accent2), .2); }
+.proxmox-confirm-overlay { background: rgba(23, 33, 27, .6); }
+.proxmox-confirm-panel { background: #17211b; color: #dbe8dc; border: 1px solid #a34f31; }
+.proxmox-confirm-panel h2 { color: #f1dfc2; font-size: 18px; margin: 0 0 10px; }
+.proxmox-confirm-panel p { color: #dbe8dc; }
+.proxmox-confirm { padding: 9px 14px; color: #17211b; background: #a34f31; font-weight: 700; }
+.proxmox-confirm:hover { background: #c4693f; }
+.proxmox-confirm-panel .filter { color: #dbe8dc; border-color: rgba(219, 232, 220, .3); }
 .catalog-entity { grid-template-columns: 90px 1fr auto; }
 .doc-page { grid-template-columns: 1fr auto; }
 .doc-page-onboarding { border-left-color: var(--gold); }
