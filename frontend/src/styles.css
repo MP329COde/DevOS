@@ -90,8 +90,15 @@ body { margin: 0; min-width: 320px; }
 .shell {
   min-height: 100vh;
   padding: 24px clamp(16px, 4vw, 48px);
-  background: linear-gradient(135deg, var(--bg-1) 0%, var(--bg-2) 100%);
+  /* Fond dynamique par défaut (section AA) : dérive doucement entre les deux teintes de fond déjà
+     définies par le thème, sans dépendre d'un fond d'écran optionnel (section AB, `data-bg`, opt-in).
+     Très léger — un seul gradient animé, désactivé si l'utilisateur préfère moins de mouvement. */
+  background: linear-gradient(135deg, var(--bg-1) 0%, var(--bg-2) 50%, var(--bg-1) 100%);
+  background-size: 220% 220%;
+  animation: devos-shell-drift 40s ease-in-out infinite;
 }
+@keyframes devos-shell-drift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+@media (prefers-reduced-motion: reduce) { .shell { animation: none; } }
 
 .shell.layout-sidebar { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: auto 1fr; gap: 24px; align-items: start; max-width: 1400px; margin: 0 auto; }
 .shell.layout-sidebar .topbar { grid-column: 1 / -1; max-width: none; margin: 0; }
@@ -101,6 +108,11 @@ body { margin: 0; min-width: 320px; }
 .shell.layout-topbar .topbar { max-width: 1120px; margin: 0 auto 32px; }
 
 .topbar, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+/* Logo animé au survol (section AA) — la page en soit ; l'icône d'onglet du navigateur
+   (favicon.svg) ne peut techniquement pas réagir au survol, aucune API navigateur ne le permet. */
+.brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex-shrink: 0; color: var(--surface); background: var(--accent-2); border-radius: 9px; transition: transform .25s cubic-bezier(.34,1.56,.64,1), border-radius .25s ease; }
+.brand:hover .brand-mark { transform: rotate(-12deg) scale(1.08); border-radius: 30%; }
 .topbar h1 { margin: 4px 0 0; font-size: clamp(28px, 4vw, 36px); }
 .login { background: var(--text); border-radius: 8px; }
 .workspace { display: flex; flex-direction: column; gap: 4px; }
@@ -157,6 +169,7 @@ input { flex: 1; min-width: 0; }
 .view-group { display: grid; gap: 8px; }.view-group h3 { margin: 14px 0 2px; font: 700 13px Arial, sans-serif; text-transform: uppercase; color: var(--accent); }
 .catalog-template-form { padding: 14px 16px; border-radius: 12px; background: rgba(var(--rgb-surface), .6); border: 1px solid var(--border); }
 .catalog-template-result pre { white-space: pre-wrap; word-break: break-word; padding: 12px; border-radius: 8px; background: rgba(var(--rgb-text), .06); font: 13px ui-monospace, 'SFMono-Regular', Menlo, monospace; }
+.dev-job-log { max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: rgba(var(--rgb-text), .06); font: 12px ui-monospace, 'SFMono-Regular', Menlo, monospace; }
 .item { display: grid; grid-template-columns: 90px 1fr 110px 135px auto; align-items: center; gap: 12px; padding: 16px 18px; background: rgba(var(--rgb-surface), .78); border-left: 4px solid var(--border-strong); border-radius: 10px; box-shadow: 0 1px 2px rgba(var(--rgb-text), .06); }
 .item-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .item-actions button { white-space: nowrap; }
@@ -458,3 +471,51 @@ html[data-bg="nebula"]::before {
 .note-checkbox input { width: 15px; height: 15px; }
 .note-edit { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .note-edit .doc-editor { margin: 0; }
+
+/* Catalogue de templates du module Développement (section AM.3) : cartes de dépendances et
+   badges par défaut/désactivé, réutilisant la grammaire .widget-card/.status-badge existante. */
+.dev-template-form { display: flex; flex-wrap: wrap; gap: 8px; }
+.dev-templates-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.dev-template-card { grid-template-columns: none; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.dev-template-inactive { opacity: .6; }
+.type-template { color: var(--gold); }
+.status-badge-default { color: var(--status-ok); background: rgba(47, 107, 58, .12); }
+.status-badge-inactive { color: var(--status-warn); background: rgba(122, 99, 45, .12); }
+.dependency-cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.dependency-card { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; background: rgba(var(--rgb-surface), .6); border: 1px solid rgba(var(--rgb-text), .1); font: 12px sans-serif; }
+.dependency-version { color: var(--muted); font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; }
+.dev-template-detail { display: flex; flex-direction: column; gap: 4px; width: 100%; font-size: 13px; }
+.dev-template-detail p { margin: 0; }
+
+/* Module Développement — fondation (section AM.1/AM.2) : vue globale des projets, dashboard
+   projet, assistant de création guidée. Réutilise .widget-card/.item-meta/.item-actions/.filter
+   existants pour rester cohérent avec le reste de l'app plutôt que d'introduire un style isolé. */
+.dev-overview { display: flex; flex-direction: column; gap: 8px; }
+.dev-overview > input { max-width: 360px; }
+.dev-project-card { grid-template-columns: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.status-planning, .status-badge.status-planning { color: var(--status-warn); background: rgba(122, 99, 45, .12); }
+.status-development, .status-badge.status-development { color: var(--accent-2); background: rgba(var(--rgb-accent2), .12); }
+.status-maintenance, .status-badge.status-maintenance { color: var(--gold); background: rgba(198, 152, 60, .14); }
+.status-done, .status-badge.status-done { color: var(--status-ok); background: rgba(47, 107, 58, .12); }
+.status-archived, .status-badge.status-archived { color: var(--muted); background: rgba(var(--rgb-text), .08); }
+.dev-dashboard { display: flex; flex-direction: column; gap: 12px; }
+.dev-dashboard-header { display: flex; align-items: center; gap: 12px; }
+.dev-dashboard-header h2 { margin: 0; }
+.dev-dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.dev-dashboard-grid .widget-card h4 { margin: 0 0 6px; font: 700 12px sans-serif; text-transform: uppercase; color: var(--accent); }
+.dev-dashboard-grid .widget-card p { margin: 0; }
+.dev-wizard { display: flex; flex-direction: column; gap: 12px; }
+.dev-wizard label { font: 600 12px sans-serif; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+.dev-wizard ul { margin: 4px 0; padding-left: 18px; }
+
+/* Sous-vue Dépôts du module Développement (section AM.4) : vue dépôt unifiée GitHub/GitLab. */
+.dev-repos-list { display: flex; flex-direction: column; gap: 10px; }
+.dev-repo-card { grid-template-columns: none; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.type-gitlab { color: var(--gold); background: rgba(198, 152, 60, .14); }
+.type-github { color: var(--accent-2); background: rgba(var(--rgb-accent2), .12); }
+.dev-repo-detail { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 6px; }
+.dev-repo-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.dev-repo-tabs button { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 12px; cursor: pointer; }
+.dev-repo-tabs button.active { color: var(--surface); background: var(--accent); }
+.dev-repo-changes, .dev-repo-commits, .dev-repo-branches ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.dev-repo-changes li, .dev-repo-commits li, .dev-repo-branches li { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }

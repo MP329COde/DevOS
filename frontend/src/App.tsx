@@ -4,15 +4,20 @@ import { Command } from 'cmdk';
 import { createAuthorizationRequest } from './auth/oidc.js';
 import { NetworkGraph, type NetworkGraphEdge, type NetworkGraphNode } from './components/NetworkGraph.js';
 import { ProxmoxPanel } from './components/ProxmoxPanel.js';
+import { DeploymentPanel } from './components/DeploymentPanel.js';
 import { CustomWidgetsPanel, type CustomWidget } from './components/CustomWidgetsPanel.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
 import { NotesPanel } from './components/NotesPanel.js';
+import { DevelopmentPanel } from './components/DevelopmentPanel.js';
 import { DevTemplatesPanel } from './components/DevTemplatesPanel.js';
 import { TaskDetailPanel } from './components/TaskDetailPanel.js';
 import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js';
 import { THEME_COLOR_SETTINGS, THEME_PRESETS, type ThemeMode } from './theme.js';
 
-const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'settings', 'network'] as const;
+// TODO(AM.1/AM.2) : 'dev-templates' est un panel autonome temporaire (catalogue de templates,
+// section AM.3) en attendant le panel racine "Développement" avec sous-navigation. À rattacher
+// comme sous-vue de ce module une fois posé, plutôt que de rester une entrée de nav séparée.
+const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'settings', 'network', 'dev-templates', 'development', 'deployment'] as const;
 
 // Sous-onglets internes du panel "Travail" (section X) : fusionne les anciens panels séparés
 // Tâches/Triage/Aujourd'hui en un seul onglet cohérent, sans perdre de fonctionnalité — seule
@@ -770,11 +775,14 @@ export function App() {
     { id: 'home', label: 'Dashboard', icon: 'home', group: 'Vue d’ensemble' },
     { id: 'work', label: 'Travail', badge: triage.length, icon: 'tasks', group: 'Travail' },
     { id: 'notes', label: 'Notes', icon: 'doc', group: 'Travail' },
+    { id: 'dev-templates', label: 'Templates dev', icon: 'layers', group: 'Travail' },
+    { id: 'development', label: 'Développement', icon: 'layers', group: 'Développement' },
     { id: 'catalog', label: 'Catalogue', icon: 'layers', group: 'Infrastructure' },
     { id: 'network', label: 'Topologie réseau', icon: 'network', group: 'Infrastructure' },
     { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: 'Infrastructure' },
     { id: 'proxmox', label: 'VMs Proxmox', icon: 'network', group: 'Infrastructure' },
     { id: 'widgets', label: 'Widgets', icon: 'widget', group: 'Infrastructure' },
+    { id: 'deployment', label: 'Déploiement', icon: 'layers', group: 'Infrastructure' },
     { id: 'settings', label: 'Paramètres', icon: 'gear', group: 'Autres' },
     { id: 'docs', label: 'Docs', icon: 'doc', group: 'Autres' },
   ];
@@ -796,7 +804,10 @@ export function App() {
   return (
     <div className={`shell layout-${navLayout}`}>
       <header className="topbar">
-        <div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">{navItems.find((n) => n.id === panel)?.label ?? 'Dashboard'}</h1></div>
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true"><Icon name="network" size={18} /></span>
+          <div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">{navItems.find((n) => n.id === panel)?.label ?? 'Dashboard'}</h1></div>
+        </div>
       </header>
       {navLayout === 'sidebar' && (
         <nav className={collapsed ? 'sidebar collapsed' : 'sidebar'} aria-label="Navigation">
@@ -910,7 +921,16 @@ export function App() {
               })}
             </div>
           </div>
-        ) : panel === 'items' ? (<>
+        ) : panel === 'work' ? (<>
+        {/* Section X : Tâches/Triage/Aujourd'hui fusionnés en un seul panel "Travail" avec
+            sous-onglets internes, plutôt que trois panels de nav séparés — même fonctionnalité,
+            navigation simplifiée. Le sous-onglet actif est piloté par `workTab` (persistant en URL). */}
+        <nav className="views work-subnav" aria-label="Sous-onglets Travail">
+          <button className={workTab === 'tasks' ? 'filter active' : 'filter'} type="button" onClick={() => setWorkTab('tasks')}>Tâches</button>
+          <button className={workTab === 'triage' ? 'filter active' : 'filter'} type="button" onClick={() => setWorkTab('triage')}>Triage{triage.length > 0 ? ` (${triage.length})` : ''}</button>
+          <button className={workTab === 'today' ? 'filter active' : 'filter'} type="button" onClick={() => setWorkTab('today')}>Aujourd’hui</button>
+        </nav>
+        {workTab === 'tasks' ? (<>
         {cycles.length > 0 && <aside className="cycles" aria-label="Cycles"><span className="kicker">CYCLE ACTIF</span>{cycles.filter((cycle) => !cycle.closedAt).map((cycle) => <div className="cycle" key={cycle.id}><strong>{cycle.name}</strong><button type="button" onClick={() => void closeCycle(cycle.id)}>Clôturer</button></div>)}</aside>}
         <div className="section-heading"><div><span className="kicker">WORK QUEUE</span><h2 id="items-title">Vos items</h2></div><div className="filters" aria-label="Filtrer les items">{['all', 'task', 'doc', 'goal', 'required'].map((value) => <button className={filter === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setFilter(value)}>{value === 'all' ? 'Tout' : value === 'required' ? 'Obligatoires' : value}</button>)}</div></div>
         <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setView(value)}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}</nav>
@@ -930,7 +950,7 @@ export function App() {
           </section>
         )}
         <div className={`items view-${view}`}>{view === 'list' ? visibleItems.map(itemCard) : Object.entries(groupedItems).map(([group, groupItems]) => <section className="view-group" key={group}><h3>{view === 'gantt' ? `Échéance ${group}` : group}</h3>{groupItems.map(itemCard)}</section>)}{!itemsError && visibleItems.length === 0 && <p className="empty">Aucun item dans cette vue.</p>}</div>
-        </>) : panel === 'today' ? (
+        </>) : workTab === 'today' ? (
           <div className="items dashboard-timeline">
             <div className="filters" aria-label="Jour du dashboard">
               <button className={dashboardDay === 'today' ? 'filter active' : 'filter'} type="button" onClick={() => setDashboardDay('today')}>Aujourd’hui</button>
@@ -950,7 +970,13 @@ export function App() {
             ))}
             {dashboardItems.length === 0 && <p className="empty">Aucun item programmé pour {dashboardDay === 'today' ? "aujourd'hui" : 'demain'}.</p>}
           </div>
-        ) : panel === 'network' ? (
+        ) : (
+          <div className="items triage-list">
+            {triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}
+            {triage.length === 0 && <p className="empty">La file de triage est vide.</p>}
+          </div>
+        )}
+        </>) : panel === 'network' ? (
           <div className="items network-panel">
             {networkError && <p className="error" role="alert">{networkError}</p>}
             {!networkError && !networkGraph && <p className="empty">Chargement de la topologie…</p>}
@@ -1011,6 +1037,8 @@ export function App() {
           </div>
         ) : panel === 'proxmox' ? (
           <ProxmoxPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
+        ) : panel === 'deployment' ? (
+          <DeploymentPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
         ) : panel === 'catalog' ? (
           <div className="items catalog-panel">
             <div className="filters" aria-label="Actions catalogue"><button type="button" onClick={() => void scanCatalog()}>Scanner les dépôts GitLab</button></div>
@@ -1141,9 +1169,12 @@ export function App() {
             notificationPermission={notificationPermission}
             onRequestNotificationPermission={() => void Notification.requestPermission().then(setNotificationPermission)}
           />
-        ) : panel === 'triage' ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div>
-        : panel === 'notes' ? (
+        ) : panel === 'notes' ? (
           <NotesPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
+        ) : panel === 'dev-templates' ? (
+          <DevTemplatesPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
+        ) : panel === 'development' ? (
+          <DevelopmentPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
         ) : null}
       </main>
       {detailItemId && (() => {
@@ -1164,12 +1195,14 @@ export function App() {
         <Command.List>
           <Command.Empty>Aucune commande trouvée.</Command.Empty>
           <Command.Group heading="Navigation">
-            {(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <Command.Item key={value} onSelect={() => { setPanel('items'); setView(value); setPaletteOpen(false); }}>{value === 'list' ? 'Ouvrir la liste' : value === 'board' ? 'Ouvrir le board' : value === 'gantt' ? 'Ouvrir Gantt' : 'Ouvrir le calendrier'}</Command.Item>)}
-            <Command.Item onSelect={() => { setPanel('triage'); setPaletteOpen(false); }}>Ouvrir le triage</Command.Item>
+            {(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <Command.Item key={value} onSelect={() => { setPanel('work'); setWorkTab('tasks'); setView(value); setPaletteOpen(false); }}>{value === 'list' ? 'Ouvrir la liste' : value === 'board' ? 'Ouvrir le board' : value === 'gantt' ? 'Ouvrir Gantt' : 'Ouvrir le calendrier'}</Command.Item>)}
+            <Command.Item onSelect={() => { setPanel('work'); setWorkTab('triage'); setPaletteOpen(false); }}>Ouvrir le triage</Command.Item>
+            <Command.Item onSelect={() => { setPanel('work'); setWorkTab('today'); setPaletteOpen(false); }}>Ouvrir Aujourd’hui</Command.Item>
+            <Command.Item onSelect={() => { setPanel('notes'); setPaletteOpen(false); }}>Ouvrir les notes</Command.Item>
             <Command.Item onSelect={() => { setPanel('home'); setPaletteOpen(false); }}>Ouvrir le dashboard</Command.Item>
           </Command.Group>
           <Command.Group heading="Actions">
-            <Command.Item onSelect={() => { setPaletteOpen(false); titleInput.current?.focus(); }}>Créer un item</Command.Item>
+            <Command.Item onSelect={() => { setPanel('work'); setWorkTab('tasks'); setPaletteOpen(false); window.setTimeout(() => titleInput.current?.focus(), 0); }}>Créer un item</Command.Item>
             <Command.Item onSelect={() => { setNavLayout((current) => current === 'sidebar' ? 'topbar' : 'sidebar'); setPaletteOpen(false); }}>Changer la disposition de navigation</Command.Item>
           </Command.Group>
         </Command.List>
