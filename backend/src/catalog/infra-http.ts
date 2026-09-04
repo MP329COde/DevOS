@@ -1,6 +1,7 @@
 import type { ArgoCDApplication, ArgoCDSyncHistoryEntry } from './argocd.js';
 import type { KubernetesDeployment, KubernetesNode, KubernetesPod } from './kubernetes.js';
 import type { TrivyVulnerabilitySummary } from './harbor-trivy.js';
+import type { NetworkTopologyGraph } from './network-topology.js';
 
 export interface InfraHttpService {
   listPods(namespace?: string): Promise<KubernetesPod[]>;
@@ -9,6 +10,7 @@ export interface InfraHttpService {
   listArgoApplications(): Promise<ArgoCDApplication[]>;
   getArgoSyncHistory(name: string): Promise<ArgoCDSyncHistoryEntry[]>;
   getTrivySummary(project: string, repository: string, tag: string): Promise<TrivyVulnerabilitySummary | null>;
+  getNetworkTopology?(): Promise<NetworkTopologyGraph>;
 }
 
 export interface InfraHttpResponse {
@@ -35,6 +37,11 @@ export async function handleInfraRequest(method: string, url: string, service: I
     if (trivy) {
       const summary = await service.getTrivySummary(decodeURIComponent(trivy[1]), decodeURIComponent(trivy[2]), decodeURIComponent(trivy[3]));
       return summary === null ? { status: 404, body: { error: 'No Trivy scan available for this artifact yet' } } : { status: 200, body: summary };
+    }
+
+    if (path === '/api/infra/network-topology') {
+      if (!service.getNetworkTopology) return { status: 503, body: { error: 'Network topology is not configured' } };
+      return { status: 200, body: await service.getNetworkTopology() };
     }
 
     return { status: 404, body: { error: 'Not found' } };

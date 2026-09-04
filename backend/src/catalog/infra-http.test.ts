@@ -56,3 +56,14 @@ test('rejects non-GET methods', async () => {
   const result = await handleInfraRequest('POST', '/api/catalog/kubernetes/pods', service);
   assert.equal(result.status, 404);
 });
+
+test('returns 503 for network topology when not configured', async () => {
+  const result = await handleInfraRequest('GET', '/api/infra/network-topology', service);
+  assert.equal(result.status, 503);
+});
+
+test('returns the network topology graph when configured', async () => {
+  const graph = { nodes: [{ id: 'proxmox-host:pve1', kind: 'proxmox-host' as const, label: 'pve1' }], edges: [] };
+  const result = await handleInfraRequest('GET', '/api/infra/network-topology', { ...service, getNetworkTopology: async () => graph });
+  assert.deepEqual(result, { status: 200, body: graph });
+});

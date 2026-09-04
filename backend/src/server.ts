@@ -30,6 +30,7 @@ import { CatalogService } from './catalog/catalog-service.js';
 import { scanCatalogFromGitLab } from './catalog/catalog-scan.js';
 import { GitLabClient } from './integrations/gitlab.js';
 import { handleInfraRequest, type InfraHttpService } from './catalog/infra-http.js';
+import { buildNetworkTopology } from './catalog/network-topology.js';
 import { KubernetesClient } from './catalog/kubernetes.js';
 import { ArgoCDClient } from './catalog/argocd.js';
 import { HarborTrivyClient } from './catalog/harbor-trivy.js';
@@ -184,7 +185,7 @@ export function createServer(
       return;
     }
 
-    if (request.url?.startsWith('/api/catalog/kubernetes') || request.url?.startsWith('/api/catalog/argocd') || request.url?.startsWith('/api/catalog/trivy')) {
+    if (request.url?.startsWith('/api/catalog/kubernetes') || request.url?.startsWith('/api/catalog/argocd') || request.url?.startsWith('/api/catalog/trivy') || request.url?.startsWith('/api/infra')) {
       if (!infra) { writeJson(response, 503, { error: 'Infrastructure integrations are not configured' }); return; }
       const result = await handleInfraRequest(request.method ?? 'GET', request.url, infra);
       writeJson(response, result.status, result.body);
@@ -574,11 +575,18 @@ function buildInfraServiceFromEnv(): InfraHttpService | undefined {
   const harborBaseUrl = process.env.HARBOR_BASE_URL;
   const harborUsername = process.env.HARBOR_USERNAME;
   const harborPassword = process.env.HARBOR_PASSWORD;
-  if (!k8sApiServer && !k8sToken && !argoBaseUrl && !argoToken && !harborBaseUrl) return undefined;
+  const proxmoxBaseUrl = process.env.PROXMOX_BASE_URL;
+  const proxmoxApiToken = process.env.PROXMOX_API_TOKEN;
+  const dnsBaseUrl = process.env.POWERDNS_BASE_URL;
+  const dnsApiKey = process.env.POWERDNS_API_KEY;
+  const hasProxmoxAndDns = Boolean(proxmoxBaseUrl && proxmoxApiToken && dnsBaseUrl && dnsApiKey);
+  if (!k8sApiServer && !k8sToken && !argoBaseUrl && !argoToken && !harborBaseUrl && !hasProxmoxAndDns) return undefined;
 
   const kubernetes = k8sApiServer && k8sToken ? new KubernetesClient({ apiServer: k8sApiServer, token: k8sToken }) : undefined;
   const argocd = argoBaseUrl && argoToken ? new ArgoCDClient({ baseUrl: argoBaseUrl, token: argoToken }) : undefined;
   const harbor = harborBaseUrl && harborUsername && harborPassword ? new HarborTrivyClient({ baseUrl: harborBaseUrl, username: harborUsername, password: harborPassword }) : undefined;
+  const proxmox = proxmoxBaseUrl && proxmoxApiToken ? new ProxmoxClient({ baseUrl: proxmoxBaseUrl, apiToken: proxmoxApiToken }) : undefined;
+  const dns = dnsBaseUrl && dnsApiKey ? new PowerDNSClient({ baseUrl: dnsBaseUrl, apiKey: dnsApiKey, serverId: process.env.POWERDNS_SERVER_ID }) : undefined;
 
   const requireClient = <T>(client: T | undefined, name: string): T => {
     if (!client) throw new Error(`${name} is not configured`);
@@ -592,6 +600,19 @@ function buildInfraServiceFromEnv(): InfraHttpService | undefined {
     listArgoApplications: () => requireClient(argocd, 'ArgoCD').listApplications(),
     getArgoSyncHistory: (name) => requireClient(argocd, 'ArgoCD').getSyncHistory(name),
     getTrivySummary: (project, repository, tag) => requireClient(harbor, 'Harbor').getVulnerabilitySummary(project, repository, tag),
+    getNetworkTopology: hasProxmoxAndDns
+      ? async () => {
+          const proxmoxClient = requireClient(proxmox, 'Proxmox');
+          const dnsClient = requireClient(dns, 'PowerDNS');
+          const nodes = await proxmoxClient.listNodes();
+          const vmsByNode = Object.fromEntries(
+            await Promise.all(nodes.map(async (node) => [node.id, await proxmoxClient.listVirtualMachines(node.id)] as const)),
+          );
+          const zones = await dnsClient.listZones();
+          const recordSets = (await Promise.all(zones.map((zone) => dnsClient.getZoneRecords(zone.id)))).flat();
+          return buildNetworkTopology({ proxmoxNodes: nodes, proxmoxVMsByNode: vmsByNode, dnsRecords: recordSets });
+        }
+      : undefined,
   };
 }
 

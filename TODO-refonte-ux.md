@@ -40,8 +40,8 @@ Fichiers : `frontend/src/App.tsx` (`navButton`, `<nav className="sidebar">`), `f
 
 Contexte : demande explicite d'une vue nœuds/traits zoomable montrant IP/DNS, VMs reliées à leur hôte Proxmox, regroupement par cluster, certificats. S'appuie sur les intégrations déjà présentes : `backend/src/catalog/proxmox.ts` (VMs/hôtes), `backend/src/catalog/dns-server.ts` (PowerDNS), `backend/src/catalog/network-security.ts`.
 
-- [ ] `backend/src/catalog/network-topology.ts` — fonction pure combinant les données Proxmox (hôte → VMs) et DNS (nom → IP) en un graphe `{ nodes, edges }` typé, sur le modèle de `backend/src/catalog/catalog-graph.ts` déjà existant (même pattern de construction de graphe pur, testable unitairement)
-- [ ] Endpoint HTTP dans `backend/src/catalog/infra-http.ts` (`GET /api/infra/network-topology`), branché dans `server.ts`
+- [x] `backend/src/catalog/network-topology.ts` — fonction pure combinant les données Proxmox (hôte → VMs) et DNS (nom → IP) en un graphe `{ nodes, edges }` typé, sur le modèle de `backend/src/catalog/catalog-graph.ts` déjà existant (même pattern de construction de graphe pur, testable unitairement)
+- [x] Endpoint HTTP dans `backend/src/catalog/infra-http.ts` (`GET /api/infra/network-topology`), branché dans `server.ts`
 - [ ] `frontend/src/components/NetworkGraph.tsx` — composant SVG/canvas avec zoom/pan (implémentation native, pas de dépendance graphe lourde sauf justification), nœuds colorés par type (hôte Proxmox / VM / enregistrement DNS), regroupement visuel par cluster
 - [ ] Nouveau panel `'network'` dans `App.tsx` + entrée de nav (groupe "Infrastructure", icône dédiée)
 - [ ] Affichage des certificats (échéance, autorité) sur les nœuds concernés si l'info est disponible via une intégration existante — sinon documenter le manque plutôt que d'inventer une donnée
