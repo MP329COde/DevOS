@@ -63,8 +63,8 @@ Contexte : Vault est déjà intégré côté backend (`backend/src/infrastructur
 - [x] Vérifier l'API actuelle de `VaultClient` dans `backend/src/infrastructure/vault.ts` (méthodes déjà disponibles) avant d'étendre — seule `readKv2` existait ; ajout de `writeKv2`/`deleteKv2`/`listKv2`
 - [x] `backend/src/tasks/secrets-service.ts` — CRUD minimal sur des secrets nommés, backé par Vault (jamais par Postgres en clair)
 - [x] Endpoint HTTP dédié (liste des clés existantes sans valeur, écriture, lecture à la demande uniquement)
-- [ ] Frontend : section dans le panel Paramètres (ou nouveau panel dédié) — écriture d'un secret, pas d'affichage en clair par défaut (bouton "Révéler" explicite comme pour un gestionnaire de mots de passe classique)
-- [ ] Vérifier avec Playwright que la valeur d'un secret n'apparaît jamais dans le DOM par défaut (attribut masqué ou absent tant que non révélé)
+- [x] Frontend : section dans le panel Paramètres (ou nouveau panel dédié) — écriture d'un secret, pas d'affichage en clair par défaut (bouton "Révéler" explicite comme pour un gestionnaire de mots de passe classique)
+- [x] Vérifier avec Playwright que la valeur d'un secret n'apparaît jamais dans le DOM par défaut (attribut masqué ou absent tant que non révélé)
 
 ## F. Calendriers personnel/professionnel
 

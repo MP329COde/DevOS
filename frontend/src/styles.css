@@ -168,6 +168,11 @@ button:hover { background: #7f3d29; }
 .integration-test-result { margin: 14px 0; }
 .integration-test-result button { margin-top: 8px; }
 
+.secrets-panel { margin-top: 16px; }
+.secret-value { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; letter-spacing: .04em; }
+.secret-value[data-revealed="true"] { color: #a34f31; font-weight: 700; }
+.secret-form { margin-top: 12px; }
+
 /* Module Réseau & Serveurs — identité visuelle "infra critique" : fond sombre, monospace, accents terracotta. */
 .network-graph-shell { border-radius: 16px; background: #17211b; padding: 16px; box-shadow: 0 8px 20px rgba(23, 33, 27, .28); }
 .network-graph-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }

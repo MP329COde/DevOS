@@ -4,6 +4,7 @@ import { Command } from 'cmdk';
 import { createAuthorizationRequest } from './auth/oidc.js';
 import { NetworkGraph, type NetworkGraphEdge, type NetworkGraphNode } from './components/NetworkGraph.js';
 import { IntegrationsPanel } from './components/IntegrationsPanel.js';
+import { SecretsPanel } from './components/SecretsPanel.js';
 
 const oidcConfig = {
   issuerUrl: import.meta.env.VITE_KEYCLOAK_ISSUER_URL ?? 'https://keycloak.example.internal/realms/devos',
@@ -678,6 +679,7 @@ export function App() {
                 <button className={navLayout === 'topbar' ? 'filter active' : 'filter'} type="button" onClick={() => setNavLayout('topbar')}>Barre du haut</button>
               </div>
             </section>
+            <SecretsPanel />
             {settingsError && <p className="error" role="alert">{settingsError}</p>}
             {!settingsError && settingsKnown.length === 0 && <p className="empty">Chargement des paramètres…</p>}
             {settingsKnown.map((key) => (
