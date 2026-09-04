@@ -34,19 +34,21 @@ test('linkedItemIds returns the item ids linked to a doc page', async () => {
   assert.deepEqual(await new DocsService(database).linkedItemIds('doc-1'), ['item-1', 'item-2']);
 });
 
-test('ensureDefaultOnboardingPages upserts the three operational guides idempotently', async () => {
+test('ensureDefaultOnboardingPages upserts the operational guides idempotently', async () => {
   const upserts: Array<{ where: unknown; create: { title: string; pageType: string } }> = [];
   const database = { docPage: { upsert: async (args: unknown) => { upserts.push(args as typeof upserts[number]); return {}; } } } as never;
 
   const pages = await new DocsService(database).ensureDefaultOnboardingPages();
 
-  assert.equal(pages.length, 3);
-  assert.equal(upserts.length, 3);
+  assert.equal(pages.length, 5);
+  assert.equal(upserts.length, 5);
   const titles = upserts.map((u) => u.create.title);
   assert.deepEqual(titles, [
     'Configurer un backend HAProxy pour un nouveau service',
     'Choisir un dépôt/version de logiciel',
     'Bonnes pratiques de sécurité',
+    'Prendre en main le Dashboard DevOS',
+    'Configurer les intégrations DevOS',
   ]);
   for (const upsert of upserts) {
     assert.equal(upsert.create.pageType, 'onboarding');
@@ -62,7 +64,7 @@ test('ensureDefaultOnboardingPages uses a stable path (no timestamp) so re-runni
   await service.ensureDefaultOnboardingPages();
   await service.ensureDefaultOnboardingPages();
 
-  assert.deepEqual(wheres.slice(0, 3), wheres.slice(3, 6));
+  assert.deepEqual(wheres.slice(0, 5), wheres.slice(5, 10));
 });
 
 test('createOnboardingPage persists a page with pageType "onboarding" and a slugified path', async () => {

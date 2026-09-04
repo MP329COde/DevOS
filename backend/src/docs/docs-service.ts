@@ -67,6 +67,45 @@ DevOS (voir INFO.md section 4 pour la référence complète).
 - Cette checklist s'applique à toute nouvelle intégration ajoutée via le générateur d'intégration générique ou le Vault applicatif — ne pas contourner le flux Vault même pour un test rapide.
 `,
   },
+  {
+    slug: 'prendre-en-main-le-dashboard-devos',
+    title: 'Prendre en main le Dashboard DevOS',
+    content: `# Prendre en main le Dashboard DevOS
+
+Le Dashboard est l'écran d'accueil de DevOS : il regroupe les widgets (pipelines, alertes,
+sources personnalisées) et sert de point de départ vers les autres modules (Infra, Catalogue,
+Docs, Paramètres...).
+
+## Checklist
+- [ ] Repérer la barre latérale de navigation (groupes Travail / Infra / Plateforme) et la flèche de réduction pour la replier/déplier
+- [ ] Activer/désactiver les widgets utiles depuis le panel Widgets (ou Paramètres selon la version)
+- [ ] Personnaliser l'ordre et la disposition des widgets si l'édition est activée
+- [ ] Consulter la vue "Aujourd'hui" pour les tâches et commentaires du jour
+- [ ] Ouvrir Paramètres pour ajuster thème, intégrations et widgets custom
+
+## Points d'attention
+- Le Dashboard n'affiche que les widgets pour lesquels une intégration est configurée ou une source \`/api/extras/*\` existe ; un widget vide n'est pas une erreur.
+`,
+  },
+  {
+    slug: 'configurer-les-integrations-devos',
+    title: 'Configurer les intégrations DevOS',
+    content: `# Configurer les intégrations DevOS
+
+Toutes les intégrations externes (GitLab, GitHub, Proxmox, HAProxy, Vault, Kubernetes/ArgoCD...)
+se paramètrent depuis Paramètres → Intégrations, jamais en dur dans le code.
+
+## Checklist
+- [ ] Ouvrir Paramètres → Intégrations et repérer la carte du service à connecter
+- [ ] Renseigner l'URL et le token/identifiant requis (stocké via Vault quand c'est le cas, jamais en clair)
+- [ ] Utiliser le bouton de test de connexion avant de considérer l'intégration comme active
+- [ ] Vérifier qu'un service non configuré répond simplement par une absence de données (503 attendu), sans casser le reste de l'UI
+- [ ] Revenir sur cette page pour toute rotation de token ou changement d'URL de service
+
+## Points d'attention
+- Le scan de dépôts applicatifs (catalogue de services) reste disponible depuis le panel Catalogue ; la page Docs, elle, ne contient que de la documentation DevOS.
+`,
+  },
 ];
 
 export class DocsService {
