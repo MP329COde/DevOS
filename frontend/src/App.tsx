@@ -3,6 +3,7 @@ import { Command } from 'cmdk';
 
 import { createAuthorizationRequest } from './auth/oidc.js';
 import { NetworkGraph, type NetworkGraphEdge, type NetworkGraphNode } from './components/NetworkGraph.js';
+import { IntegrationsPanel } from './components/IntegrationsPanel.js';
 
 const oidcConfig = {
   issuerUrl: import.meta.env.VITE_KEYCLOAK_ISSUER_URL ?? 'https://keycloak.example.internal/realms/devos',
@@ -75,7 +76,7 @@ export function App() {
   const [dueAt, setDueAt] = useState('');
   const [view, setView] = useState<'list' | 'board' | 'gantt' | 'calendar'>('list');
   const [itemsError, setItemsError] = useState('');
-  const [panel, setPanel] = useState<'home' | 'items' | 'today' | 'triage' | 'haproxy' | 'catalog' | 'docs' | 'widgets' | 'settings' | 'network'>('home');
+  const [panel, setPanel] = useState<'home' | 'items' | 'today' | 'triage' | 'haproxy' | 'catalog' | 'docs' | 'widgets' | 'settings' | 'network' | 'integrations'>('home');
   const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('devos.sidebarCollapsed') === '1');
   const [homeEditMode, setHomeEditMode] = useState(false);
@@ -445,6 +446,7 @@ export function App() {
     { id: 'today', label: 'Aujourd’hui', icon: 'clock', group: 'Travail' },
     { id: 'catalog', label: 'Catalogue', icon: 'layers', group: 'Infrastructure' },
     { id: 'network', label: 'Topologie réseau', icon: 'network', group: 'Infrastructure' },
+    { id: 'integrations', label: 'Intégrations', icon: 'widget', group: 'Infrastructure' },
     { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: 'Infrastructure' },
     { id: 'widgets', label: 'Widgets', icon: 'widget', group: 'Infrastructure' },
     { id: 'settings', label: 'Paramètres', icon: 'gear', group: 'Autres' },
@@ -582,6 +584,8 @@ export function App() {
             {!networkError && !networkGraph && <p className="empty">Chargement de la topologie…</p>}
             {!networkError && networkGraph && <NetworkGraph nodes={networkGraph.nodes} edges={networkGraph.edges} />}
           </div>
+        ) : panel === 'integrations' ? (
+          <IntegrationsPanel />
         ) : panel === 'haproxy' ? (
           <div className="items haproxy-panel">
             {haproxyError && <p className="error" role="alert">{haproxyError}</p>}

@@ -53,8 +53,8 @@ Contexte : au lieu d'un client codé à la main par service, permettre de donner
 
 - [x] `backend/src/integrations/integration-builder.ts` — service acceptant `{ baseUrl, authType: 'none'|'basic'|'bearer'|'apiKey', credentials }`, testant la connectivité (`GET /` ou endpoint de santé configurable) et proposant une détection basique du type d'API (OpenAPI/Swagger si `/openapi.json` ou `/swagger.json` répond, sinon REST générique)
 - [x] `backend/src/catalog/integration-builder-http.ts` — endpoints `POST /api/integrations/test` (valider une config avant sauvegarde) et `POST /api/integrations` (persister via `SettingsService` existant — le service réel vit dans `backend/src/settings/settings-service.ts`, pas `tasks/`)
-- [ ] Frontend : nouveau panel "Intégrations" (formulaire URL + type d'auth + credentials, bouton "Tester la connexion", liste des intégrations custom ajoutées)
-- [ ] Documenter clairement les limites (pas de découverte magique universelle — best-effort sur OpenAPI/health checks standards) pour ne pas sur-promettre
+- [x] Frontend : nouveau panel "Intégrations" (formulaire URL + type d'auth + credentials, bouton "Tester la connexion", liste des intégrations custom ajoutées)
+- [x] Documenter clairement les limites (pas de découverte magique universelle — best-effort sur OpenAPI/health checks standards) pour ne pas sur-promettre
 
 ## E. Vault — gestion des mots de passe/secrets dans l'UI
 
