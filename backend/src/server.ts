@@ -12,6 +12,10 @@ import { handleItemRequest, type ItemHttpService } from './tasks/item-http.js';
 import { ItemService } from './tasks/item-service.js';
 import { handleCommentRequest, type CommentHttpService } from './tasks/comment-http.js';
 import { CommentService } from './tasks/comment-service.js';
+import { handleBugRequest, type BugHttpService } from './tasks/bug-http.js';
+import { BugService } from './tasks/bug-service.js';
+import { handleWorkflowRequest, type WorkflowHttpService } from './tasks/workflow-http.js';
+import { WorkflowService } from './tasks/workflow-service.js';
 import { handleCycleRequest, type CycleService } from './tasks/cycle-http.js';
 import { PrismaCycleService } from './tasks/cycle-service.js';
 import { handleTriageRequest, type TriageService } from './tasks/triage-http.js';
@@ -44,6 +48,7 @@ import { handleWorkspaceRequest, type WorkspaceHttpService } from './tasks/works
 import { applyAutoStop, openEnvironment } from './tasks/workspace-service.js';
 import { handleExtrasRequest, type ExtrasHttpService } from './catalog/extras-http.js';
 import { GitHubClient } from './integrations/github.js';
+import { listDevRepos, getDevRepoDetail, listDevRepoBranches, type DevReposConfig } from './catalog/dev-repos.js';
 import { buildMcpToolDefinitions } from './integrations/mcp-server.js';
 import { OllamaClient } from './integrations/ollama.js';
 import { WoodpeckerClient } from './integrations/woodpecker.js';
@@ -66,7 +71,8 @@ import { N8nClient, NatsMonitorClient } from './integrations/nats-n8n.js';
 import { NexusClient, VerdaccioClient } from './integrations/artifact-registries.js';
 import { MeilisearchClient } from './integrations/meilisearch.js';
 import { RedpandaClient } from './integrations/redpanda.js';
-import { listRunningPipelines } from './integrations/gitlab-pipelines.js';
+import { getJobLog, getPipeline, listPipelineJobs, listProjectPipelines, listRunningPipelines, retryPipeline } from './integrations/gitlab-pipelines.js';
+import { handleCiCdRequest, type CiCdHttpService } from './catalog/cicd-http.js';
 import { AlertmanagerClient } from './integrations/alertmanager.js';
 import { buildDashboardWidgets } from './tasks/dashboard-widgets.js';
 import { handleIntegrationBuilderRequest, type IntegrationBuilderHttpService, type SavedIntegration } from './catalog/integration-builder-http.js';
@@ -79,6 +85,16 @@ import { handleCalendarRequest, type CalendarHttpService, type CalendarSourceEve
 import { fetchIcsEvents } from './integrations/ics-calendar.js';
 import { handleNotificationsRequest, type NotificationsHttpService } from './tasks/notifications-http.js';
 import { NotificationsService } from './tasks/notifications-service.js';
+import { handleDevProjectRequest, type DevProjectHttpService } from './development/dev-project-http.js';
+import { DevProjectService } from './development/dev-project-service.js';
+import { handleDevActivityRequest, type DevActivityHttpService } from './development/dev-activity-http.js';
+import { DevActivityService } from './development/dev-activity-service.js';
+import { handleDevTemplateRequest, type DevTemplateHttpService } from './development/dev-template-http.js';
+import { DevTemplateService } from './development/dev-template-service.js';
+import { handleRoadmapRequest, type RoadmapHttpService } from './tasks/roadmap-http.js';
+import { RoadmapService } from './tasks/roadmap-service.js';
+import { handleDeploymentRequest, type DeploymentHttpService } from './catalog/deployment-http.js';
+import { detectProjectType, generateDeploymentManifests } from './catalog/k8s-manifest-generator.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -104,6 +120,14 @@ export function createServer(
   customWidgets?: CustomWidgetsHttpService,
   comments?: CommentHttpService,
   proxmox?: ProxmoxHttpService,
+  roadmap?: RoadmapHttpService,
+  devProjects?: DevProjectHttpService,
+  devTemplates?: DevTemplateHttpService,
+  deployment?: DeploymentHttpService,
+  bugs?: BugHttpService,
+  workflow?: WorkflowHttpService,
+  cicd?: CiCdHttpService,
+  devActivity?: DevActivityHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -168,6 +192,68 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/roadmap')) {
+      if (!roadmap) { writeJson(response, 503, { error: 'Roadmap is not configured' }); return; }
+      const result = await handleRoadmapRequest(request.method ?? 'GET', request.url, roadmap);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/dev-projects')) {
+      if (!devProjects) { writeJson(response, 503, { error: 'Development projects are not configured' }); return; }
+      const result = await handleDevProjectRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), devProjects);
+      if (result.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/dev-activity')) {
+      if (!devActivity) { writeJson(response, 503, { error: 'Development activity module is not configured' }); return; }
+      const result = await handleDevActivityRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), devActivity);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/dev/templates')) {
+      if (!devTemplates) { writeJson(response, 503, { error: 'Development templates are not configured' }); return; }
+      const result = await handleDevTemplateRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), devTemplates);
+      if (result.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/bugs')) {
+      if (!bugs) { writeJson(response, 503, { error: 'Bugs are not configured' }); return; }
+      const result = await handleBugRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), bugs);
+      if (result.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/workflow-statuses')) {
+      if (!workflow) { writeJson(response, 503, { error: 'Workflow statuses are not configured' }); return; }
+      const result = await handleWorkflowRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), workflow);
+      if (result.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.url?.startsWith('/api/dashboard')) {
       if (!dashboard) { writeJson(response, 503, { error: 'Dashboard is not configured' }); return; }
       const result = await handleDashboardRequest(request.method ?? 'GET', request.url, dashboard);
@@ -216,6 +302,13 @@ export function createServer(
       if (!proxmox) { writeJson(response, 503, { error: 'Proxmox VM control is not configured' }); return; }
       const role = parseRole(headerValue(request.headers['x-devos-role']));
       const result = await handleProxmoxRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, proxmox);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/deployment')) {
+      if (!deployment) { writeJson(response, 503, { error: 'Deployment generator is not configured' }); return; }
+      const result = await handleDeploymentRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), deployment);
       writeJson(response, result.status, result.body);
       return;
     }
@@ -305,6 +398,13 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/dev-cicd')) {
+      if (!cicd) { writeJson(response, 503, { error: 'CI/CD (AM.7) is not configured' }); return; }
+      const result = await handleCiCdRequest(request.method ?? 'GET', request.url, cicd);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -347,7 +447,22 @@ if (require.main === module) {
     const customWidgets = buildCustomWidgetsServiceFromEnv(settingsService);
     const comments = buildCommentsServiceFromEnv(database);
     const proxmoxHttp = buildProxmoxHttpServiceFromEnv();
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const roadmapService = new RoadmapService(database);
+    const roadmap: RoadmapHttpService = { get: () => roadmapService.get() };
+    const devProjects: DevProjectHttpService = new DevProjectService(database);
+    const devTemplates: DevTemplateHttpService = new DevTemplateService(database);
+    const deployment = buildDeploymentServiceFromEnv();
+    const bugs: BugHttpService = new BugService(database);
+    const workflowService = new WorkflowService(database);
+    const workflow: WorkflowHttpService = {
+      list: (scope) => workflowService.list(scope),
+      resolve: (scope) => workflowService.resolve(scope),
+      create: (input) => workflowService.create(input),
+      update: (id, input) => workflowService.update(id, input),
+      delete: (id) => workflowService.delete(id),
+    };
+    const devActivity: DevActivityHttpService = new DevActivityService(database);
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp, roadmap, devProjects, devTemplates, deployment, bugs, workflow, undefined, devActivity).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -492,13 +607,38 @@ function buildExtrasServiceFromEnv(items: ItemService): ExtrasHttpService {
   const extras: ExtrasHttpService = {};
 
   const githubToken = process.env.GITHUB_TOKEN;
+  let githubClientForRepos: GitHubClient | undefined;
   if (githubToken) {
     const github = new GitHubClient({ baseUrl: process.env.GITHUB_BASE_URL ?? 'https://api.github.com', token: githubToken });
+    githubClientForRepos = github;
     extras.listGitHubIssues = async (owner, repo) => {
       const issues = [];
       for await (const issue of github.listIssues(owner, repo)) issues.push(issue);
       return issues;
     };
+  }
+
+  // Section AM.4 — vue dépôt unifiée GitHub/GitLab (branches, MR/PR, pipelines, releases).
+  {
+    const devReposGitlabBaseUrl = process.env.GITLAB_BASE_URL;
+    const devReposGitlabToken = process.env.GITLAB_TOKEN;
+    const devReposGitlabProjectId = process.env.GITLAB_PROJECT_ID;
+    const devReposGithubRepos = process.env.GITHUB_REPOS?.split(',').map((s) => s.trim()).filter(Boolean);
+    const devReposConfig: DevReposConfig = {};
+    if (devReposGitlabBaseUrl && devReposGitlabToken && devReposGitlabProjectId) {
+      devReposConfig.gitlab = {
+        client: new GitLabClient({ baseUrl: devReposGitlabBaseUrl, tokenProvider: { async getToken() { return devReposGitlabToken; } } }),
+        projectId: devReposGitlabProjectId,
+      };
+    }
+    if (githubClientForRepos && devReposGithubRepos?.length) {
+      devReposConfig.github = { client: githubClientForRepos, repos: devReposGithubRepos };
+    }
+    if (devReposConfig.gitlab || devReposConfig.github) {
+      extras.listDevRepos = () => listDevRepos(devReposConfig);
+      extras.getDevRepoDetail = (provider, id) => getDevRepoDetail(devReposConfig, provider, id);
+      extras.listDevRepoBranches = (provider, id) => listDevRepoBranches(devReposConfig, provider, id);
+    }
   }
 
   extras.listMcpTools = async () => buildMcpToolDefinitions(items).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
@@ -842,6 +982,46 @@ function buildCatalogServiceFromEnv(database: PrismaClient): CatalogHttpService 
       return { scanned: result.entities.length, errors: result.errors };
     },
     createFromTemplate: (templateKind, templateName, input) => service.createFromTemplate(templateKind, templateName, input),
+  };
+}
+
+/**
+ * Assistant de déploiement V1 (section AL) : détection du langage/framework via la seule liste
+ * des fichiers du dépôt (jamais d'exécution ni d'analyse réelle du code), puis génération de
+ * manifests Kubernetes/ArgoCD à partir de gabarits. Ne pousse rien nulle part.
+ */
+function buildDeploymentServiceFromEnv(): DeploymentHttpService {
+  return {
+    async generate(input) {
+      let projectType: ReturnType<typeof detectProjectType> | undefined;
+      if (input.sourceProject) {
+        const baseUrl = process.env.GITLAB_BASE_URL;
+        const token = process.env.GITLAB_TOKEN;
+        if (baseUrl && token) {
+          const gitlab = new GitLabClient({ baseUrl, tokenProvider: { async getToken() { return token; } } });
+          const fileNames: string[] = [];
+          try {
+            for await (const entry of gitlab.listRepositoryTree(input.sourceProject, '', 'HEAD')) {
+              if (entry.type === 'blob') fileNames.push(entry.path);
+            }
+          } catch {
+            // Le dépôt source est optionnel côté détection : à défaut de tree accessible, on génère quand même les manifests avec un type "unknown".
+          }
+          projectType = detectProjectType(fileNames);
+        }
+      }
+
+      const centralRepoUrl = process.env.DEPLOYMENT_CENTRAL_REPO_URL;
+      return generateDeploymentManifests({
+        appName: input.appName,
+        image: input.image,
+        port: input.port,
+        replicas: input.replicas,
+        environments: input.environments,
+        projectType,
+        sourceRepoUrl: centralRepoUrl,
+      });
+    },
   };
 }
 
