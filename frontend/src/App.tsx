@@ -4,7 +4,11 @@ import { Command } from 'cmdk';
 import { createAuthorizationRequest } from './auth/oidc.js';
 import { NetworkGraph, type NetworkGraphEdge, type NetworkGraphNode } from './components/NetworkGraph.js';
 import { IntegrationsPanel } from './components/IntegrationsPanel.js';
-import { SecretsPanel } from './components/SecretsPanel.js';
+import { SettingsPanel } from './components/SettingsPanel.js';
+import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js';
+import { THEME_COLOR_SETTINGS } from './theme.js';
+
+const PANEL_IDS = ['home', 'items', 'today', 'triage', 'haproxy', 'catalog', 'docs', 'widgets', 'settings', 'network', 'integrations'] as const;
 
 const oidcConfig = {
   issuerUrl: import.meta.env.VITE_KEYCLOAK_ISSUER_URL ?? 'https://keycloak.example.internal/realms/devos',
@@ -72,15 +76,19 @@ export function App() {
   const [status, setStatus] = useState('');
   const [items, setItems] = useState<Array<{ id: string; title: string; type: string; status: string; dueAt?: string | null; mergeRequestState?: string | null; pipelineStatus?: string | null; coderWorkspaceName?: string | null; coderWorkspaceStatus?: string | null; required?: boolean }>>([]);
   const [workspaceLinks, setWorkspaceLinks] = useState<Record<string, string>>({});
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(() => readUrlFilter('all'));
   const [title, setTitle] = useState('');
   const [type, setType] = useState('task');
   const [labels, setLabels] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [view, setView] = useState<'list' | 'board' | 'gantt' | 'calendar'>('list');
   const [itemsError, setItemsError] = useState('');
-  const [panel, setPanel] = useState<'home' | 'items' | 'today' | 'triage' | 'haproxy' | 'catalog' | 'docs' | 'widgets' | 'settings' | 'network' | 'integrations'>('home');
+  const [panel, setPanel] = useState<(typeof PANEL_IDS)[number]>(() => readUrlPanel(PANEL_IDS, 'home'));
   const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => (localStorage.getItem('devos.theme') as 'light' | 'dark' | 'system' | null) ?? 'system');
+  const [themeColors, setThemeColors] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('devos.themeColors') ?? '{}'); } catch { return {}; }
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('devos.sidebarCollapsed') === '1');
   const [homeEditMode, setHomeEditMode] = useState(false);
   const [homeWidgets, setHomeWidgets] = useState<Array<{ id: string; visible: boolean }>>(() => {
@@ -117,17 +125,14 @@ export function App() {
     const saved = localStorage.getItem('devos.widgets');
     return saved ? JSON.parse(saved) : { pipelines: true, alerts: true };
   });
-  const [settingsKnown, setSettingsKnown] = useState<string[]>([]);
-  const [settingsValues, setSettingsValues] = useState<Record<string, string>>({});
-  const [settingsDrafts, setSettingsDrafts] = useState<Record<string, string>>({});
-  const [settingsError, setSettingsError] = useState('');
-  const [settingsSavedKey, setSettingsSavedKey] = useState('');
   const [networkGraph, setNetworkGraph] = useState<{ nodes: NetworkGraphNode[]; edges: NetworkGraphEdge[] } | null>(null);
   const [networkError, setNetworkError] = useState('');
   const [calendarEvents, setCalendarEvents] = useState<Array<{ uid: string; title: string; start: string; end?: string; allDay: boolean; source: 'personal' | 'professional' }>>([]);
   const [calendarError, setCalendarError] = useState('');
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => (typeof Notification === 'undefined' ? 'denied' : Notification.permission));
   const titleInput = useRef<HTMLInputElement>(null);
+
+  useUrlState(panel, setPanel, PANEL_IDS, filter, setFilter);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -141,6 +146,21 @@ export function App() {
   }, []);
 
   useEffect(() => { localStorage.setItem('devos.sidebarCollapsed', sidebarCollapsed ? '1' : '0'); }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem('devos.theme', themeMode);
+    if (themeMode === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    localStorage.setItem('devos.themeColors', JSON.stringify(themeColors));
+    for (const { cssVar } of THEME_COLOR_SETTINGS) {
+      const value = themeColors[cssVar];
+      if (value) document.documentElement.style.setProperty(`--${cssVar}`, value);
+      else document.documentElement.style.removeProperty(`--${cssVar}`);
+    }
+  }, [themeColors]);
 
   useEffect(() => {
     if (notificationPermission !== 'granted') return;
@@ -325,20 +345,6 @@ export function App() {
   }, [enabledWidgets]);
 
   useEffect(() => {
-    if (panel !== 'settings') return;
-    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error(response.status === 503 ? 'Les paramètres ne sont pas configurés sur ce backend.' : 'Impossible de charger les paramètres.');
-        const data = await response.json();
-        setSettingsKnown(data.known);
-        setSettingsValues(data.values);
-        setSettingsDrafts(data.values);
-        setSettingsError('');
-      })
-      .catch((error: Error) => setSettingsError(error.message));
-  }, [panel]);
-
-  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const state = params.get('state');
@@ -474,24 +480,6 @@ export function App() {
     setDocPages((current) => [...current, created]);
     setOnboardingTitle('');
     setOnboardingContent('');
-  }
-
-  async function saveSetting(key: string) {
-    const value = settingsDrafts[key] ?? '';
-    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings/${encodeURIComponent(key)}`, {
-      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value }),
-    });
-    if (!response.ok) { setSettingsError(`Échec de l'enregistrement de ${key}.`); return; }
-    setSettingsValues((current) => ({ ...current, [key]: value }));
-    setSettingsSavedKey(key);
-    setTimeout(() => setSettingsSavedKey(''), 1500);
-  }
-
-  async function clearSetting(key: string) {
-    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings/${encodeURIComponent(key)}`, { method: 'DELETE' });
-    if (!response.ok) { setSettingsError(`Échec de la suppression de ${key}.`); return; }
-    setSettingsValues((current) => { const next = { ...current }; delete next[key]; return next; });
-    setSettingsDrafts((current) => { const next = { ...current }; delete next[key]; return next; });
   }
 
   const visibleItems = filter === 'all' ? items : filter === 'required' ? items.filter((item) => item.required) : items.filter((item) => item.type === filter);
@@ -751,45 +739,16 @@ export function App() {
             )}
           </div>
         ) : panel === 'settings' ? (
-          <div className="items settings-panel">
-            <section className="widget-card">
-              <h3>Apparence</h3>
-              <div className="filters" aria-label="Disposition de navigation">
-                <button className={navLayout === 'sidebar' ? 'filter active' : 'filter'} type="button" onClick={() => setNavLayout('sidebar')}>Barre latérale</button>
-                <button className={navLayout === 'topbar' ? 'filter active' : 'filter'} type="button" onClick={() => setNavLayout('topbar')}>Barre du haut</button>
-              </div>
-            </section>
-            <section className="widget-card">
-              <h3>Notifications</h3>
-              <p className="empty">Notification navigateur locale sur échéance dépassée ou alerte critique (Wazuh, niveau ≥ {CRITICAL_WAZUH_LEVEL}).</p>
-              {notificationPermission === 'granted' ? (
-                <p className="empty">Notifications activées ✓</p>
-              ) : notificationPermission === 'denied' ? (
-                <p className="error" role="alert">Notifications bloquées par le navigateur.</p>
-              ) : (
-                <button type="button" onClick={() => void Notification.requestPermission().then(setNotificationPermission)}>Activer les notifications navigateur</button>
-              )}
-            </section>
-            <SecretsPanel />
-            {settingsError && <p className="error" role="alert">{settingsError}</p>}
-            {!settingsError && settingsKnown.length === 0 && <p className="empty">Chargement des paramètres…</p>}
-            {settingsKnown.map((key) => (
-              <article className="item setting-row" key={key}>
-                <strong>{key}</strong>
-                <input
-                  aria-label={key}
-                  type="text"
-                  placeholder={settingsValues[key] ? '••••••••' : 'Non configuré'}
-                  value={settingsDrafts[key] ?? ''}
-                  onChange={(event) => setSettingsDrafts((current) => ({ ...current, [key]: event.target.value }))}
-                />
-                <span className="setting-actions">
-                  <button type="button" onClick={() => void saveSetting(key)}>{settingsSavedKey === key ? 'Enregistré ✓' : 'Enregistrer'}</button>
-                  {settingsValues[key] && <button className="delete" type="button" aria-label={`Effacer ${key}`} onClick={() => void clearSetting(key)}>×</button>}
-                </span>
-              </article>
-            ))}
-          </div>
+          <SettingsPanel
+            navLayout={navLayout}
+            setNavLayout={setNavLayout}
+            themeMode={themeMode}
+            setThemeMode={setThemeMode}
+            themeColors={themeColors}
+            setThemeColors={setThemeColors}
+            notificationPermission={notificationPermission}
+            onRequestNotificationPermission={() => void Notification.requestPermission().then(setNotificationPermission)}
+          />
         ) : panel === 'triage' ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div> : null}
       </main>
       {status && <span className="status" role="status">{status}</span>}

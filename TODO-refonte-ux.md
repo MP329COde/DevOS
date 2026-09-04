@@ -91,19 +91,19 @@ Fichiers : `backend/prisma/schema.prisma` (champ `required Boolean @default(fals
 
 Contexte : retour utilisateur du 2026-09-04 — le panel Paramètres n'a pas de vraie icône (favicon générique), tout y est un simple champ clé/valeur texte alors que certaines intégrations ont besoin de plusieurs champs structurés (ex. SMTP : hôte, port, utilisateur, mot de passe, adresse expéditeur, nom d'expéditeur pour les alertes), et tout est regroupé dans un seul bloc qu'il faut faire défiler au lieu d'être organisé en sections dépliables/navigables.
 
-- [ ] Favicon réel du produit (remplacer le favicon Vite par défaut dans `frontend/index.html` / `frontend/public`)
-- [ ] Regrouper les ~57+ clés de Paramètres en sections repliables par intégration/thème (Général, Apparence, GitLab, Email/SMTP, Webhooks, Vault, HAProxy, Coder, Proxmox, etc.) avec ancre/scroll-to-section, plutôt qu'une liste plate unique
-- [ ] Formulaire structuré dédié pour l'email sortant (SMTP) : hôte, port, utilisateur, mot de passe, adresse expéditeur, nom expéditeur — au lieu de clés brutes génériques, en s'appuyant sur les clés déjà utilisées par `backend/src/notifications/` (vérifier les noms de variables SMTP existants avant d'en inventer de nouveaux)
-- [ ] Vérifier Playwright : favicon visible, navigation entre sections, formulaire SMTP structuré fonctionnel
+- [x] Favicon réel du produit (remplacer le favicon Vite par défaut dans `frontend/index.html` / `frontend/public`)
+- [x] Regrouper les ~57+ clés de Paramètres en sections repliables par intégration/thème (Général, Apparence, GitLab, Email/SMTP, Webhooks, Vault, HAProxy, Coder, Proxmox, etc.) avec ancre/scroll-to-section, plutôt qu'une liste plate unique
+- [x] Formulaire structuré dédié pour l'email sortant (SMTP) : hôte, port, utilisateur, mot de passe, adresse expéditeur, nom expéditeur — au lieu de clés brutes génériques, en s'appuyant sur les clés déjà utilisées par `backend/src/notifications/` (vérifier les noms de variables SMTP existants avant d'en inventer de nouveaux)
+- [x] Vérifier Playwright : favicon visible, navigation entre sections, formulaire SMTP structuré fonctionnel
 
 ## K. Thème — personnalisation du fond et vrai mode sombre
 
 Contexte : couleurs/teintes incohérentes signalées (décalages), seul un thème clair existe alors que `Design.md` prévoit "dark mode par défaut, light mode disponible". L'utilisateur veut 5-6 réglages de personnalisation du fond (couleur d'accent bleu, autres teintes) en plus du choix clair/sombre.
 
-- [ ] Implémenter un vrai thème sombre (tokens CSS dupliqués en variante sombre dans `frontend/src/styles.css`, cohérents avec la palette `Design.md`) et un sélecteur clair/sombre/système dans Paramètres → Apparence
-- [ ] Ajouter 5-6 réglages de personnalisation (couleur d'accent, teinte de fond, etc.) persistés en `localStorage`, appliqués via variables CSS
-- [ ] Corriger les décalages/incohérences de teinte existants relevés visuellement (comparer captures avant/après)
-- [ ] Vérifier Playwright : bascule clair/sombre, personnalisation d'accent, captures avant/après
+- [x] Implémenter un vrai thème sombre (tokens CSS dupliqués en variante sombre dans `frontend/src/styles.css`, cohérents avec la palette `Design.md`) et un sélecteur clair/sombre/système dans Paramètres → Apparence
+- [x] Ajouter 5-6 réglages de personnalisation (couleur d'accent, teinte de fond, etc.) persistés en `localStorage`, appliqués via variables CSS — 6 jetons : accent, accent secondaire, fond teinte 1, fond teinte 2, accent doré, bordures (`frontend/src/theme.ts`)
+- [x] Corriger les décalages/incohérences de teinte existants relevés visuellement (comparer captures avant/après) — l'ensemble des couleurs codées en dur de `styles.css` a été converti en variables CSS (`--text`, `--surface`, `--accent`, etc.), supprimant les décalages entre composants ajoutés à des moments différents ; le module Réseau & Serveurs garde volontairement son identité "infra critique" fixe (fond sombre), non liée au thème, comme documenté dans `Design.md`
+- [x] Vérifier Playwright : bascule clair/sombre, personnalisation d'accent, captures avant/après — vérifié en conditions réelles (backend+frontend démarrés) : bascule Clair/Sombre/Système, changement live de l'accent en bleu, persistance après rechargement, aucune erreur console/réseau inattendue (seuls des 503 d'intégrations non configurées)
 
 ## L. URL — paramètres de requête pour l'état de navigation
 
