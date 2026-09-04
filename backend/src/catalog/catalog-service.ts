@@ -2,6 +2,7 @@ import type { CatalogEntity as PrismaCatalogEntity, PrismaClient } from '@prisma
 
 import { buildDependencyGraph, type CatalogGraph } from './catalog-graph.js';
 import type { CatalogEntity } from './catalog-parser.js';
+import { createProjectFromTemplate, type CreateProjectFromTemplateInput, type CreateProjectFromTemplateResult } from './catalog-template.js';
 
 export class CatalogService {
   public constructor(private readonly database: PrismaClient) {}
@@ -46,6 +47,38 @@ export class CatalogService {
   public async graph(): Promise<CatalogGraph> {
     const rows = await this.list();
     return buildDependencyGraph(rows.map(toCatalogEntity));
+  }
+
+  /**
+   * Generates a new catalog entity from an existing template entity and persists it as a draft
+   * (sourceProject records it as not-yet-pushed). Never contacts GitLab — creating the project's
+   * actual repository/catalog-info.yaml file remains a manual, explicitly-confirmed step.
+   */
+  public async createFromTemplate(templateKind: string, templateName: string, input: CreateProjectFromTemplateInput): Promise<CreateProjectFromTemplateResult> {
+    const rows = await this.list();
+    const templateRow = rows.find((row) => row.kind === templateKind && row.name === templateName);
+    if (!templateRow) throw new Error(`Modèle inconnu : ${templateKind}/${templateName}`);
+
+    const result = createProjectFromTemplate(toCatalogEntity(templateRow), input);
+
+    await this.database.catalogEntity.create({
+      data: {
+        kind: result.entity.kind,
+        name: result.entity.metadata.name,
+        sourceProject: '(brouillon — non poussé vers GitLab)',
+        description: result.entity.metadata.description,
+        type: result.entity.spec.type,
+        lifecycle: result.entity.spec.lifecycle,
+        owner: result.entity.spec.owner,
+        system: result.entity.spec.system,
+        dependsOn: result.entity.spec.dependsOn,
+        providesApis: result.entity.spec.providesApis,
+        annotations: result.entity.metadata.annotations,
+        links: result.entity.metadata.links,
+      },
+    });
+
+    return result;
   }
 }
 

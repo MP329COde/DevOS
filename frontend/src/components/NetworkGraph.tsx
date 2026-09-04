@@ -6,6 +6,7 @@ export interface NetworkGraphNode {
   label: string;
   cluster?: string;
   meta?: Record<string, string>;
+  services?: string[];
 }
 
 export interface NetworkGraphEdge {
@@ -30,28 +31,37 @@ const kindLabel: Record<NetworkGraphNode['kind'], string> = {
   'dns-record': 'Enregistrement DNS',
 };
 
-/** Layout: hosts in a row, their VMs stacked below in a column, DNS records one column further right per VM. */
+const COL_WIDTH = 220;
+const ROW_HEIGHT = 90;
+
+/** Layout: hosts in a row, their VMs stacked below in a column. DNS records are placed by the caller, next to the VM they resolve to (see edge-based placement below). */
 function layoutNodes(nodes: NetworkGraphNode[]): Map<string, { x: number; y: number }> {
   const positions = new Map<string, { x: number; y: number }>();
   const hosts = nodes.filter((n) => n.kind === 'proxmox-host');
-  const colWidth = 220;
-  const rowHeight = 90;
 
   hosts.forEach((host, hostIndex) => {
-    const baseX = hostIndex * colWidth * 2.4 + 140;
+    const baseX = hostIndex * COL_WIDTH * 2.4 + 140;
     positions.set(host.id, { x: baseX, y: 60 });
     const vms = nodes.filter((n) => n.kind === 'proxmox-vm' && n.cluster === host.id);
     vms.forEach((vm, vmIndex) => {
-      const vmY = 60 + (vmIndex + 1) * rowHeight;
-      positions.set(vm.id, { x: baseX, y: vmY });
-      const dnsNodes = nodes.filter((n) => n.kind === 'dns-record' && positions.has(vm.id));
-      // A DNS record is linked to exactly one VM in practice; place it to the right of that VM.
-      void dnsNodes;
+      positions.set(vm.id, { x: baseX, y: 60 + (vmIndex + 1) * ROW_HEIGHT });
     });
   });
 
-  // Place DNS records to the right of the VM they are connected to (resolved by caller via edges).
   return positions;
+}
+
+/** Bug fix: the graph previously used a fixed 520px viewport, which cut off nodes once a host had more than a handful of VMs, or once several hosts pushed the layout past the visible width. Size the SVG from the actual node positions instead, with the shell scrolling if the result is still larger than the panel. */
+function computeCanvasSize(nodes: NetworkGraphNode[], positions: Map<string, { x: number; y: number }>): { width: number; height: number } {
+  let maxX = 0;
+  let maxY = 0;
+  for (const node of nodes) {
+    const pos = positions.get(node.id);
+    if (!pos) continue;
+    maxX = Math.max(maxX, pos.x);
+    maxY = Math.max(maxY, pos.y);
+  }
+  return { width: Math.max(640, maxX + 220), height: Math.max(360, maxY + 100) };
 }
 
 export function NetworkGraph({ nodes, edges }: NetworkGraphProps) {
@@ -73,6 +83,8 @@ export function NetworkGraph({ nodes, edges }: NetworkGraphProps) {
     }
     return base;
   }, [nodes, edges]);
+
+  const canvasSize = useMemo(() => computeCanvasSize(nodes, positions), [nodes, positions]);
 
   const clusters = useMemo(() => {
     const groups = new Map<string, { x: number; y: number; w: number; h: number }>();
@@ -118,8 +130,8 @@ export function NetworkGraph({ nodes, edges }: NetworkGraphProps) {
       </div>
       <svg
         className="network-graph"
-        width="100%"
-        height="520"
+        width={canvasSize.width}
+        height={canvasSize.height}
         onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -155,11 +167,18 @@ export function NetworkGraph({ nodes, edges }: NetworkGraphProps) {
                 transform={`translate(${pos.x}, ${pos.y})`}
                 className="network-node"
                 onClick={() => setSelected(node)}
+                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(node); } }}
                 tabIndex={0}
                 role="button"
-                aria-label={`${kindLabel[node.kind]} ${node.label}`}
+                aria-label={`${kindLabel[node.kind]} ${node.label}${node.services?.length ? `, ${node.services.length} service(s)` : ''}`}
               >
                 <circle r={22} fill={kindColor[node.kind]} />
+                {node.services && node.services.length > 0 && (
+                  <circle className="network-node-badge" r={7} cx={16} cy={-16} />
+                )}
+                {node.services && node.services.length > 0 && (
+                  <text x={16} y={-16} dy={3} textAnchor="middle" className="network-node-badge-label">{node.services.length}</text>
+                )}
                 <text textAnchor="middle" dy={38} className="network-node-label">{node.label}</text>
               </g>
             );
@@ -170,6 +189,12 @@ export function NetworkGraph({ nodes, edges }: NetworkGraphProps) {
         <div className="network-node-detail">
           <h4>{kindLabel[selected.kind]} · {selected.label}</h4>
           {selected.meta && Object.entries(selected.meta).map(([key, value]) => <p className="empty" key={key}>{key} : {value}</p>)}
+          {selected.services && selected.services.length > 0 && (
+            <div className="network-node-services">
+              <p className="empty">Services/outils sur cette machine :</p>
+              <ul>{selected.services.map((service) => <li key={service}>{service}</li>)}</ul>
+            </div>
+          )}
           <button type="button" className="filter" onClick={() => setSelected(null)}>Fermer</button>
         </div>
       )}

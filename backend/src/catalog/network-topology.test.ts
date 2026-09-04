@@ -49,6 +49,20 @@ test('leaves a VM without a matching DNS record as a standalone node', () => {
   assert.equal(graph.edges.length, 1);
 });
 
+test('cross-references catalog services onto the machine node named by their devos.io/host annotation', () => {
+  const graph = buildNetworkTopology({
+    proxmoxNodes: [{ id: 'pve1', status: 'online' }],
+    proxmoxVMsByNode: { pve1: [{ vmid: 100, name: 'gitlab', status: 'running' }] },
+    dnsRecords: [],
+    catalogServices: [{ name: 'devos', host: 'GitLab' }, { name: 'unmatched-service', host: 'nowhere' }],
+  });
+
+  const vm = graph.nodes.find((n) => n.kind === 'proxmox-vm');
+  assert.deepEqual(vm?.services, ['devos']);
+  const host = graph.nodes.find((n) => n.kind === 'proxmox-host');
+  assert.equal(host?.services, undefined);
+});
+
 test('ignores non-address DNS record types (CNAME, MX, ...)', () => {
   const graph = buildNetworkTopology({
     proxmoxNodes: [{ id: 'pve1', status: 'online' }],

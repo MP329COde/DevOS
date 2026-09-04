@@ -5,6 +5,8 @@ export interface NetworkTopologyNode {
   /** Cluster grouping key: the Proxmox host id for hosts and their VMs, absent for unmatched DNS records. */
   cluster?: string;
   meta?: Record<string, string>;
+  /** Names of Catalogue services/tools running on this machine (see TopologyCatalogService), empty when none match. */
+  services?: string[];
 }
 
 export interface NetworkTopologyEdge {
@@ -34,10 +36,21 @@ export interface TopologyDnsRecord {
   records: string[];
 }
 
+export interface TopologyCatalogService {
+  name: string;
+  /**
+   * Value of the `devos.io/host` Catalogue annotation (see docs/catalog-info-format.md), naming
+   * the Proxmox host or VM this service runs on. Matched case-insensitively against node labels.
+   */
+  host?: string;
+}
+
 export interface NetworkTopologyInput {
   proxmoxNodes: readonly TopologyProxmoxNode[];
   proxmoxVMsByNode: Readonly<Record<string, readonly TopologyProxmoxVM[]>>;
   dnsRecords: readonly TopologyDnsRecord[];
+  /** Catalogue entities, cross-referenced onto machine nodes via their `devos.io/host` annotation, if any. */
+  catalogServices?: readonly TopologyCatalogService[];
 }
 
 /**
@@ -69,6 +82,19 @@ export function buildNetworkTopology(input: NetworkTopologyInput): NetworkTopolo
         }
         edges.push({ from: vmId, to: dnsId });
       }
+    }
+  }
+
+  if (input.catalogServices?.length) {
+    const byLabel = new Map<string, NetworkTopologyNode>();
+    for (const node of nodes) {
+      if (node.kind === 'proxmox-host' || node.kind === 'proxmox-vm') byLabel.set(node.label.toLowerCase(), node);
+    }
+    for (const service of input.catalogServices) {
+      if (!service.host) continue;
+      const node = byLabel.get(service.host.toLowerCase());
+      if (!node) continue;
+      (node.services ??= []).push(service.name);
     }
   }
 
