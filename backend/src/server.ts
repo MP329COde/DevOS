@@ -32,6 +32,9 @@ import { HarborTrivyClient } from './catalog/harbor-trivy.js';
 import { handleDocsRequest, type DocsHttpService } from './docs/docs-http.js';
 import { DocsService } from './docs/docs-service.js';
 import { scanDocsFromGitLab } from './docs/docs-scan.js';
+import { handleWorkspaceRequest, type WorkspaceHttpService } from './tasks/workspace-http.js';
+import { applyAutoStop, openEnvironment } from './tasks/workspace-service.js';
+import { CoderClient } from './integrations/coder.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -47,6 +50,7 @@ export function createServer(
   catalog?: CatalogHttpService,
   infra?: InfraHttpService,
   docs?: DocsHttpService,
+  workspace?: WorkspaceHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -71,6 +75,13 @@ export function createServer(
     if (request.url?.startsWith('/api/items/') && request.url.endsWith('/time') || request.url?.startsWith('/api/time/')) {
       if (!time) { writeJson(response, 503, { error: 'Time tracking is not configured' }); return; }
       const result = await handleTimeRequest(request.method ?? 'GET', request.url, time);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url === '/api/coder/templates' || (request.url?.startsWith('/api/items/') && request.url.endsWith('/workspace'))) {
+      if (!workspace) { writeJson(response, 503, { error: 'Coder integration is not configured' }); return; }
+      const result = await handleWorkspaceRequest(request.method ?? 'GET', request.url, workspace);
       writeJson(response, result.status, result.body);
       return;
     }
@@ -184,7 +195,9 @@ export function createServer(
 
 if (require.main === module) {
   const database = new PrismaClient();
-  const items = new ItemService(database);
+  const rawItems = new ItemService(database);
+  const coder = buildCoderClientFromEnv();
+  const items = coder ? wrapItemsWithAutoStop(rawItems, database, coder) : rawItems;
   const cycles = new PrismaCycleService(database);
   const triage = new PrismaTriageService(database);
   const time = new PrismaTimeService(database);
@@ -193,7 +206,46 @@ if (require.main === module) {
   const catalog = buildCatalogServiceFromEnv(database);
   const infra = buildInfraServiceFromEnv();
   const docs = buildDocsServiceFromEnv(database);
-  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+  const workspace = coder ? buildWorkspaceServiceFromEnv(database, coder) : undefined;
+  createServer(undefined, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+}
+
+function buildCoderClientFromEnv(): CoderClient | undefined {
+  const baseUrl = process.env.CODER_BASE_URL;
+  const token = process.env.CODER_TOKEN;
+  const organizationId = process.env.CODER_ORGANIZATION_ID;
+  if (!baseUrl || !token || !organizationId) return undefined;
+  return new CoderClient({ baseUrl, token, organizationId });
+}
+
+/** Wraps ItemService so that a status transition into "done" auto-stops the item's linked Coder workspace. */
+function wrapItemsWithAutoStop(inner: ItemService, database: PrismaClient, coder: CoderClient): ItemHttpService {
+  return {
+    list: () => inner.list(),
+    create: (input) => inner.create(input),
+    delete: (id) => inner.delete(id),
+    async update(id, input) {
+      const before = await database.item.findUnique({ where: { id }, select: { status: true } });
+      const updated = await inner.update(id, input);
+      if (before) await applyAutoStop(updated, before.status, coder);
+      return updated;
+    },
+  };
+}
+
+function buildWorkspaceServiceFromEnv(database: PrismaClient, coder: CoderClient): WorkspaceHttpService | undefined {
+  const baseUrl = process.env.CODER_BASE_URL;
+  const owner = process.env.CODER_OWNER;
+  if (!baseUrl || !owner) return undefined;
+  return {
+    listTemplates: () => coder.listTemplates(),
+    async openEnvironment(itemId) {
+      const item = await database.item.findUniqueOrThrow({ where: { id: itemId }, select: { id: true, coderTemplateId: true } });
+      return openEnvironment(item, coder, {
+        async saveWorkspace(id, fields) { await database.item.update({ where: { id }, data: fields }); },
+      }, { defaultTemplateId: process.env.CODER_DEFAULT_TEMPLATE_ID, baseUrl, owner });
+    },
+  };
 }
 
 function buildDocsServiceFromEnv(database: PrismaClient): DocsHttpService {

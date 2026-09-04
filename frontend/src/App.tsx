@@ -11,7 +11,8 @@ const oidcConfig = {
 
 export function App() {
   const [status, setStatus] = useState('Prêt pour une session sécurisée.');
-  const [items, setItems] = useState<Array<{ id: string; title: string; type: string; status: string; dueAt?: string | null; mergeRequestState?: string | null; pipelineStatus?: string | null }>>([]);
+  const [items, setItems] = useState<Array<{ id: string; title: string; type: string; status: string; dueAt?: string | null; mergeRequestState?: string | null; pipelineStatus?: string | null; coderWorkspaceName?: string | null; coderWorkspaceStatus?: string | null }>>([]);
+  const [workspaceLinks, setWorkspaceLinks] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('all');
   const [title, setTitle] = useState('');
   const [type, setType] = useState('task');
@@ -202,6 +203,17 @@ export function App() {
     });
   }
 
+  async function openWorkspace(item: { id: string }) {
+    const existingLink = workspaceLinks[item.id];
+    if (existingLink) { window.location.assign(existingLink); return; }
+    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/items/${item.id}/workspace`, { method: 'POST' });
+    if (!response.ok) { setItemsError('Impossible d’ouvrir l’environnement Coder.'); return; }
+    const workspace = await response.json();
+    setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, coderWorkspaceName: workspace.workspaceName, coderWorkspaceStatus: workspace.status } : entry));
+    setWorkspaceLinks((current) => ({ ...current, [item.id]: workspace.vscodeUri }));
+    window.location.assign(workspace.vscodeUri);
+  }
+
   async function closeCycle(id: string) {
     const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/cycles/${id}/close`, { method: 'POST' });
     if (response.ok) setCycles((current) => current.map((cycle) => cycle.id === id ? { ...cycle, closedAt: new Date().toISOString() } : cycle));
@@ -236,7 +248,7 @@ export function App() {
     (groups[key] ??= []).push(item);
     return groups;
   }, {});
-  const itemCard = (item: typeof items[number]) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}</span><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></article>;
+  const itemCard = (item: typeof items[number]) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}{item.coderWorkspaceStatus && ` · Workspace ${item.coderWorkspaceStatus}`}</span><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><span className="item-actions">{item.type === 'task' && <button className="open-workspace" type="button" onClick={() => void openWorkspace(item)}>{item.coderWorkspaceName ? 'Ouvrir dans VS Code' : 'Ouvrir un environnement'}</button>}<button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></span></article>;
 
   return (
     <main className="shell">

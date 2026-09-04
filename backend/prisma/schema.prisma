@@ -53,6 +53,10 @@ model Item {
   triage      TriageStatus @default(none)
   mergeRequestState String? @map("merge_request_state") @db.VarChar(20)
   pipelineStatus String? @map("pipeline_status") @db.VarChar(20)
+  coderTemplateId   String? @map("coder_template_id") @db.VarChar(100)
+  coderWorkspaceId  String? @map("coder_workspace_id") @db.VarChar(100)
+  coderWorkspaceName String? @map("coder_workspace_name") @db.VarChar(200)
+  coderWorkspaceStatus String? @map("coder_workspace_status") @db.VarChar(30)
   cycleId     String?   @db.Uuid @map("cycle_id")
   cycle       Cycle?    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   timeEntries TimeEntry[]
