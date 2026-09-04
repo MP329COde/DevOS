@@ -83,6 +83,7 @@ input { flex: 1; min-width: 0; }
 .stat-value { font: 700 32px/1 -apple-system, sans-serif; color: #49634c; }
 .stat-label { font: 600 12px sans-serif; text-transform: uppercase; color: #667569; }
 .widget-toolbar { display: flex; justify-content: flex-end; }
+.finish-edit { display: inline-flex; align-items: center; gap: 6px; }
 .edit-toggle { padding: 8px; color: #49634c; background: rgba(255, 252, 242, .78); border: 1px solid rgba(23, 33, 27, .12); }
 .edit-toggle:hover { background: rgba(73, 99, 76, .12); }
 .edit-toggle.active { color: #fffdf4; background: #49634c; }

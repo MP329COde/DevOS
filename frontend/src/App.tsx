@@ -479,9 +479,15 @@ export function App() {
               <div className="stat-card"><span className="stat-value">{statusCounts.done ?? 0}</span><span className="stat-label">Terminés</span></div>
             </div>
             <div className="widget-toolbar">
-              <button type="button" className={homeEditMode ? 'edit-toggle active' : 'edit-toggle'} aria-label="Modifier le dashboard" title="Modifier le dashboard" onClick={() => setHomeEditMode((m) => !m)}>
-                <Icon name="pencil" />
-              </button>
+              {homeEditMode ? (
+                <button type="button" className="filter active finish-edit" onClick={() => setHomeEditMode(false)}>
+                  <Icon name="x" size={14} /> Terminer l'édition
+                </button>
+              ) : (
+                <button type="button" className="edit-toggle" aria-label="Modifier le dashboard" title="Modifier le dashboard" onClick={() => setHomeEditMode(true)}>
+                  <Icon name="pencil" />
+                </button>
+              )}
             </div>
             {homeEditMode && homeWidgets.some((w) => !w.visible) && (
               <div className="widget-add-panel">
