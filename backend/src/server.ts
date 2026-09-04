@@ -95,6 +95,12 @@ import { handleRoadmapRequest, type RoadmapHttpService } from './tasks/roadmap-h
 import { RoadmapService } from './tasks/roadmap-service.js';
 import { handleDeploymentRequest, type DeploymentHttpService } from './catalog/deployment-http.js';
 import { detectProjectType, generateDeploymentManifests } from './catalog/k8s-manifest-generator.js';
+import { handleReleaseRequest, type ReleaseHttpService } from './development/release-http.js';
+import { ReleaseService } from './development/release-service.js';
+import { handleEnvironmentRequest, type EnvironmentHttpService } from './development/environment-http.js';
+import { EnvironmentService } from './development/environment-service.js';
+import { handleProfileRequest, type ProfileHttpService } from './profiles/profile-http.js';
+import { ProfileService } from './profiles/profile-service.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -128,6 +134,9 @@ export function createServer(
   workflow?: WorkflowHttpService,
   cicd?: CiCdHttpService,
   devActivity?: DevActivityHttpService,
+  releases?: ReleaseHttpService,
+  environments?: EnvironmentHttpService,
+  profiles?: ProfileHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -214,6 +223,23 @@ export function createServer(
     if (request.url?.startsWith('/api/dev-activity')) {
       if (!devActivity) { writeJson(response, 503, { error: 'Development activity module is not configured' }); return; }
       const result = await handleDevActivityRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), devActivity);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/releases')) {
+      if (!releases) { writeJson(response, 503, { error: 'Releases are not configured' }); return; }
+      const result = await handleReleaseRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), releases);
+      if (result.status === 204) { response.writeHead(204); response.end(); return; }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/environments')) {
+      if (!environments) { writeJson(response, 503, { error: 'Environments are not configured' }); return; }
+      const role = parseRole(headerValue(request.headers['x-devos-role']));
+      const result = await handleEnvironmentRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, environments);
+      if (result.status === 204) { response.writeHead(204); response.end(); return; }
       writeJson(response, result.status, result.body);
       return;
     }
@@ -462,7 +488,10 @@ if (require.main === module) {
       delete: (id) => workflowService.delete(id),
     };
     const devActivity: DevActivityHttpService = new DevActivityService(database);
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp, roadmap, devProjects, devTemplates, deployment, bugs, workflow, undefined, devActivity).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const cicd = buildCiCdServiceFromEnv();
+    const releases: ReleaseHttpService = new ReleaseService(database);
+    const environments: EnvironmentHttpService = new EnvironmentService(database);
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp, roadmap, devProjects, devTemplates, deployment, bugs, workflow, cicd, devActivity, releases, environments).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -895,6 +924,40 @@ function buildDocsServiceFromEnv(database: PrismaClient): DocsHttpService {
       return { scanned: result.pages.length, errors: result.errors };
     },
   };
+}
+
+/**
+ * CI/CD par projet (AM.7) : réutilise les mêmes variables d'environnement GitLab/ArgoCD/Harbor
+ * que les autres modules (pas de nouvelle intégration) plutôt que de recoder un client dédié.
+ */
+function buildCiCdServiceFromEnv(): CiCdHttpService | undefined {
+  const gitlabBaseUrl = process.env.GITLAB_BASE_URL;
+  const gitlabToken = process.env.GITLAB_TOKEN;
+  const argoBaseUrl = process.env.ARGOCD_BASE_URL;
+  const argoToken = process.env.ARGOCD_TOKEN;
+  const harborBaseUrl = process.env.HARBOR_BASE_URL;
+  const harborUsername = process.env.HARBOR_USERNAME;
+  const harborPassword = process.env.HARBOR_PASSWORD;
+  const hasGitlab = Boolean(gitlabBaseUrl && gitlabToken);
+  const hasArgo = Boolean(argoBaseUrl && argoToken);
+  const hasHarbor = Boolean(harborBaseUrl && harborUsername && harborPassword);
+  if (!hasGitlab && !hasArgo && !hasHarbor) return undefined;
+
+  const gitlab = hasGitlab ? { baseUrl: gitlabBaseUrl as string, tokenProvider: { async getToken() { return gitlabToken as string; } } } : undefined;
+  const argocd = hasArgo ? new ArgoCDClient({ baseUrl: argoBaseUrl as string, token: argoToken as string }) : undefined;
+  const harbor = hasHarbor ? new HarborTrivyClient({ baseUrl: harborBaseUrl as string, username: harborUsername as string, password: harborPassword as string }) : undefined;
+
+  const service: CiCdHttpService = {};
+  if (gitlab) {
+    service.listPipelines = (projectId) => listProjectPipelines(gitlab, projectId);
+    service.getPipeline = (projectId, pipelineId) => getPipeline(gitlab, projectId, pipelineId);
+    service.listPipelineJobs = (projectId, pipelineId) => listPipelineJobs(gitlab, projectId, pipelineId);
+    service.getJobLog = (projectId, jobId) => getJobLog(gitlab, projectId, jobId);
+    service.retryPipeline = (projectId, pipelineId) => retryPipeline(gitlab, projectId, pipelineId);
+  }
+  if (argocd) service.getDeploymentHistory = (appName) => argocd.getSyncHistory(appName);
+  if (harbor) service.getSecuritySummary = (project, repository, tag) => harbor.getVulnerabilitySummary(project, repository, tag);
+  return service;
 }
 
 function buildInfraServiceFromEnv(database: PrismaClient): InfraHttpService | undefined {
