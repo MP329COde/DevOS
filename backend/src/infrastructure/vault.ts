@@ -1,5 +1,9 @@
 import { readFile } from 'node:fs/promises';
 
+function normalizePath(path: string): string {
+  return path.replace(/^\/+/, '');
+}
+
 interface VaultAuthResponse {
   auth?: {
     client_token?: string;
@@ -39,12 +43,8 @@ export class VaultClient {
   }
 
   public async readKv2<T extends Record<string, unknown>>(path: string): Promise<T> {
-    if (!this.token) {
-      throw new Error('Vault client is not authenticated');
-    }
-
-    const response = await this.fetchImpl(this.url(`/v1/secret/data/${path.replace(/^\/+/, '')}`), {
-      headers: { 'x-vault-token': this.token },
+    const response = await this.fetchImpl(this.url(`/v1/secret/data/${normalizePath(path)}`), {
+      headers: { 'x-vault-token': this.requireToken() },
     });
     const payload = (await response.json()) as { data?: { data?: T } };
 
@@ -53,6 +53,40 @@ export class VaultClient {
     }
 
     return payload.data.data;
+  }
+
+  public async writeKv2(path: string, data: Record<string, unknown>): Promise<void> {
+    const response = await this.fetchImpl(this.url(`/v1/secret/data/${normalizePath(path)}`), {
+      method: 'POST',
+      headers: { 'x-vault-token': this.requireToken(), 'content-type': 'application/json' },
+      body: JSON.stringify({ data }),
+    });
+    if (!response.ok) throw new Error(`Vault secret write failed (${response.status})`);
+  }
+
+  public async deleteKv2(path: string): Promise<void> {
+    const response = await this.fetchImpl(this.url(`/v1/secret/metadata/${normalizePath(path)}`), {
+      method: 'DELETE',
+      headers: { 'x-vault-token': this.requireToken() },
+    });
+    if (!response.ok && response.status !== 404) throw new Error(`Vault secret delete failed (${response.status})`);
+  }
+
+  /** Lists the secret names under a KV v2 path — used to expose which keys exist without ever reading their values. */
+  public async listKv2(path: string): Promise<string[]> {
+    const response = await this.fetchImpl(this.url(`/v1/secret/metadata/${normalizePath(path)}?list=true`), {
+      method: 'LIST',
+      headers: { 'x-vault-token': this.requireToken() },
+    });
+    if (response.status === 404) return [];
+    const payload = (await response.json()) as { data?: { keys?: string[] } };
+    if (!response.ok) throw new Error(`Vault secret list failed (${response.status})`);
+    return payload.data?.keys ?? [];
+  }
+
+  private requireToken(): string {
+    if (!this.token) throw new Error('Vault client is not authenticated');
+    return this.token;
   }
 
   private url(path: string): string {

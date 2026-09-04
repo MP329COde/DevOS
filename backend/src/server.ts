@@ -68,6 +68,9 @@ import { AlertmanagerClient } from './integrations/alertmanager.js';
 import { buildDashboardWidgets } from './tasks/dashboard-widgets.js';
 import { handleIntegrationBuilderRequest, type IntegrationBuilderHttpService, type SavedIntegration } from './catalog/integration-builder-http.js';
 import { testIntegration } from './integrations/integration-builder.js';
+import { handleSecretsRequest, type SecretsHttpService } from './tasks/secrets-http.js';
+import { SecretsService } from './tasks/secrets-service.js';
+import { VaultClient } from './infrastructure/vault.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -87,6 +90,7 @@ export function createServer(
   extras?: ExtrasHttpService,
   settings?: SettingsHttpService,
   integrationBuilder?: IntegrationBuilderHttpService,
+  secrets?: SecretsHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -240,6 +244,18 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/secrets')) {
+      if (!secrets) { writeJson(response, 503, { error: 'Secrets management is not configured' }); return; }
+      const result = await handleSecretsRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), secrets);
+      if (result.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -275,7 +291,8 @@ if (require.main === module) {
     const extras = buildExtrasServiceFromEnv(rawItems);
     const auth = await buildAuthServiceFromEnv();
     const integrationBuilder = buildIntegrationBuilderServiceFromEnv(settingsService);
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const secrets = await buildSecretsServiceFromEnv();
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -296,6 +313,27 @@ function buildIntegrationBuilderServiceFromEnv(settings: SettingsService): Integ
       await settings.set(CUSTOM_INTEGRATIONS_SETTINGS_KEY, JSON.stringify(next));
     },
   };
+}
+
+/**
+ * Builds the generic secrets manager when a real Vault deployment is configured. Same
+ * local/dev limitation as buildAuthServiceFromEnv above: this needs a real Vault + Kubernetes
+ * ServiceAccount, so it stays undefined (503) without one — no Postgres fallback for secrets.
+ */
+async function buildSecretsServiceFromEnv(): Promise<SecretsHttpService | undefined> {
+  const address = process.env.VAULT_ADDR;
+  const kubernetesAuthPath = process.env.VAULT_KUBERNETES_AUTH_PATH;
+  const kubernetesRole = process.env.VAULT_KUBERNETES_ROLE;
+  const kubernetesJwtFile = process.env.VAULT_KUBERNETES_JWT_FILE;
+  if (!address || !kubernetesAuthPath || !kubernetesRole || !kubernetesJwtFile) return undefined;
+
+  const vault = new VaultClient({ address, kubernetesAuthPath, kubernetesRole, kubernetesJwtFile });
+  try {
+    await vault.authenticateKubernetes();
+  } catch {
+    return undefined;
+  }
+  return new SecretsService(vault);
 }
 
 /** Loads integration settings persisted via the Settings screen into process.env, without overriding variables already set (env vars always win). */
