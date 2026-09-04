@@ -51,8 +51,8 @@ Contexte : demande explicite d'une vue nœuds/traits zoomable montrant IP/DNS, V
 
 Contexte : au lieu d'un client codé à la main par service, permettre de donner une URL + des identifiants et laisser le système découvrir/tester l'API lui-même.
 
-- [ ] `backend/src/integrations/integration-builder.ts` — service acceptant `{ baseUrl, authType: 'none'|'basic'|'bearer'|'apiKey', credentials }`, testant la connectivité (`GET /` ou endpoint de santé configurable) et proposant une détection basique du type d'API (OpenAPI/Swagger si `/openapi.json` ou `/swagger.json` répond, sinon REST générique)
-- [ ] `backend/src/catalog/integration-builder-http.ts` — endpoints `POST /api/integrations/test` (valider une config avant sauvegarde) et `POST /api/integrations` (persister via `SettingsService` existant, `backend/src/tasks/settings-service.ts` si ce nom existe — vérifier le nom réel du service de paramètres avant de coder)
+- [x] `backend/src/integrations/integration-builder.ts` — service acceptant `{ baseUrl, authType: 'none'|'basic'|'bearer'|'apiKey', credentials }`, testant la connectivité (`GET /` ou endpoint de santé configurable) et proposant une détection basique du type d'API (OpenAPI/Swagger si `/openapi.json` ou `/swagger.json` répond, sinon REST générique)
+- [x] `backend/src/catalog/integration-builder-http.ts` — endpoints `POST /api/integrations/test` (valider une config avant sauvegarde) et `POST /api/integrations` (persister via `SettingsService` existant — le service réel vit dans `backend/src/settings/settings-service.ts`, pas `tasks/`)
 - [ ] Frontend : nouveau panel "Intégrations" (formulaire URL + type d'auth + credentials, bouton "Tester la connexion", liste des intégrations custom ajoutées)
 - [ ] Documenter clairement les limites (pas de découverte magique universelle — best-effort sur OpenAPI/health checks standards) pour ne pas sur-promettre
 

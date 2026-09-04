@@ -66,6 +66,8 @@ import { RedpandaClient } from './integrations/redpanda.js';
 import { listRunningPipelines } from './integrations/gitlab-pipelines.js';
 import { AlertmanagerClient } from './integrations/alertmanager.js';
 import { buildDashboardWidgets } from './tasks/dashboard-widgets.js';
+import { handleIntegrationBuilderRequest, type IntegrationBuilderHttpService, type SavedIntegration } from './catalog/integration-builder-http.js';
+import { testIntegration } from './integrations/integration-builder.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -84,6 +86,7 @@ export function createServer(
   workspace?: WorkspaceHttpService,
   extras?: ExtrasHttpService,
   settings?: SettingsHttpService,
+  integrationBuilder?: IntegrationBuilderHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -230,6 +233,13 @@ export function createServer(
       return;
     }
 
+    if (request.url === '/api/integrations' || request.url === '/api/integrations/test') {
+      if (!integrationBuilder) { writeJson(response, 503, { error: 'Integration builder is not configured' }); return; }
+      const result = await handleIntegrationBuilderRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), integrationBuilder);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.method === 'POST' && request.url === '/auth/callback') {
       if (!auth) {
         writeJson(response, 503, { error: 'Authentication is not configured' });
@@ -264,8 +274,28 @@ if (require.main === module) {
     const workspace = coder ? buildWorkspaceServiceFromEnv(database, coder) : undefined;
     const extras = buildExtrasServiceFromEnv(rawItems);
     const auth = await buildAuthServiceFromEnv();
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const integrationBuilder = buildIntegrationBuilderServiceFromEnv(settingsService);
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
+}
+
+const CUSTOM_INTEGRATIONS_SETTINGS_KEY = 'CUSTOM_INTEGRATIONS';
+
+/** Generic integration builder: connectivity test is stateless, saved configs are persisted as a JSON array via SettingsService. */
+function buildIntegrationBuilderServiceFromEnv(settings: SettingsService): IntegrationBuilderHttpService {
+  return {
+    test: (config) => testIntegration(config),
+    async list() {
+      const raw = await settings.get(CUSTOM_INTEGRATIONS_SETTINGS_KEY);
+      return raw ? (JSON.parse(raw) as SavedIntegration[]) : [];
+    },
+    async save(integration) {
+      const raw = await settings.get(CUSTOM_INTEGRATIONS_SETTINGS_KEY);
+      const current: SavedIntegration[] = raw ? JSON.parse(raw) : [];
+      const next = [...current.filter((existing) => existing.name !== integration.name), integration];
+      await settings.set(CUSTOM_INTEGRATIONS_SETTINGS_KEY, JSON.stringify(next));
+    },
+  };
 }
 
 /** Loads integration settings persisted via the Settings screen into process.env, without overriding variables already set (env vars always win). */
