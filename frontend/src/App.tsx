@@ -6,11 +6,12 @@ import { NetworkGraph, type NetworkGraphEdge, type NetworkGraphNode } from './co
 import { ProxmoxPanel } from './components/ProxmoxPanel.js';
 import { CustomWidgetsPanel, type CustomWidget } from './components/CustomWidgetsPanel.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
+import { NotesPanel } from './components/NotesPanel.js';
 import { TaskDetailPanel } from './components/TaskDetailPanel.js';
 import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js';
-import { THEME_COLOR_SETTINGS } from './theme.js';
+import { THEME_COLOR_SETTINGS, THEME_PRESETS, type ThemeMode } from './theme.js';
 
-const PANEL_IDS = ['home', 'items', 'today', 'triage', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'settings', 'network'] as const;
+const PANEL_IDS = ['home', 'items', 'today', 'triage', 'notes', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'settings', 'network'] as const;
 
 const oidcConfig = {
   issuerUrl: import.meta.env.VITE_KEYCLOAK_ISSUER_URL ?? 'https://keycloak.example.internal/realms/devos',
@@ -27,7 +28,7 @@ const iconPaths: Record<string, string> = {
   layers: 'M10 3 3 7l7 4 7-4-7-4Zm-7 7 7 4 7-4M3 13l7 4 7-4',
   doc: 'M6 3h6l3 3v11H6V3Zm6 0v3h3M8 10h5M8 13h5',
   widget: 'M4 4h5v5H4V4Zm7 0h5v5h-5V4ZM4 11h5v5H4v-5Zm7 0h5v5h-5v-5Z',
-  gear: 'M10 6.5A3.5 3.5 0 1 0 10 13.5 3.5 3.5 0 0 0 10 6.5ZM10 2v2M10 16v2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M2 10h2M16 10h2M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4',
+  gear: 'M10 7.4A2.6 2.6 0 1 0 10 12.6 2.6 2.6 0 0 0 10 7.4ZM10 6.6A3.4 3.4 0 1 0 10 13.4 3.4 3.4 0 0 0 10 6.6ZM16.6 10L18.6 10M18.6 11.05L18.6 8.95M14.67 14.67L16.08 16.08M15.34 16.82L16.82 15.34M10 16.6L10 18.6M8.95 18.6L11.05 18.6M5.33 14.67L3.92 16.08M3.18 15.34L4.66 16.82M3.4 10L1.4 10M1.4 8.95L1.4 11.05M5.33 5.33L3.92 3.92M4.66 3.18L3.18 4.66M10 3.4L10 1.4M11.05 1.4L8.95 1.4M14.67 5.33L16.08 3.92M16.82 4.66L15.34 3.18',
   pencil: 'M13.5 3.5 16.5 6.5 7 16H4v-3L13.5 3.5Z',
   chevron: 'M7 5l6 5-6 5',
   plus: 'M10 4v12M4 10h12',
@@ -140,11 +141,63 @@ export function App() {
   const [itemsError, setItemsError] = useState('');
   const [panel, setPanel] = useState<(typeof PANEL_IDS)[number]>(() => readUrlPanel(PANEL_IDS, 'home'));
   const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
-  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => (localStorage.getItem('devos.theme') as 'light' | 'dark' | 'system' | null) ?? 'system');
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => (localStorage.getItem('devos.theme') as ThemeMode | null) ?? 'system');
   const [themeColors, setThemeColors] = useState<Record<string, string>>(() => {
     try { return JSON.parse(localStorage.getItem('devos.themeColors') ?? '{}'); } catch { return {}; }
   });
+  // Bascule automatique clair/sombre par horaire (section AB) : n'est active que si themeMode === 'auto'.
+  const [themeAutoStart, setThemeAutoStart] = useState<string>(() => localStorage.getItem('devos.themeAutoStart') ?? '20:00');
+  const [themeAutoEnd, setThemeAutoEnd] = useState<string>(() => localStorage.getItem('devos.themeAutoEnd') ?? '07:00');
+  // Historique des dernières couleurs personnalisées modifiées, pour permettre un undo (section AB).
+  const [themeColorHistory, setThemeColorHistory] = useState<Array<{ cssVar: string; previous: string | undefined }>>([]);
+  const setThemeColorsTracked = (cssVar: string, value: string) => {
+    setThemeColorHistory((history) => [{ cssVar, previous: themeColors[cssVar] }, ...history].slice(0, 20));
+    setThemeColors((current) => ({ ...current, [cssVar]: value }));
+  };
+  const undoThemeColor = () => {
+    setThemeColorHistory((history) => {
+      if (history.length === 0) return history;
+      const [last, ...rest] = history;
+      setThemeColors((current) => {
+        const next = { ...current };
+        if (last.previous === undefined) delete next[last.cssVar]; else next[last.cssVar] = last.previous;
+        return next;
+      });
+      return rest;
+    });
+  };
+  // Presets de couleurs personnalisés sauvegardés par l'utilisateur (paires clair/sombre), section AB.
+  const [customThemePresets, setCustomThemePresets] = useState<Array<{ id: string; name: string; light: Record<string, string>; dark: Record<string, string> }>>(() => {
+    try { return JSON.parse(localStorage.getItem('devos.customThemePresets') ?? '[]'); } catch { return []; }
+  });
+  const applyThemePreset = (light: Record<string, string>, dark: Record<string, string>) => {
+    // Applique la palette correspondant au thème effectif courant (clair/sombre) ;
+    // styles.css bascule déjà les jetons via data-theme, on ne stocke que le jeu actif.
+    setThemeColors(() => (document.documentElement.getAttribute('data-theme') === 'dark' ? { ...dark } : { ...light }));
+  };
+  const saveCustomThemePreset = (name: string) => {
+    const preset = { id: `custom-${Date.now()}`, name, light: { ...themeColors }, dark: { ...themeColors } };
+    setCustomThemePresets((current) => {
+      const next = [...current, preset];
+      localStorage.setItem('devos.customThemePresets', JSON.stringify(next));
+      return next;
+    });
+  };
+  const deleteCustomThemePreset = (id: string) => {
+    setCustomThemePresets((current) => {
+      const next = current.filter((p) => p.id !== id);
+      localStorage.setItem('devos.customThemePresets', JSON.stringify(next));
+      return next;
+    });
+  };
+  // Fond d'écran animé (section AB), CSS pur, appliqué globalement via data-bg sur <html>.
+  const [profileBackground, setProfileBackground] = useState<string>(() => localStorage.getItem('devos.profileBackground') ?? 'none');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('devos.sidebarCollapsed') === '1');
+  // Nom affiché sur le Dashboard ("Bonjour, {nom}") : pas encore de vraie session Keycloak côté frontend,
+  // donc on stocke un nom de profil local éditable en place, avec repli générique si non renseigné.
+  const [profileName, setProfileName] = useState<string>(() => localStorage.getItem('devos.profileName') ?? '');
+  const [editingProfileName, setEditingProfileName] = useState(false);
+  useEffect(() => { localStorage.setItem('devos.profileName', profileName); }, [profileName]);
   const [homeEditMode, setHomeEditMode] = useState(false);
   const [homeWidgets, setHomeWidgets] = useState<Array<{ id: string; visible: boolean }>>(() => {
     const saved = localStorage.getItem('devos.homeWidgets');
@@ -239,11 +292,42 @@ export function App() {
 
   useEffect(() => { localStorage.setItem('devos.sidebarCollapsed', sidebarCollapsed ? '1' : '0'); }, [sidebarCollapsed]);
 
+  // Applique le thème effectif (clair/sombre) au DOM avec une courte transition fade (section AB) ;
+  // en mode "auto", l'heure courante décide entre les créneaux configurés (themeAutoStart/End).
+  const applyEffectiveTheme = (mode: ThemeMode, start: string, end: string) => {
+    let effective: 'light' | 'dark' | null = null;
+    if (mode === 'light' || mode === 'dark') effective = mode;
+    else if (mode === 'auto') {
+      const now = new Date();
+      const minutesNow = now.getHours() * 60 + now.getMinutes();
+      const toMinutes = (value: string) => { const [h, m] = value.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+      const startM = toMinutes(start);
+      const endM = toMinutes(end);
+      const inNightRange = startM <= endM ? minutesNow >= startM && minutesNow < endM : minutesNow >= startM || minutesNow < endM;
+      effective = inNightRange ? 'dark' : 'light';
+    }
+    document.documentElement.classList.add('theme-fade');
+    if (effective === null) document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', effective);
+    window.setTimeout(() => document.documentElement.classList.remove('theme-fade'), 400);
+  };
+
   useEffect(() => {
     localStorage.setItem('devos.theme', themeMode);
-    if (themeMode === 'system') document.documentElement.removeAttribute('data-theme');
-    else document.documentElement.setAttribute('data-theme', themeMode);
-  }, [themeMode]);
+    applyEffectiveTheme(themeMode, themeAutoStart, themeAutoEnd);
+    if (themeMode !== 'auto') return;
+    const interval = window.setInterval(() => applyEffectiveTheme(themeMode, themeAutoStart, themeAutoEnd), 60_000);
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [themeMode, themeAutoStart, themeAutoEnd]);
+
+  useEffect(() => { localStorage.setItem('devos.themeAutoStart', themeAutoStart); }, [themeAutoStart]);
+  useEffect(() => { localStorage.setItem('devos.themeAutoEnd', themeAutoEnd); }, [themeAutoEnd]);
+  useEffect(() => {
+    localStorage.setItem('devos.profileBackground', profileBackground);
+    if (profileBackground === 'none') document.documentElement.removeAttribute('data-bg');
+    else document.documentElement.setAttribute('data-bg', profileBackground);
+  }, [profileBackground]);
 
   useEffect(() => {
     localStorage.setItem('devos.themeColors', JSON.stringify(themeColors));
@@ -630,13 +714,6 @@ export function App() {
     if (entitiesResponse.ok) setCatalogEntities(await entitiesResponse.json());
   }
 
-  async function scanDocs() {
-    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/docs/scan`, { method: 'POST' });
-    if (!response.ok) { setDocsError('Le scan des docs a échoué.'); return; }
-    const docsResponse = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/docs`);
-    if (docsResponse.ok) setDocPages(await docsResponse.json());
-  }
-
   async function createOnboardingPage(event: FormEvent) {
     event.preventDefault();
     if (!onboardingTitle.trim() || !onboardingContent.trim()) return;
@@ -650,7 +727,9 @@ export function App() {
     setOnboardingContent('');
   }
 
-  const visibleItems = filter === 'all' ? items : filter === 'required' ? items.filter((item) => item.required) : items.filter((item) => item.type === filter);
+  // Les notes (ItemType.note) ne sont jamais mélangées aux tâches de projet ici — panel Notes dédié.
+  const nonNoteItems = items.filter((item) => item.type !== 'note');
+  const visibleItems = filter === 'all' ? nonNoteItems : filter === 'required' ? nonNoteItems.filter((item) => item.required) : nonNoteItems.filter((item) => item.type === filter);
   const groupedItems = visibleItems.reduce<Record<string, typeof visibleItems>>((groups, item) => {
     const key = view === 'calendar' || view === 'gantt' ? (item.dueAt ? new Date(item.dueAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : 'Sans date') : item.status.replace('_', ' ');
     (groups[key] ??= []).push(item);
@@ -661,6 +740,7 @@ export function App() {
     { id: 'home', label: 'Dashboard', icon: 'home', group: 'Vue d’ensemble' },
     { id: 'items', label: 'Tâches', icon: 'tasks', group: 'Travail' },
     { id: 'triage', label: 'Triage', badge: triage.length, icon: 'inbox', group: 'Travail' },
+    { id: 'notes', label: 'Notes', icon: 'doc', group: 'Travail' },
     { id: 'today', label: 'Aujourd’hui', icon: 'clock', group: 'Travail' },
     { id: 'catalog', label: 'Catalogue', icon: 'layers', group: 'Infrastructure' },
     { id: 'network', label: 'Topologie réseau', icon: 'network', group: 'Infrastructure' },
@@ -707,16 +787,38 @@ export function App() {
         {navLayout === 'topbar' && <nav className="views topnav" aria-label="Navigation">{navItems.map(navButton)}</nav>}
         {panel === 'home' ? (
           <div className="home-dashboard">
-            <div className="widget-toolbar">
-              {homeEditMode ? (
-                <button type="button" className="filter active finish-edit" onClick={() => setHomeEditMode(false)}>
-                  <Icon name="x" size={14} /> Terminer l'édition
-                </button>
-              ) : (
-                <button type="button" className="edit-toggle" aria-label="Modifier le dashboard" title="Modifier le dashboard" onClick={() => setHomeEditMode(true)}>
-                  <Icon name="pencil" />
-                </button>
-              )}
+            <div className="home-header">
+              <div className="home-greeting">
+                {editingProfileName ? (
+                  <input
+                    className="home-greeting-input"
+                    aria-label="Votre nom"
+                    autoFocus
+                    defaultValue={profileName}
+                    placeholder="Votre nom"
+                    onBlur={(event) => { setProfileName(event.target.value.trim()); setEditingProfileName(false); }}
+                    onKeyDown={(event) => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); if (event.key === 'Escape') setEditingProfileName(false); }}
+                  />
+                ) : (
+                  <h2 className="home-greeting-title">
+                    {profileName ? `Bonjour, ${profileName}` : 'Bonjour'}
+                    <button type="button" className="home-greeting-edit" aria-label="Modifier votre nom" title="Modifier votre nom" onClick={() => setEditingProfileName(true)}>
+                      <Icon name="pencil" size={13} />
+                    </button>
+                  </h2>
+                )}
+              </div>
+              <div className="widget-toolbar">
+                {homeEditMode ? (
+                  <button type="button" className="filter active finish-edit" onClick={() => setHomeEditMode(false)}>
+                    <Icon name="x" size={14} /> Terminer l'édition
+                  </button>
+                ) : (
+                  <button type="button" className="edit-toggle" aria-label="Modifier le dashboard" title="Modifier le dashboard" onClick={() => setHomeEditMode(true)}>
+                    <Icon name="pencil" />
+                  </button>
+                )}
+              </div>
             </div>
             {homeEditMode && homeWidgets.some((w) => !w.visible) && (
               <div className="widget-add-panel">
@@ -937,12 +1039,11 @@ export function App() {
           </div>
         ) : panel === 'docs' ? (
           <div className="items docs-panel">
-            <div className="filters" aria-label="Actions docs"><button type="button" onClick={() => void scanDocs()}>Scanner les dépôts GitLab</button></div>
-            <p className="empty">Documentation DevOS uniquement — les pages scannées proviennent des dossiers <code>docs/</code> des dépôts GitLab du homelab (pas de contenu hors sujet).</p>
+            <p className="empty">Documentation DevOS uniquement — guides d'usage et de fonctionnement de la plateforme (pas de contenu de dépôts externes).</p>
             <div className="filters" aria-label="Filtrer les pages Docs">
               <button className={docsFilter === 'all' ? 'filter active' : 'filter'} type="button" onClick={() => setDocsFilter('all')}>Toutes ({docPages.length})</button>
               <button className={docsFilter === 'onboarding' ? 'filter active' : 'filter'} type="button" onClick={() => setDocsFilter('onboarding')}>Onboarding ({docPages.filter((p) => p.pageType === 'onboarding').length})</button>
-              <button className={docsFilter === 'scanned' ? 'filter active' : 'filter'} type="button" onClick={() => setDocsFilter('scanned')}>Dépôts scannés ({docPages.filter((p) => p.pageType !== 'onboarding').length})</button>
+              <button className={docsFilter === 'scanned' ? 'filter active' : 'filter'} type="button" onClick={() => setDocsFilter('scanned')}>Autres pages ({docPages.filter((p) => p.pageType !== 'onboarding').length})</button>
             </div>
             <form className="new-item onboarding-form" onSubmit={(event) => void createOnboardingPage(event)}>
               <input aria-label="Titre de la fiche onboarding" placeholder="Titre (ex: Arrivée sur le projet DevOS)" value={onboardingTitle} onChange={(event) => setOnboardingTitle(event.target.value)} />
@@ -952,7 +1053,7 @@ export function App() {
               <textarea className="doc-editor" aria-label="Contenu de la fiche onboarding" placeholder="Checklist ou documentation à consulter (Markdown)..." value={onboardingContent} onChange={(event) => setOnboardingContent(event.target.value)} />
             )}
             {docsError && <p className="error" role="alert">{docsError}</p>}
-            {!docsError && docPages.length === 0 && <p className="empty">Aucune doc trouvée. Lancez un scan ou créez une fiche onboarding.</p>}
+            {!docsError && docPages.length === 0 && <p className="empty">Aucune doc trouvée. Créez une fiche onboarding pour commencer.</p>}
             {docPages.filter((page) => docsFilter === 'all' || (docsFilter === 'onboarding' ? page.pageType === 'onboarding' : page.pageType !== 'onboarding')).map((page) => (
               <article className={page.pageType === 'onboarding' ? 'item doc-page doc-page-onboarding' : 'item doc-page'} key={page.id}>
                 <span className="item-title"><strong>{page.title}</strong>{page.pageType === 'onboarding' && <span className="onboarding-badge">Onboarding</span>}</span>
@@ -996,10 +1097,26 @@ export function App() {
             setThemeMode={setThemeMode}
             themeColors={themeColors}
             setThemeColors={setThemeColors}
+            setThemeColor={setThemeColorsTracked}
+            themeColorHistory={themeColorHistory}
+            undoThemeColor={undoThemeColor}
+            themeAutoStart={themeAutoStart}
+            setThemeAutoStart={setThemeAutoStart}
+            themeAutoEnd={themeAutoEnd}
+            setThemeAutoEnd={setThemeAutoEnd}
+            customThemePresets={customThemePresets}
+            saveCustomThemePreset={saveCustomThemePreset}
+            deleteCustomThemePreset={deleteCustomThemePreset}
+            applyThemePreset={applyThemePreset}
+            profileBackground={profileBackground}
+            setProfileBackground={setProfileBackground}
             notificationPermission={notificationPermission}
             onRequestNotificationPermission={() => void Notification.requestPermission().then(setNotificationPermission)}
           />
-        ) : panel === 'triage' ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div> : null}
+        ) : panel === 'triage' ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div>
+        : panel === 'notes' ? (
+          <NotesPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
+        ) : null}
       </main>
       {detailItemId && (() => {
         const detailItem = items.find((entry) => entry.id === detailItemId) ?? dashboardItems.find((entry) => entry.id === detailItemId);

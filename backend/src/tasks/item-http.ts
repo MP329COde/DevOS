@@ -39,11 +39,11 @@ export async function handleItemRequest(
 function parseCreate(body: unknown) {
   if (!body || typeof body !== 'object') throw new Error('Invalid item payload');
   const input = body as Record<string, unknown>;
-  if (!['task', 'doc', 'goal'].includes(String(input.type)) || typeof input.title !== 'string') {
+  if (!['task', 'doc', 'goal', 'note'].includes(String(input.type)) || typeof input.title !== 'string') {
     throw new Error('Item type and title are required');
   }
   return {
-    type: input.type as 'task' | 'doc' | 'goal',
+    type: input.type as 'task' | 'doc' | 'goal' | 'note',
     title: input.title,
     ...(Array.isArray(input.labels) ? { labels: input.labels.filter((label): label is string => typeof label === 'string') } : {}),
     ...(typeof input.dueAt === 'string' ? { dueAt: input.dueAt } : {}),

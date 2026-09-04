@@ -105,10 +105,28 @@ body { margin: 0; min-width: 320px; }
 .login { background: var(--text); border-radius: 8px; }
 .workspace { display: flex; flex-direction: column; gap: 4px; }
 
-.sidebar { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px; background: rgba(var(--rgb-surface), .6); border-radius: 12px; border: 1px solid rgba(var(--rgb-text), .12); width: 220px; transition: width .15s ease; }
-.sidebar.collapsed { width: 56px; padding: 12px 8px; }
-.sidebar-collapse { align-self: flex-end; padding: 4px; color: var(--muted); background: transparent; }
-.sidebar-collapse:hover { background: rgba(var(--rgb-accent), .12); }
+.sidebar { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 16px 12px 12px; background: rgba(var(--rgb-surface), .6); border-radius: 12px; border: 1px solid rgba(var(--rgb-text), .12); width: 220px; transition: width .15s ease; }
+.sidebar.collapsed { width: 56px; padding: 16px 8px 12px; }
+/* Flèche de réduction : petit bouton circulaire ancré sur le bord de la sidebar (chevauchant la bordure),
+   toujours visible et cliquable, plutôt qu'un bouton isolé en haut de la colonne. */
+.sidebar-collapse {
+  position: absolute;
+  top: 14px;
+  right: -12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--accent-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(var(--rgb-text), .18);
+}
+.sidebar-collapse:hover { background: rgba(var(--rgb-accent), .12); color: var(--accent); }
 .sidebar.collapsed .sidebar-collapse svg { transform: rotate(180deg); }
 .nav-group { display: flex; flex-direction: column; gap: 2px; }
 .nav-group-label { padding: 8px 12px 2px; font: 700 10px sans-serif; letter-spacing: .04em; text-transform: uppercase; color: var(--accent-2); opacity: .8; }
@@ -210,7 +228,14 @@ input { flex: 1; min-width: 0; }
 .home-dashboard { display: flex; flex-direction: column; gap: 24px; }
 .stat-widget-value { font: 700 32px/1 -apple-system, sans-serif; color: var(--accent); display: block; }
 .widget-card.stat-widget { display: flex; flex-direction: column; justify-content: center; min-height: 96px; }
-.widget-toolbar { display: flex; justify-content: flex-end; }
+.home-header { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 16px; }
+.home-greeting { min-width: 0; }
+.home-greeting-title { display: inline-flex; align-items: center; gap: 8px; margin: 0; font: 700 22px/1.2 -apple-system, sans-serif; color: var(--text); }
+.home-greeting-edit { padding: 4px; color: var(--muted); background: transparent; opacity: 0; transition: opacity .12s ease; }
+.home-greeting-title:hover .home-greeting-edit, .home-greeting-edit:focus-visible { opacity: 1; }
+.home-greeting-edit:hover { background: rgba(var(--rgb-accent), .12); color: var(--accent); }
+.home-greeting-input { min-height: 38px; font: 700 20px -apple-system, sans-serif; max-width: 260px; }
+.widget-toolbar { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; flex-shrink: 0; }
 .finish-edit { display: inline-flex; align-items: center; gap: 6px; }
 .edit-toggle { padding: 8px; color: var(--accent); background: rgba(var(--rgb-surface), .78); border: 1px solid rgba(var(--rgb-text), .12); }
 .edit-toggle:hover { background: rgba(var(--rgb-accent), .12); }
@@ -331,6 +356,78 @@ button:hover { background: var(--accent-2-hover); }
 .theme-reset { margin-top: 10px; padding: 8px 12px; color: var(--accent-2); background: rgba(var(--rgb-accent2), .1); }
 .theme-reset:hover { background: rgba(var(--rgb-accent2), .2); }
 
+/* Section AB (TODO-refonte-2.md) — approfondissement de l'apparence : bascule horaire, presets,
+   fond animé. Reprend la grammaire visuelle existante (.filter, .widget-card) sans style isolé. */
+.theme-auto-schedule { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; }
+.theme-auto-schedule label { display: flex; flex-direction: column; gap: 4px; font: 600 12px sans-serif; color: var(--muted); }
+.theme-preset-save { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.theme-preset-save input { flex: 1 1 220px; }
+.theme-custom-preset-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.theme-custom-preset-list li { display: flex; align-items: center; gap: 4px; }
+.theme-preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 6px; }
+.theme-preset-swatch { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px; border: 1px solid var(--border-soft); border-radius: 10px; background: rgba(var(--rgb-surface), .5); font: 600 12px sans-serif; color: var(--text); cursor: pointer; }
+.theme-preset-swatch:hover { border-color: var(--border-strong); }
+.theme-preset-swatch-colors { display: flex; gap: 4px; }
+.theme-preset-swatch-colors i { display: block; width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .1); }
+
+/* Transition fade douce au changement de thème clair/sombre (section AB). */
+html.theme-fade, html.theme-fade body, html.theme-fade * { transition: background-color .35s ease, color .35s ease, border-color .35s ease !important; }
+
+/* Fonds d'écran animés (section AB) : dégradés/formes flottantes en CSS pur, légers, sans image/vidéo.
+   Appliqués via data-bg sur <html> ; un pseudo-élément fixe en arrière-plan évite tout impact sur le layout. */
+html[data-bg]::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { html[data-bg]::before { animation: none !important; } }
+
+html[data-bg="aurora"]::before {
+  background: linear-gradient(120deg, rgba(var(--rgb-accent), .16), rgba(var(--rgb-accent2), .12), rgba(var(--rgb-accent), .16));
+  background-size: 200% 200%;
+  animation: devos-bg-aurora 22s ease infinite;
+}
+@keyframes devos-bg-aurora { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+
+html[data-bg="drift"]::before {
+  background: radial-gradient(circle at 20% 30%, rgba(var(--rgb-accent), .14), transparent 55%),
+              radial-gradient(circle at 80% 70%, rgba(var(--rgb-accent2), .12), transparent 55%);
+  animation: devos-bg-drift 30s ease-in-out infinite;
+}
+@keyframes devos-bg-drift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(2%, -2%); } }
+
+html[data-bg="bubbles"]::before {
+  background-image: radial-gradient(circle, rgba(var(--rgb-accent), .14) 10px, transparent 11px),
+                     radial-gradient(circle, rgba(var(--rgb-accent2), .12) 14px, transparent 15px);
+  background-size: 140px 140px, 220px 220px;
+  background-position: 0 0, 60px 90px;
+  animation: devos-bg-bubbles 40s linear infinite;
+}
+@keyframes devos-bg-bubbles { from { background-position: 0 0, 60px 90px; } to { background-position: 0 -600px, 60px -510px; } }
+
+html[data-bg="waves"]::before {
+  background: repeating-linear-gradient(115deg, rgba(var(--rgb-accent), .10) 0 24px, transparent 24px 48px);
+  animation: devos-bg-waves 26s linear infinite;
+}
+@keyframes devos-bg-waves { from { transform: translateX(0); } to { transform: translateX(-96px); } }
+
+html[data-bg="grid-pulse"]::before {
+  background-image: linear-gradient(rgba(var(--rgb-accent), .10) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--rgb-accent), .10) 1px, transparent 1px);
+  background-size: 42px 42px;
+  animation: devos-bg-pulse 6s ease-in-out infinite;
+}
+@keyframes devos-bg-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+
+html[data-bg="confetti-glow"]::before {
+  background: radial-gradient(circle at 30% 20%, rgba(var(--rgb-accent2), .14), transparent 40%),
+              radial-gradient(circle at 70% 60%, rgba(var(--rgb-accent), .14), transparent 45%),
+              radial-gradient(circle at 40% 85%, rgba(var(--rgb-accent2), .10), transparent 40%);
+  animation: devos-bg-glow 18s ease-in-out infinite alternate;
+}
+@keyframes devos-bg-glow { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(20deg); } }
+
+html[data-bg="nebula"]::before {
+  background: conic-gradient(from 0deg at 50% 50%, rgba(var(--rgb-accent), .10), rgba(var(--rgb-accent2), .10), rgba(var(--rgb-accent), .10));
+  animation: devos-bg-nebula 60s linear infinite;
+}
+@keyframes devos-bg-nebula { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
 /* Module Réseau & Serveurs — identité visuelle "infra critique" : fond sombre, monospace, accents terracotta.
    Volontairement non lié aux variables de thème clair/sombre : ce module garde toujours
    son identité visuelle "infra critique" (fond sombre fixe), quel que soit le thème actif. */
@@ -353,3 +450,11 @@ button:hover { background: var(--accent-2-hover); }
 .network-node-detail .network-node-services li { color: #dbe8dc; }
 .network-node-badge { fill: #a34f31; stroke: #17211b; stroke-width: 1.5; }
 .network-node-badge-label { fill: #f1dfc2; font-size: 9px; font-weight: 700; }
+
+.notes-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.note-card { grid-template-columns: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.note-body { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.note-checkbox { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.note-checkbox input { width: 15px; height: 15px; }
+.note-edit { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.note-edit .doc-editor { margin: 0; }
