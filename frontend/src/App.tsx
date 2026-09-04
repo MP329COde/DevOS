@@ -52,6 +52,17 @@ const homeWidgetDefs: Record<string, { title: string; icon: string }> = {
   wazuh: { title: 'Sécurité (Wazuh)', icon: 'layers' },
 };
 
+// Widgets génériques pour les intégrations exposées via /api/extras/* (voir backend/src/catalog/extras-http.ts).
+const extraWidgetCatalog: Record<string, { title: string; icon: string; path: string; extract: (data: unknown) => string[] }> = {
+  'extra:grafana': { title: 'Tableaux de bord Grafana', icon: 'layers', path: '/api/extras/grafana/dashboards', extract: (data) => (Array.isArray(data) ? data.map((d) => String((d as { title?: string }).title ?? d)) : []) },
+  'extra:harbor': { title: 'Projets Harbor', icon: 'layers', path: '/api/extras/harbor/projects', extract: (data) => (Array.isArray(data) ? data.map((d) => String((d as { name?: string }).name ?? d)) : []) },
+  'extra:proxmox': { title: 'Nœuds Proxmox', icon: 'network', path: '/api/extras/proxmox/nodes', extract: (data) => (Array.isArray(data) ? data.map((d) => String((d as { node?: string }).node ?? d)) : []) },
+  'extra:minio': { title: 'Buckets MinIO', icon: 'layers', path: '/api/extras/minio/buckets', extract: (data) => (Array.isArray(data) ? data.map((d) => String((d as { name?: string }).name ?? d)) : []) },
+  'extra:rabbitmq': { title: 'Files RabbitMQ', icon: 'layers', path: '/api/extras/rabbitmq/queues', extract: (data) => (Array.isArray(data) ? data.map((d) => String((d as { name?: string }).name ?? d)) : []) },
+  'extra:dns': { title: 'Zones DNS', icon: 'network', path: '/api/extras/dns/zones', extract: (data) => (Array.isArray(data) ? data.map((d) => String((d as { name?: string }).name ?? d)) : []) },
+};
+Object.entries(extraWidgetCatalog).forEach(([id, def]) => { homeWidgetDefs[id] = { title: def.title, icon: def.icon }; });
+
 export function App() {
   const [status, setStatus] = useState('');
   const [items, setItems] = useState<Array<{ id: string; title: string; type: string; status: string; dueAt?: string | null; mergeRequestState?: string | null; pipelineStatus?: string | null; coderWorkspaceName?: string | null; coderWorkspaceStatus?: string | null }>>([]);
@@ -69,8 +80,12 @@ export function App() {
   const [homeEditMode, setHomeEditMode] = useState(false);
   const [homeWidgets, setHomeWidgets] = useState<Array<{ id: string; visible: boolean }>>(() => {
     const saved = localStorage.getItem('devos.homeWidgets');
-    return saved ? JSON.parse(saved) : [{ id: 'pipelines', visible: true }, { id: 'alerts', visible: true }, { id: 'wazuh', visible: true }];
+    const base: Array<{ id: string; visible: boolean }> = saved ? JSON.parse(saved) : [{ id: 'pipelines', visible: true }, { id: 'alerts', visible: true }, { id: 'wazuh', visible: true }];
+    const known = new Set(base.map((w) => w.id));
+    const extras = Object.keys(extraWidgetCatalog).filter((id) => !known.has(id)).map((id) => ({ id, visible: false }));
+    return [...base, ...extras];
   });
+  const [extraWidgetData, setExtraWidgetData] = useState<Record<string, string[] | 'error'>>({});
   const [wazuhAlerts, setWazuhAlerts] = useState<Array<{ id: string; ruleDescription: string; level: number; timestamp: string }> | null>(null);
   const [content, setContent] = useState('');
   const [dashboardDay, setDashboardDay] = useState<'today' | 'tomorrow'>('today');
@@ -174,6 +189,23 @@ export function App() {
       .then(async (response) => { if (response.ok) setWazuhAlerts(await response.json()); })
       .catch(() => undefined);
   }, [panel]);
+
+  useEffect(() => {
+    if (panel !== 'home') return;
+    homeWidgets.filter((w) => w.visible && extraWidgetCatalog[w.id]).forEach((w) => {
+      const def = extraWidgetCatalog[w.id];
+      void (async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}${def.path}`);
+          if (!response.ok) throw new Error('indisponible');
+          const json = await response.json();
+          setExtraWidgetData((current) => ({ ...current, [w.id]: def.extract(json) }));
+        } catch {
+          setExtraWidgetData((current) => ({ ...current, [w.id]: 'error' }));
+        }
+      })();
+    });
+  }, [panel, homeWidgets]);
 
   useEffect(() => {
     if (panel !== 'haproxy') return;
@@ -467,11 +499,16 @@ export function App() {
             <div className={homeEditMode ? 'widget-grid edit-mode' : 'widget-grid'}>
               {homeWidgets.filter((w) => w.visible).map((w) => {
                 const def = homeWidgetDefs[w.id];
+                const extraDataForWidget = extraWidgetData[w.id];
                 const body = w.id === 'pipelines'
                   ? (widgetData ? (widgetData.pipelines.items.length > 0 ? widgetData.pipelines.items.map((p) => <p key={p.id} className="empty">#{p.id} · {p.ref} · {p.status}</p>) : <p className="empty">Aucun pipeline en cours.</p>) : <StatusBadge state="off" label="Non configuré" />)
                   : w.id === 'alerts'
                   ? (widgetData ? (widgetData.alerts.items.length > 0 ? widgetData.alerts.items.map((a) => <p key={a.fingerprint} className="empty">{a.labels.alertname ?? a.fingerprint} · {a.status.state}</p>) : <p className="empty">Aucune alerte active.</p>) : <StatusBadge state="off" label="Non configuré" />)
-                  : (wazuhAlerts ? (wazuhAlerts.length > 0 ? wazuhAlerts.slice(0, 5).map((a) => <p key={a.id} className="empty">{a.ruleDescription} · niveau {a.level}</p>) : <p className="empty">Aucune alerte Wazuh.</p>) : <StatusBadge state="off" label="Non configuré" />);
+                  : w.id === 'wazuh'
+                  ? (wazuhAlerts ? (wazuhAlerts.length > 0 ? wazuhAlerts.slice(0, 5).map((a) => <p key={a.id} className="empty">{a.ruleDescription} · niveau {a.level}</p>) : <p className="empty">Aucune alerte Wazuh.</p>) : <StatusBadge state="off" label="Non configuré" />)
+                  : extraDataForWidget === 'error' || extraDataForWidget === undefined
+                  ? <StatusBadge state="off" label="Non configuré" />
+                  : extraDataForWidget.length > 0 ? extraDataForWidget.slice(0, 6).map((line, index) => <p className="empty" key={index}>{line}</p>) : <p className="empty">Aucune donnée.</p>;
                 return (
                   <section
                     className={`widget-card${draggedWidgetId === w.id ? ' dragging' : ''}${dragOverWidgetId === w.id && draggedWidgetId !== w.id ? ' drag-over' : ''}`}

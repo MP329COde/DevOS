@@ -25,7 +25,7 @@ Fichiers : `frontend/src/App.tsx` (bloc `panel === 'home'`, fonctions `moveHomeW
 - [x] Remplacer les boutons monter/descendre par un vrai drag-and-drop (pointer events natifs, pas de nouvelle dépendance lourde type dnd-kit sauf si strictement nécessaire — justifier le choix si une lib est ajoutée)
 - [x] Rendre le mode édition visuellement évident sur toute la grille (pas seulement sur chaque carte isolée) : bordure en pointillés sur `.widget-grid`, léger fond distinct
 - [x] Ajouter un panneau "Ajouter un widget" listant les widgets masqués, plutôt que de devoir deviner qu'il faut recliquer sur le `×` d'une carte grisée
-- [ ] Prévoir l'ajout de widgets génériques pour les intégrations déjà branchées sur `/api/extras/*` (pas seulement pipelines/alertes/wazuh — voir `backend/src/catalog/extras-http.ts` pour la liste des routes existantes)
+- [x] Prévoir l'ajout de widgets génériques pour les intégrations déjà branchées sur `/api/extras/*` (pas seulement pipelines/alertes/wazuh — voir `backend/src/catalog/extras-http.ts` pour la liste des routes existantes)
 - [ ] Ajouter un bouton "Terminer l'édition" explicite (pas seulement recliquer le crayon)
 - [ ] Vérifier avec Playwright : ouverture du mode édition, drag d'un widget, ajout d'un widget masqué, sortie du mode édition — capture d'écran de chaque étape
 
