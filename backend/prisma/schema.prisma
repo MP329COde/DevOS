@@ -58,6 +58,36 @@ enum DevProjectStatus {
   archived
 }
 
+/**
+ * État d'une version/release (section AM.6) : de la préparation à la dépréciation.
+ */
+enum ReleaseState {
+  draft
+  in_progress
+  released
+  deprecated
+}
+
+/**
+ * Type d'environnement de déploiement par projet (section AM.6) — au-delà de dev/staging/prod.
+ */
+enum EnvironmentKind {
+  dev
+  staging
+  prod
+  other
+}
+
+/**
+ * Statut observé d'un environnement de déploiement.
+ */
+enum EnvironmentStatus {
+  unknown
+  up
+  down
+  degraded
+}
+
 model SystemSetting {
   key       String   @id @db.VarChar(100)
   value     String   @db.Text
@@ -68,46 +98,49 @@ model SystemSetting {
 }
 
 model Item {
-  id          String    @id @default(uuid()) @db.Uuid
-  type        ItemType
-  taskLevel   TaskLevel? @map("task_level")
-  title       String    @db.VarChar(300)
-  description String?   @db.Text
-  content     String?   @db.Text
-  status      String    @default("backlog") @db.VarChar(50)
-  required    Boolean   @default(false)
-  dueAt       DateTime? @map("due_at")
-  triage      TriageStatus @default(none)
-  mergeRequestState String? @map("merge_request_state") @db.VarChar(20)
-  pipelineStatus String? @map("pipeline_status") @db.VarChar(20)
-  coderTemplateId   String? @map("coder_template_id") @db.VarChar(100)
-  coderWorkspaceId  String? @map("coder_workspace_id") @db.VarChar(100)
-  coderWorkspaceName String? @map("coder_workspace_name") @db.VarChar(200)
-  coderWorkspaceStatus String? @map("coder_workspace_status") @db.VarChar(30)
-  cycleId     String?   @db.Uuid @map("cycle_id")
-  cycle       Cycle?    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
-  devProjectId String?  @db.Uuid @map("dev_project_id")
-  devProject  DevProject? @relation(fields: [devProjectId], references: [id], onDelete: SetNull)
-  timeEntries TimeEntry[]
-  gitlabLinks GitLabIssueLink[]
-  comments    ItemComment[]
-  parentId    String?   @db.Uuid @map("parent_id")
-  parent      Item?     @relation("ItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Item[]    @relation("ItemHierarchy")
-  labels      ItemLabel[]
-  outgoingLinks ItemLink[] @relation("ItemLinkSource")
-  incomingLinks ItemLink[] @relation("ItemLinkTarget")
-  docLinks    DocLink[]
-  attachments ItemAttachment[]
-  codeReferences ItemCodeReference[]
-  bugs        Bug[]
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id                   String              @id @default(uuid()) @db.Uuid
+  type                 ItemType
+  taskLevel            TaskLevel?          @map("task_level")
+  title                String              @db.VarChar(300)
+  description          String?             @db.Text
+  content              String?             @db.Text
+  status               String              @default("backlog") @db.VarChar(50)
+  required             Boolean             @default(false)
+  dueAt                DateTime?           @map("due_at")
+  triage               TriageStatus        @default(none)
+  mergeRequestState    String?             @map("merge_request_state") @db.VarChar(20)
+  pipelineStatus       String?             @map("pipeline_status") @db.VarChar(20)
+  coderTemplateId      String?             @map("coder_template_id") @db.VarChar(100)
+  coderWorkspaceId     String?             @map("coder_workspace_id") @db.VarChar(100)
+  coderWorkspaceName   String?             @map("coder_workspace_name") @db.VarChar(200)
+  coderWorkspaceStatus String?             @map("coder_workspace_status") @db.VarChar(30)
+  cycleId              String?             @map("cycle_id") @db.Uuid
+  cycle                Cycle?              @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  devProjectId         String?             @map("dev_project_id") @db.Uuid
+  devProject           DevProject?         @relation(fields: [devProjectId], references: [id], onDelete: SetNull)
+  releaseId            String?             @map("release_id") @db.Uuid
+  release              Release?            @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  timeEntries          TimeEntry[]
+  gitlabLinks          GitLabIssueLink[]
+  comments             ItemComment[]
+  parentId             String?             @map("parent_id") @db.Uuid
+  parent               Item?               @relation("ItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children             Item[]              @relation("ItemHierarchy")
+  labels               ItemLabel[]
+  outgoingLinks        ItemLink[]          @relation("ItemLinkSource")
+  incomingLinks        ItemLink[]          @relation("ItemLinkTarget")
+  docLinks             DocLink[]
+  attachments          ItemAttachment[]
+  codeReferences       ItemCodeReference[]
+  bugs                 Bug[]
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
 
   @@index([type, status])
   @@index([parentId])
   @@index([cycleId])
   @@index([devProjectId])
+  @@index([releaseId])
   @@map("items")
 }
 
@@ -119,32 +152,87 @@ model Item {
  * libre, à faire évoluer plus tard vers de vraies relations utilisateur (section AC).
  */
 model DevProject {
-  id              String            @id @default(uuid()) @db.Uuid
-  name            String            @db.VarChar(200)
-  description     String?           @db.Text
-  status          DevProjectStatus  @default(planning)
-  owner           String?           @db.VarChar(200)
-  members         String[]          @default([])
-  plannedStartAt  DateTime?         @map("planned_start_at")
-  plannedEndAt    DateTime?         @map("planned_end_at")
-  deliveryGoal    String?           @db.Text @map("delivery_goal")
-  items           Item[]
-  bugs            Bug[]
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
+  id             String           @id @default(uuid()) @db.Uuid
+  name           String           @db.VarChar(200)
+  description    String?          @db.Text
+  status         DevProjectStatus @default(planning)
+  owner          String?          @db.VarChar(200)
+  members        String[]         @default([])
+  plannedStartAt DateTime?        @map("planned_start_at")
+  plannedEndAt   DateTime?        @map("planned_end_at")
+  deliveryGoal   String?          @map("delivery_goal") @db.Text
+  items          Item[]
+  bugs           Bug[]
+  releases       Release[]
+  environments   Environment[]
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
 
   @@index([status])
   @@map("dev_projects")
 }
 
+/**
+ * Version/release d'un `DevProject` (section AM.6). Le changelog est généré automatiquement à
+ * la publication à partir des `Item` associés (titres des tâches/bugs livrés dans cette
+ * version) puis figé en texte, plutôt qu'une relation many-to-many à recalculer sans fin.
+ */
+model Release {
+  id           String       @id @default(uuid()) @db.Uuid
+  devProjectId String       @map("dev_project_id") @db.Uuid
+  devProject   DevProject   @relation(fields: [devProjectId], references: [id], onDelete: Cascade)
+  version      String       @db.VarChar(50)
+  name         String?      @db.VarChar(200)
+  description  String?      @db.Text
+  state        ReleaseState @default(draft)
+  plannedAt    DateTime?    @map("planned_at")
+  releasedAt   DateTime?    @map("released_at")
+  changelog    String?      @db.Text
+  items        Item[]
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  @@unique([devProjectId, version])
+  @@index([devProjectId, state])
+  @@map("releases")
+}
+
+/**
+ * Environnement de déploiement par projet (dev/staging/prod/autre — section AM.6). Le statut,
+ * la version déployée et le pipeline sont mis à jour par les intégrations CI/CD (AM.7) ; les
+ * actions sensibles (déploiement en prod notamment) exigent une confirmation explicite côté API,
+ * même pattern que les actions Proxmox (section Q).
+ */
+model Environment {
+  id               String            @id @default(uuid()) @db.Uuid
+  devProjectId     String            @map("dev_project_id") @db.Uuid
+  devProject       DevProject        @relation(fields: [devProjectId], references: [id], onDelete: Cascade)
+  name             String            @db.VarChar(100)
+  kind             EnvironmentKind   @default(other)
+  url              String?           @db.VarChar(500)
+  status           EnvironmentStatus @default(unknown)
+  currentVersion   String?           @map("current_version") @db.VarChar(50)
+  expectedVersion  String?           @map("expected_version") @db.VarChar(50)
+  pipelineStatus   String?           @map("pipeline_status") @db.VarChar(30)
+  lastDeployedAt   DateTime?         @map("last_deployed_at")
+  lastError        String?           @map("last_error") @db.Text
+  requiresApproval Boolean           @default(false) @map("requires_approval")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  @@unique([devProjectId, name])
+  @@index([devProjectId, kind])
+  @@map("environments")
+}
+
 model Cycle {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String   @db.VarChar(150)
-  startsAt  DateTime @map("starts_at")
-  endsAt    DateTime @map("ends_at")
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @db.VarChar(150)
+  startsAt  DateTime  @map("starts_at")
+  endsAt    DateTime  @map("ends_at")
   closedAt  DateTime? @map("closed_at")
   items     Item[]
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   @@index([startsAt, endsAt])
   @@map("cycles")
@@ -165,25 +253,25 @@ model AutomationRule {
 }
 
 model TimeEntry {
-  id        String   @id @default(uuid()) @db.Uuid
-  itemId    String   @db.Uuid @map("item_id")
-  startedAt DateTime @default(now()) @map("started_at")
+  id        String    @id @default(uuid()) @db.Uuid
+  itemId    String    @map("item_id") @db.Uuid
+  startedAt DateTime  @default(now()) @map("started_at")
   endedAt   DateTime? @map("ended_at")
-  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item      Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@index([itemId, startedAt])
   @@map("time_entries")
 }
 
 model AuditLog {
-  id               String   @id @default(uuid()) @db.Uuid
-  entityType       String   @db.VarChar(50) @map("entity_type")
-  entityId         String   @db.VarChar(100) @map("entity_id")
-  action           String   @db.VarChar(50)
-  decision         String   @db.VarChar(20)
-  localUpdatedAt   DateTime @map("local_updated_at")
-  remoteUpdatedAt  DateTime @map("remote_updated_at")
-  createdAt        DateTime @default(now()) @map("created_at")
+  id              String   @id @default(uuid()) @db.Uuid
+  entityType      String   @map("entity_type") @db.VarChar(50)
+  entityId        String   @map("entity_id") @db.VarChar(100)
+  action          String   @db.VarChar(50)
+  decision        String   @db.VarChar(20)
+  localUpdatedAt  DateTime @map("local_updated_at")
+  remoteUpdatedAt DateTime @map("remote_updated_at")
+  createdAt       DateTime @default(now()) @map("created_at")
 
   @@index([entityType, entityId])
   @@map("audit_logs")
@@ -191,14 +279,14 @@ model AuditLog {
 
 model DocPage {
   id            String      @id @default(uuid()) @db.Uuid
-  sourceProject String      @db.VarChar(200) @map("source_project")
+  sourceProject String      @map("source_project") @db.VarChar(200)
   path          String      @db.VarChar(500)
   title         String      @db.VarChar(300)
   content       String      @db.Text
   pageType      DocPageType @default(scanned) @map("page_type")
   links         DocLink[]
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
 
   @@unique([sourceProject, path])
   @@map("doc_pages")
@@ -206,8 +294,8 @@ model DocPage {
 
 model DocLink {
   id        String   @id @default(uuid()) @db.Uuid
-  docPageId String   @db.Uuid @map("doc_page_id")
-  itemId    String   @db.Uuid @map("item_id")
+  docPageId String   @map("doc_page_id") @db.Uuid
+  itemId    String   @map("item_id") @db.Uuid
   docPage   DocPage  @relation(fields: [docPageId], references: [id], onDelete: Cascade)
   item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @map("created_at")
@@ -220,7 +308,7 @@ model CatalogEntity {
   id            String   @id @default(uuid()) @db.Uuid
   kind          String   @db.VarChar(50)
   name          String   @db.VarChar(200)
-  sourceProject String   @db.VarChar(200) @map("source_project")
+  sourceProject String   @map("source_project") @db.VarChar(200)
   description   String?  @db.Text
   type          String   @db.VarChar(50)
   lifecycle     String   @db.VarChar(50)
@@ -251,8 +339,8 @@ model HAProxyChangeLog {
 
 model GitLabIssueLink {
   id              String   @id @default(uuid()) @db.Uuid
-  itemId          String   @db.Uuid @map("item_id")
-  gitlabProjectId String   @db.VarChar(100) @map("gitlab_project_id")
+  itemId          String   @map("item_id") @db.Uuid
+  gitlabProjectId String   @map("gitlab_project_id") @db.VarChar(100)
   issueIid        Int      @map("issue_iid")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -265,7 +353,7 @@ model GitLabIssueLink {
 
 model ItemComment {
   id                 String   @id @default(uuid()) @db.Uuid
-  itemId             String   @db.Uuid @map("item_id")
+  itemId             String   @map("item_id") @db.Uuid
   body               String   @db.Text
   author             String?  @db.VarChar(200)
   propagatedToGitlab Boolean  @default(false) @map("propagated_to_gitlab")
@@ -288,21 +376,21 @@ model Label {
 }
 
 model ItemLabel {
-  itemId  String @db.Uuid @map("item_id")
-  labelId String @db.Uuid @map("label_id")
-  item    Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  label   Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  itemId  String @map("item_id") @db.Uuid
+  labelId String @map("label_id") @db.Uuid
+  item    Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
   @@id([itemId, labelId])
   @@map("item_labels")
 }
 
 model ItemLink {
-  sourceId String       @db.Uuid @map("source_id")
-  targetId String       @db.Uuid @map("target_id")
+  sourceId String       @map("source_id") @db.Uuid
+  targetId String       @map("target_id") @db.Uuid
   type     ItemLinkType
-  source   Item        @relation("ItemLinkSource", fields: [sourceId], references: [id], onDelete: Cascade)
-  target   Item        @relation("ItemLinkTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  source   Item         @relation("ItemLinkSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target   Item         @relation("ItemLinkTarget", fields: [targetId], references: [id], onDelete: Cascade)
 
   @@id([sourceId, targetId, type])
   @@index([targetId])
@@ -314,7 +402,6 @@ model ItemLink {
  * réutilisables pour la création guidée de projet (AM.2), distincts des entités `CatalogEntity`
  * de type "template" du Catalogue applicatif (Backstage-like, section AD) qui décrivent des
  * services déjà existants plutôt que des gabarits de génération.
- *
  * Versionnement : éditer un template en place met à jour la ligne existante ; publier une
  * nouvelle version crée une nouvelle ligne avec `previousVersionId` pointant vers l'ancienne,
  * conservant l'historique. `isDefault` désigne le template proposé par défaut dans l'assistant de
@@ -325,7 +412,7 @@ model ItemLink {
 model DevTemplate {
   id                String   @id @default(uuid()) @db.Uuid
   name              String   @db.VarChar(200)
-  type              String   @db.VarChar(50) @map("type")
+  type              String   @map("type") @db.VarChar(50)
   description       String?  @db.Text
   technologies      String[] @map("technologies")
   dependencies      Json     @default("[]") @map("dependencies")
@@ -335,7 +422,7 @@ model DevTemplate {
   generatedItems    String[] @map("generated_items")
   isDefault         Boolean  @default(false) @map("is_default")
   active            Boolean  @default(true)
-  previousVersionId String?  @db.Uuid @map("previous_version_id")
+  previousVersionId String?  @map("previous_version_id") @db.Uuid
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -350,10 +437,10 @@ model DevTemplate {
  */
 model ItemAttachment {
   id        String   @id @default(uuid()) @db.Uuid
-  itemId    String   @db.Uuid @map("item_id")
-  fileName  String   @db.VarChar(300) @map("file_name")
+  itemId    String   @map("item_id") @db.Uuid
+  fileName  String   @map("file_name") @db.VarChar(300)
   url       String   @db.Text
-  mimeType  String?  @db.VarChar(120) @map("mime_type")
+  mimeType  String?  @map("mime_type") @db.VarChar(120)
   size      Int?
   createdAt DateTime @default(now()) @map("created_at")
   item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
@@ -369,8 +456,8 @@ model ItemAttachment {
  */
 model ItemCodeReference {
   id        String   @id @default(uuid()) @db.Uuid
-  itemId    String   @db.Uuid @map("item_id")
-  refType   String   @db.VarChar(20) @map("ref_type") // commit | merge_request | release
+  itemId    String   @map("item_id") @db.Uuid
+  refType   String   @map("ref_type") @db.VarChar(20) // commit | merge_request | release
   label     String   @db.VarChar(200)
   url       String?  @db.Text
   createdAt DateTime @default(now()) @map("created_at")
@@ -410,26 +497,26 @@ model WorkflowStatus {
  * dupliquer son cycle de vie ; `devProjectId` rattache le bug à un projet une fois AM.1 en place.
  */
 model Bug {
-  id                String       @id @default(uuid()) @db.Uuid
-  title             String       @db.VarChar(300)
-  description       String?      @db.Text
-  severity          BugSeverity  @default(medium)
-  status            String       @default("open") @db.VarChar(50)
-  environment       String?      @db.VarChar(100)
-  versionAffected   String?      @db.VarChar(100) @map("version_affected")
-  expectedBehavior  String?      @db.Text @map("expected_behavior")
-  observedBehavior  String?      @db.Text @map("observed_behavior")
-  reproSteps        String?      @db.Text @map("repro_steps")
-  logs              String?      @db.Text
-  screenshots       String[]     @default([])
-  releaseRef        String?      @db.VarChar(200) @map("release_ref")
-  commitRef         String?      @db.VarChar(200) @map("commit_ref")
-  itemId            String?      @db.Uuid @map("item_id")
-  item              Item?        @relation(fields: [itemId], references: [id], onDelete: SetNull)
-  devProjectId      String?      @db.Uuid @map("dev_project_id")
-  devProject        DevProject?  @relation(fields: [devProjectId], references: [id], onDelete: SetNull)
-  createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
+  id               String      @id @default(uuid()) @db.Uuid
+  title            String      @db.VarChar(300)
+  description      String?     @db.Text
+  severity         BugSeverity @default(medium)
+  status           String      @default("open") @db.VarChar(50)
+  environment      String?     @db.VarChar(100)
+  versionAffected  String?     @map("version_affected") @db.VarChar(100)
+  expectedBehavior String?     @map("expected_behavior") @db.Text
+  observedBehavior String?     @map("observed_behavior") @db.Text
+  reproSteps       String?     @map("repro_steps") @db.Text
+  logs             String?     @db.Text
+  screenshots      String[]    @default([])
+  releaseRef       String?     @map("release_ref") @db.VarChar(200)
+  commitRef        String?     @map("commit_ref") @db.VarChar(200)
+  itemId           String?     @map("item_id") @db.Uuid
+  item             Item?       @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  devProjectId     String?     @map("dev_project_id") @db.Uuid
+  devProject       DevProject? @relation(fields: [devProjectId], references: [id], onDelete: SetNull)
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
 
   @@index([status])
   @@index([severity])
