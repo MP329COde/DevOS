@@ -89,8 +89,12 @@ input { flex: 1; min-width: 0; }
 .widget-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; padding: 4px; border-radius: 16px; transition: background .15s, border-color .15s; border: 1px dashed transparent; }
 .widget-grid.edit-mode { background: rgba(73, 99, 76, .06); border-color: rgba(73, 99, 76, .35); padding: 14px; }
 .widget-card { padding: 18px; border-radius: 12px; background: rgba(255, 252, 242, .78); border: 1px solid rgba(23, 33, 27, .1); transition: transform .1s, box-shadow .1s, opacity .1s; }
-.widget-card.widget-hidden { opacity: .45; border-style: dashed; }
 .widget-grid.edit-mode .widget-card { cursor: grab; }
+.widget-add-panel { margin-bottom: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(163, 79, 49, .08); border: 1px dashed rgba(163, 79, 49, .4); }
+.widget-add-panel h4 { margin: 0 0 8px; font: 700 12px sans-serif; text-transform: uppercase; color: #a34f31; }
+.widget-add-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.widget-add-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: rgba(255, 252, 242, .9); border: 1px solid rgba(163, 79, 49, .3); color: #a34f31; font-size: 13px; }
+.widget-add-chip:hover { background: rgba(163, 79, 49, .15); }
 .widget-card.dragging { opacity: .5; box-shadow: 0 6px 18px rgba(23, 33, 27, .18); cursor: grabbing; }
 .widget-card.drag-over { border-color: #a34f31; box-shadow: 0 0 0 2px rgba(163, 79, 49, .35) inset; }
 .widget-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font: 700 13px sans-serif; text-transform: uppercase; color: #49634c; }

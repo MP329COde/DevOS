@@ -451,8 +451,21 @@ export function App() {
                 <Icon name="pencil" />
               </button>
             </div>
+            {homeEditMode && homeWidgets.some((w) => !w.visible) && (
+              <div className="widget-add-panel">
+                <h4>Ajouter un widget</h4>
+                <div className="widget-add-list">
+                  {homeWidgets.filter((w) => !w.visible).map((w) => (
+                    <button type="button" className="widget-add-chip" key={w.id} onClick={() => toggleHomeWidget(w.id)}>
+                      <Icon name={homeWidgetDefs[w.id].icon} size={14} /> {homeWidgetDefs[w.id].title}
+                      <Icon name="plus" size={12} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className={homeEditMode ? 'widget-grid edit-mode' : 'widget-grid'}>
-              {homeWidgets.filter((w) => homeEditMode || w.visible).map((w) => {
+              {homeWidgets.filter((w) => w.visible).map((w) => {
                 const def = homeWidgetDefs[w.id];
                 const body = w.id === 'pipelines'
                   ? (widgetData ? (widgetData.pipelines.items.length > 0 ? widgetData.pipelines.items.map((p) => <p key={p.id} className="empty">#{p.id} · {p.ref} · {p.status}</p>) : <p className="empty">Aucun pipeline en cours.</p>) : <StatusBadge state="off" label="Non configuré" />)
@@ -461,7 +474,7 @@ export function App() {
                   : (wazuhAlerts ? (wazuhAlerts.length > 0 ? wazuhAlerts.slice(0, 5).map((a) => <p key={a.id} className="empty">{a.ruleDescription} · niveau {a.level}</p>) : <p className="empty">Aucune alerte Wazuh.</p>) : <StatusBadge state="off" label="Non configuré" />);
                 return (
                   <section
-                    className={`widget-card${!w.visible ? ' widget-hidden' : ''}${draggedWidgetId === w.id ? ' dragging' : ''}${dragOverWidgetId === w.id && draggedWidgetId !== w.id ? ' drag-over' : ''}`}
+                    className={`widget-card${draggedWidgetId === w.id ? ' dragging' : ''}${dragOverWidgetId === w.id && draggedWidgetId !== w.id ? ' drag-over' : ''}`}
                     key={w.id}
                     draggable={homeEditMode}
                     onDragStart={(event) => { setDraggedWidgetId(w.id); event.dataTransfer.effectAllowed = 'move'; }}
@@ -473,7 +486,7 @@ export function App() {
                     <h3><Icon name={def.icon} /> {def.title}{homeEditMode && (
                       <span className="widget-controls">
                         <span className="widget-drag-handle" aria-hidden="true" title="Glisser pour réordonner"><Icon name="drag" size={14} /></span>
-                        <button type="button" aria-label={w.visible ? 'Masquer' : 'Afficher'} onClick={() => toggleHomeWidget(w.id)}><Icon name={w.visible ? 'x' : 'plus'} size={14} /></button>
+                        <button type="button" aria-label="Masquer" onClick={() => toggleHomeWidget(w.id)}><Icon name="x" size={14} /></button>
                       </span>
                     )}</h3>
                     {body}
