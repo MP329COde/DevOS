@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Command } from 'cmdk';
 
 import { createAuthorizationRequest } from './auth/oidc.js';
 import { NetworkGraph, type NetworkGraphEdge, type NetworkGraphNode } from './components/NetworkGraph.js';
 import { IntegrationsPanel } from './components/IntegrationsPanel.js';
+import { CustomWidgetsPanel, type CustomWidget } from './components/CustomWidgetsPanel.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
 import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js';
 import { THEME_COLOR_SETTINGS } from './theme.js';
@@ -55,11 +56,48 @@ function StatusBadge({ state, label }: { state: 'ok' | 'warn' | 'off'; label: st
 
 const CRITICAL_WAZUH_LEVEL = 12;
 
+// Cases de stats du dashboard : intégrées au même système homeWidgets que les autres widgets
+// (déplaçables/masquables/réordonnables) au lieu d'un bloc séparé fixe.
+const statWidgetDefs: Record<string, { title: string; icon: string; statusKey?: string }> = {
+  'stat-total': { title: 'Items au total', icon: 'layers' },
+  'stat-in_progress': { title: 'En cours', icon: 'clock', statusKey: 'in_progress' },
+  'stat-blocked': { title: 'Bloqués', icon: 'gear', statusKey: 'blocked' },
+  'stat-done': { title: 'Terminés', icon: 'doc', statusKey: 'done' },
+};
+
 const homeWidgetDefs: Record<string, { title: string; icon: string }> = {
   pipelines: { title: 'Pipelines en cours', icon: 'network' },
   alerts: { title: 'Alertes actives', icon: 'gear' },
   wazuh: { title: 'Sécurité (Wazuh)', icon: 'layers' },
+  ...statWidgetDefs,
 };
+
+/**
+ * Calcule CPU/RAM/disque à partir des métriques brutes d'un exporter Prometheus de type
+ * node_exporter (clés standard node_load1, node_memory_*, node_filesystem_*). Best-effort :
+ * une ligne n'est produite que si les métriques nécessaires sont présentes.
+ */
+function summarizeMachinePerformance(metrics: Record<string, number>): string[] {
+  const lines: string[] = [];
+  const load1 = metrics['node_load1'];
+  if (typeof load1 === 'number') lines.push(`Charge CPU (1m) : ${load1.toFixed(2)}`);
+
+  const memTotalKey = Object.keys(metrics).find((k) => k.startsWith('node_memory_MemTotal_bytes'));
+  const memAvailKey = Object.keys(metrics).find((k) => k.startsWith('node_memory_MemAvailable_bytes'));
+  if (memTotalKey && memAvailKey && metrics[memTotalKey] > 0) {
+    const used = 100 - (metrics[memAvailKey] / metrics[memTotalKey]) * 100;
+    lines.push(`RAM utilisée : ${used.toFixed(0)}%`);
+  }
+
+  const fsSizeKey = Object.keys(metrics).find((k) => k.startsWith('node_filesystem_size_bytes') && k.includes('mountpoint="/"'));
+  const fsAvailKey = Object.keys(metrics).find((k) => k.startsWith('node_filesystem_avail_bytes') && k.includes('mountpoint="/"'));
+  if (fsSizeKey && fsAvailKey && metrics[fsSizeKey] > 0) {
+    const used = 100 - (metrics[fsAvailKey] / metrics[fsSizeKey]) * 100;
+    lines.push(`Disque (/) utilisé : ${used.toFixed(0)}%`);
+  }
+
+  return lines;
+}
 
 // Widgets génériques pour les intégrations exposées via /api/extras/* (voir backend/src/catalog/extras-http.ts).
 const extraWidgetCatalog: Record<string, { title: string; icon: string; path: string; extract: (data: unknown) => string[] }> = {
@@ -69,8 +107,24 @@ const extraWidgetCatalog: Record<string, { title: string; icon: string; path: st
   'extra:minio': { title: 'Buckets MinIO', icon: 'layers', path: '/api/extras/minio/buckets', extract: (data) => (Array.isArray(data) ? data.map((d) => String((d as { name?: string }).name ?? d)) : []) },
   'extra:rabbitmq': { title: 'Files RabbitMQ', icon: 'layers', path: '/api/extras/rabbitmq/queues', extract: (data) => (Array.isArray(data) ? data.map((d) => String((d as { name?: string }).name ?? d)) : []) },
   'extra:dns': { title: 'Zones DNS', icon: 'network', path: '/api/extras/dns/zones', extract: (data) => (Array.isArray(data) ? data.map((d) => String((d as { name?: string }).name ?? d)) : []) },
+  'extra:machine-perf': { title: 'Performance machine', icon: 'gear', path: '/api/extras/metrics/node', extract: (data) => summarizeMachinePerformance(data as Record<string, number>) },
 };
 Object.entries(extraWidgetCatalog).forEach(([id, def]) => { homeWidgetDefs[id] = { title: def.title, icon: def.icon }; });
+
+// Données fictives affichées en mode édition quand un widget n'a pas encore de données réelles
+// (503 / intégration non configurée), pour prévisualiser son rendu plutôt que de montrer un vide.
+const mockWidgetPreview: Record<string, string[]> = {
+  pipelines: ['#128 · main · running (exemple)', '#127 · feature/x · success (exemple)'],
+  alerts: ['HighCPU · firing (exemple)', 'DiskSpaceLow · firing (exemple)'],
+  wazuh: ['Connexion SSH suspecte · niveau 10 (exemple)', 'Modification fichier système · niveau 7 (exemple)'],
+  'extra:grafana': ['Dashboard Infra (exemple)', 'Dashboard Pipelines (exemple)'],
+  'extra:harbor': ['projet-devos (exemple)', 'projet-infra (exemple)'],
+  'extra:proxmox': ['pve-node-1 (exemple)', 'pve-node-2 (exemple)'],
+  'extra:minio': ['backups (exemple)', 'artifacts (exemple)'],
+  'extra:rabbitmq': ['tasks.default (exemple)', 'notifications (exemple)'],
+  'extra:dns': ['example.internal (exemple)', 'lab.internal (exemple)'],
+  'extra:machine-perf': ['Charge CPU (1m) : 0.42 (exemple)', 'RAM utilisée : 61% (exemple)', 'Disque (/) utilisé : 47% (exemple)'],
+};
 
 export function App() {
   const [status, setStatus] = useState('');
@@ -93,12 +147,37 @@ export function App() {
   const [homeEditMode, setHomeEditMode] = useState(false);
   const [homeWidgets, setHomeWidgets] = useState<Array<{ id: string; visible: boolean }>>(() => {
     const saved = localStorage.getItem('devos.homeWidgets');
-    const base: Array<{ id: string; visible: boolean }> = saved ? JSON.parse(saved) : [{ id: 'pipelines', visible: true }, { id: 'alerts', visible: true }, { id: 'wazuh', visible: true }];
+    const defaultStats = Object.keys(statWidgetDefs).map((id) => ({ id, visible: true }));
+    const base: Array<{ id: string; visible: boolean }> = saved
+      ? JSON.parse(saved)
+      : [...defaultStats, { id: 'pipelines', visible: true }, { id: 'alerts', visible: true }, { id: 'wazuh', visible: true }];
     const known = new Set(base.map((w) => w.id));
-    const extras = Object.keys(extraWidgetCatalog).filter((id) => !known.has(id)).map((id) => ({ id, visible: false }));
-    return [...base, ...extras];
+    // Migration : ajoute les nouveaux widgets connus (stats désormais éditables, nouvelles intégrations)
+    // absents d'une configuration déjà sauvegardée, sans écraser l'ordre/visibilité existants.
+    const missingStats = Object.keys(statWidgetDefs).filter((id) => !known.has(id)).map((id, index) => ({ id, visible: true, _prepend: index }));
+    const missingExtras = Object.keys(extraWidgetCatalog).filter((id) => !known.has(id)).map((id) => ({ id, visible: false }));
+    return [...missingStats.map(({ id, visible }) => ({ id, visible })), ...base, ...missingExtras];
   });
   const [extraWidgetData, setExtraWidgetData] = useState<Record<string, string[] | 'error'>>({});
+  const [customWidgets, setCustomWidgets] = useState<CustomWidget[]>([]);
+  const customWidgetDefs = useMemo(() => {
+    const defs: Record<string, { title: string; icon: string; path: string; extract: (data: unknown) => string[] }> = {};
+    for (const widget of customWidgets) {
+      defs[`custom:${widget.id}`] = {
+        title: widget.title,
+        icon: 'gear',
+        path: widget.sourcePath,
+        extract: (data) => (Array.isArray(data) ? data.map((entry) => `${widget.label} : ${String((entry as Record<string, unknown>)[widget.dataKey] ?? '—')}`) : []),
+      };
+    }
+    return defs;
+  }, [customWidgets]);
+  const combinedWidgetDefs = useMemo(() => {
+    const defs: Record<string, { title: string; icon: string }> = { ...homeWidgetDefs };
+    for (const [id, def] of Object.entries(customWidgetDefs)) defs[id] = { title: def.title, icon: def.icon };
+    return defs;
+  }, [customWidgetDefs]);
+  const combinedExtraCatalog = useMemo(() => ({ ...extraWidgetCatalog, ...customWidgetDefs }), [customWidgetDefs]);
   const [wazuhAlerts, setWazuhAlerts] = useState<Array<{ id: string; ruleDescription: string; level: number; timestamp: string }> | null>(null);
   const [content, setContent] = useState('');
   const [dashboardDay, setDashboardDay] = useState<'today' | 'tomorrow'>('today');
@@ -113,6 +192,12 @@ export function App() {
   const [catalogEntities, setCatalogEntities] = useState<Array<{ kind: string; name: string; type: string; owner: string; sourceProject: string }>>([]);
   const [catalogGraph, setCatalogGraph] = useState<{ nodes: Array<{ id: string; known: boolean }>; edges: Array<{ from: string; to: string }> }>({ nodes: [], edges: [] });
   const [catalogError, setCatalogError] = useState('');
+  const [templateSource, setTemplateSource] = useState('');
+  const [templateName, setTemplateName] = useState('');
+  const [templateOwner, setTemplateOwner] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  const [templateResult, setTemplateResult] = useState<{ yaml: string } | null>(null);
+  const [templateError, setTemplateError] = useState('');
   const [k8sNodes, setK8sNodes] = useState<Array<{ name: string; ready: boolean }>>([]);
   const [argoApps, setArgoApps] = useState<Array<{ name: string; syncStatus: string; healthStatus: string }>>([]);
   const [docPages, setDocPages] = useState<Array<{ id: string; title: string; sourceProject: string; path: string; pageType?: 'scanned' | 'onboarding' }>>([]);
@@ -234,6 +319,22 @@ export function App() {
   }, [navLayout]);
 
   useEffect(() => {
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/custom-widgets`)
+      .then(async (response) => { if (response.ok) setCustomWidgets(await response.json()); })
+      .catch(() => undefined);
+  }, []);
+
+  // Ajoute les widgets custom nouvellement créés (chargés après le montage) au set connu, masqués par défaut.
+  useEffect(() => {
+    if (customWidgets.length === 0) return;
+    setHomeWidgets((current) => {
+      const known = new Set(current.map((w) => w.id));
+      const missing = customWidgets.filter((widget) => !known.has(`custom:${widget.id}`)).map((widget) => ({ id: `custom:${widget.id}`, visible: false }));
+      return missing.length > 0 ? [...current, ...missing] : current;
+    });
+  }, [customWidgets]);
+
+  useEffect(() => {
     if (panel !== 'home') return;
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/extras/dashboard/widgets`)
       .then(async (response) => { if (response.ok) setWidgetData(await response.json()); })
@@ -245,8 +346,8 @@ export function App() {
 
   useEffect(() => {
     if (panel !== 'home') return;
-    homeWidgets.filter((w) => w.visible && extraWidgetCatalog[w.id]).forEach((w) => {
-      const def = extraWidgetCatalog[w.id];
+    homeWidgets.filter((w) => w.visible && combinedExtraCatalog[w.id]).forEach((w) => {
+      const def = combinedExtraCatalog[w.id];
       void (async () => {
         try {
           const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}${def.path}`);
@@ -258,7 +359,7 @@ export function App() {
         }
       })();
     });
-  }, [panel, homeWidgets]);
+  }, [panel, homeWidgets, combinedExtraCatalog]);
 
   useEffect(() => {
     if (panel !== 'items' || view !== 'calendar') return;
@@ -463,6 +564,27 @@ export function App() {
     if (graphResponse.ok) setCatalogGraph(await graphResponse.json());
   }
 
+  async function createProjectFromTemplate(event: FormEvent) {
+    event.preventDefault();
+    setTemplateError('');
+    setTemplateResult(null);
+    const [templateKind, templateNameOfSource] = templateSource.split(':');
+    if (!templateKind || !templateNameOfSource) { setTemplateError('Choisissez un modèle.'); return; }
+    if (!templateName.trim()) { setTemplateError('Le nom du nouveau projet est requis.'); return; }
+    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/catalog/template`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ templateKind, templateName: templateNameOfSource, name: templateName.trim(), owner: templateOwner.trim() || undefined, description: templateDescription.trim() || undefined }),
+    });
+    if (!response.ok) { const body = await response.json().catch(() => ({})); setTemplateError((body as { error?: string }).error ?? 'La création du projet a échoué.'); return; }
+    const result = await response.json();
+    setTemplateResult(result);
+    setTemplateName('');
+    setTemplateDescription('');
+    const entitiesResponse = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/catalog/entities`);
+    if (entitiesResponse.ok) setCatalogEntities(await entitiesResponse.json());
+  }
+
   async function scanDocs() {
     const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/docs/scan`, { method: 'POST' });
     if (!response.ok) { setDocsError('Le scan des docs a échoué.'); return; }
@@ -540,12 +662,6 @@ export function App() {
         {navLayout === 'topbar' && <nav className="views topnav" aria-label="Navigation">{navItems.map(navButton)}</nav>}
         {panel === 'home' ? (
           <div className="home-dashboard">
-            <div className="stat-cards">
-              <div className="stat-card"><span className="stat-value">{items.length}</span><span className="stat-label">Items au total</span></div>
-              <div className="stat-card"><span className="stat-value">{statusCounts.in_progress ?? 0}</span><span className="stat-label">En cours</span></div>
-              <div className="stat-card"><span className="stat-value">{statusCounts.blocked ?? 0}</span><span className="stat-label">Bloqués</span></div>
-              <div className="stat-card"><span className="stat-value">{statusCounts.done ?? 0}</span><span className="stat-label">Terminés</span></div>
-            </div>
             <div className="widget-toolbar">
               {homeEditMode ? (
                 <button type="button" className="filter active finish-edit" onClick={() => setHomeEditMode(false)}>
@@ -563,7 +679,7 @@ export function App() {
                 <div className="widget-add-list">
                   {homeWidgets.filter((w) => !w.visible).map((w) => (
                     <button type="button" className="widget-add-chip" key={w.id} onClick={() => toggleHomeWidget(w.id)}>
-                      <Icon name={homeWidgetDefs[w.id].icon} size={14} /> {homeWidgetDefs[w.id].title}
+                      <Icon name={combinedWidgetDefs[w.id].icon} size={14} /> {combinedWidgetDefs[w.id].title}
                       <Icon name="plus" size={12} />
                     </button>
                   ))}
@@ -572,9 +688,22 @@ export function App() {
             )}
             <div className={homeEditMode ? 'widget-grid edit-mode' : 'widget-grid'}>
               {homeWidgets.filter((w) => w.visible).map((w) => {
-                const def = homeWidgetDefs[w.id];
+                const def = combinedWidgetDefs[w.id];
+                const statDef = statWidgetDefs[w.id];
                 const extraDataForWidget = extraWidgetData[w.id];
-                const body = w.id === 'pipelines'
+                const unconfigured = w.id === 'pipelines' ? !widgetData
+                  : w.id === 'wazuh' ? !wazuhAlerts
+                  : (w.id === 'alerts' ? !widgetData
+                  : (!statDef && (extraDataForWidget === 'error' || extraDataForWidget === undefined)));
+                const preview = homeEditMode && unconfigured ? mockWidgetPreview[w.id] : undefined;
+                const body = statDef
+                  ? <span className="stat-widget-value">{statDef.statusKey ? (statusCounts[statDef.statusKey] ?? 0) : items.length}</span>
+                  : preview
+                  ? <>
+                      <p className="widget-preview-label">Aperçu (données d'exemple) — intégration non configurée</p>
+                      {preview.map((line, index) => <p className="empty preview-example" key={index}>{line}</p>)}
+                    </>
+                  : w.id === 'pipelines'
                   ? (widgetData ? (widgetData.pipelines.items.length > 0 ? widgetData.pipelines.items.map((p) => <p key={p.id} className="empty">#{p.id} · {p.ref} · {p.status}</p>) : <p className="empty">Aucun pipeline en cours.</p>) : <StatusBadge state="off" label="Non configuré" />)
                   : w.id === 'alerts'
                   ? (widgetData ? (widgetData.alerts.items.length > 0 ? widgetData.alerts.items.map((a) => <p key={a.fingerprint} className="empty">{a.labels.alertname ?? a.fingerprint} · {a.status.state}</p>) : <p className="empty">Aucune alerte active.</p>) : <StatusBadge state="off" label="Non configuré" />)
@@ -585,7 +714,7 @@ export function App() {
                   : extraDataForWidget.length > 0 ? extraDataForWidget.slice(0, 6).map((line, index) => <p className="empty" key={index}>{line}</p>) : <p className="empty">Aucune donnée.</p>;
                 return (
                   <section
-                    className={`widget-card${draggedWidgetId === w.id ? ' dragging' : ''}${dragOverWidgetId === w.id && draggedWidgetId !== w.id ? ' drag-over' : ''}`}
+                    className={`widget-card${statDef ? ' stat-widget' : ''}${draggedWidgetId === w.id ? ' dragging' : ''}${dragOverWidgetId === w.id && draggedWidgetId !== w.id ? ' drag-over' : ''}`}
                     key={w.id}
                     draggable={homeEditMode}
                     onDragStart={(event) => { setDraggedWidgetId(w.id); event.dataTransfer.effectAllowed = 'move'; }}
@@ -669,6 +798,29 @@ export function App() {
         ) : panel === 'catalog' ? (
           <div className="items catalog-panel">
             <div className="filters" aria-label="Actions catalogue"><button type="button" onClick={() => void scanCatalog()}>Scanner les dépôts GitLab</button></div>
+            <section className="view-group catalog-template-form">
+              <h3>Créer un projet depuis un template</h3>
+              <p className="empty">Génère un nouveau document <code>catalog-info.yaml</code> à partir d'un template existant du catalogue. Rien n'est poussé vers GitLab automatiquement — le document généré reste à copier manuellement dans le nouveau dépôt.</p>
+              <form className="new-item" onSubmit={(event) => void createProjectFromTemplate(event)}>
+                <select aria-label="Template" value={templateSource} onChange={(event) => setTemplateSource(event.target.value)} required>
+                  <option value="">Choisir un template…</option>
+                  {catalogEntities.map((entity) => (
+                    <option key={`${entity.kind}:${entity.name}`} value={`${entity.kind}:${entity.name}`}>{entity.kind} · {entity.name}</option>
+                  ))}
+                </select>
+                <input aria-label="Nom du nouveau projet" placeholder="Nom du nouveau projet" value={templateName} onChange={(event) => setTemplateName(event.target.value)} required />
+                <input aria-label="Propriétaire (optionnel)" placeholder="Propriétaire (optionnel)" value={templateOwner} onChange={(event) => setTemplateOwner(event.target.value)} />
+                <input aria-label="Description (optionnel)" placeholder="Description (optionnel)" value={templateDescription} onChange={(event) => setTemplateDescription(event.target.value)} />
+                <button type="submit" disabled={catalogEntities.length === 0}>Créer le projet</button>
+              </form>
+              {templateError && <p className="error" role="alert">{templateError}</p>}
+              {templateResult && (
+                <div className="catalog-template-result">
+                  <p className="empty">Document généré (non poussé vers GitLab) :</p>
+                  <pre>{templateResult.yaml}</pre>
+                </div>
+              )}
+            </section>
             {catalogError && <p className="error" role="alert">{catalogError}</p>}
             {!catalogError && catalogEntities.length === 0 && <p className="empty">Le catalogue est vide. Lancez un scan pour le peupler.</p>}
             {catalogEntities.map((entity) => (
@@ -744,6 +896,11 @@ export function App() {
                 {widgetData.alerts.items.length === 0 && <p className="empty">Aucune alerte active.</p>}
               </section>
             )}
+            <CustomWidgetsPanel onChange={() => {
+              void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/custom-widgets`)
+                .then(async (response) => { if (response.ok) setCustomWidgets(await response.json()); })
+                .catch(() => undefined);
+            }} />
           </div>
         ) : panel === 'settings' ? (
           <SettingsPanel

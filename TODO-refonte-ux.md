@@ -132,11 +132,11 @@ Contexte : demande d'une vraie vue "tâches du jour" pilotable depuis l'app, et 
 
 Contexte : les 4 cases de statistiques en haut du Dashboard sont fixes (non supprimables/déplaçables) contrairement aux widgets. Il manque un widget de performance machine (CPU/RAM/disque), et le mode édition doit devenir une vraie grille drag-and-drop qui s'adapte à la taille d'écran avec prévisualisation à données fictives si l'intégration n'est pas configurée.
 
-- [ ] Intégrer les 4 cases de stats dans le même système `homeWidgets` que les autres widgets (déplaçables/masquables/réordonnables), au lieu d'un bloc séparé non éditable
-- [ ] Nouveau widget "Performance machine" (CPU/RAM/disque) réutilisant l'exporter Prometheus générique déjà en place (`backend/src/catalog/prometheus-metrics.ts`), 503 propre si non configuré
-- [ ] Grille responsive (colonnes qui s'adaptent à la largeur d'écran) pour `.widget-grid`
-- [ ] En mode édition, si un widget n'a pas de données réelles (503/non configuré), afficher un aperçu avec données fictives clairement labellisées "exemple" plutôt qu'un état vide
-- [ ] Vérifier Playwright : cases de stats déplaçables/masquables, widget performance machine, aperçu à données fictives, redimensionnement de fenêtre
+- [x] Intégrer les 4 cases de stats dans le même système `homeWidgets` que les autres widgets (déplaçables/masquables/réordonnables), au lieu d'un bloc séparé non éditable
+- [x] Nouveau widget "Performance machine" (CPU/RAM/disque) réutilisant l'exporter Prometheus générique déjà en place (`backend/src/catalog/prometheus-metrics.ts`), 503 propre si non configuré — via l'endpoint générique existant `GET /api/extras/metrics/:exporter` (exporter `node`), aucun changement backend nécessaire
+- [x] Grille responsive (colonnes qui s'adaptent à la largeur d'écran) pour `.widget-grid`
+- [x] En mode édition, si un widget n'a pas de données réelles (503/non configuré), afficher un aperçu avec données fictives clairement labellisées "exemple" plutôt qu'un état vide
+- [x] Vérifier Playwright : cases de stats déplaçables/masquables, widget performance machine, aperçu à données fictives, redimensionnement de fenêtre
 
 ## P. Catalogue — création de projet depuis template + corrections topologie réseau
 
