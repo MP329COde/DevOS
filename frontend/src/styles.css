@@ -35,7 +35,7 @@ select, input { min-height: 46px; border: 1px solid #a8b5a7; padding: 0 12px; co
 input { flex: 1; min-width: 0; }
 .items { display: grid; gap: 8px; }
 .view-group { display: grid; gap: 8px; }.view-group h3 { margin: 14px 0 2px; font: 700 13px Arial, sans-serif; text-transform: uppercase; color: #49634c; }
-.item { display: grid; grid-template-columns: 90px 1fr 110px 110px auto 32px; align-items: center; gap: 12px; padding: 16px 18px; background: rgba(255, 252, 242, .72); border-left: 4px solid #839b86; }
+.item { display: grid; grid-template-columns: 90px 1fr 110px 135px auto; align-items: center; gap: 12px; padding: 16px 18px; background: rgba(255, 252, 242, .72); border-left: 4px solid #839b86; }
 .item-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .item-actions button { white-space: nowrap; }
 .type, .item-status { font: 11px 700 Arial, sans-serif; text-transform: uppercase; }
