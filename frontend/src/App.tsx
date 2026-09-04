@@ -3,13 +3,13 @@ import { Command } from 'cmdk';
 
 import { createAuthorizationRequest } from './auth/oidc.js';
 import { NetworkGraph, type NetworkGraphEdge, type NetworkGraphNode } from './components/NetworkGraph.js';
-import { IntegrationsPanel } from './components/IntegrationsPanel.js';
 import { CustomWidgetsPanel, type CustomWidget } from './components/CustomWidgetsPanel.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
+import { TaskDetailPanel } from './components/TaskDetailPanel.js';
 import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js';
 import { THEME_COLOR_SETTINGS } from './theme.js';
 
-const PANEL_IDS = ['home', 'items', 'today', 'triage', 'haproxy', 'catalog', 'docs', 'widgets', 'settings', 'network', 'integrations'] as const;
+const PANEL_IDS = ['home', 'items', 'today', 'triage', 'haproxy', 'catalog', 'docs', 'widgets', 'settings', 'network'] as const;
 
 const oidcConfig = {
   issuerUrl: import.meta.env.VITE_KEYCLOAK_ISSUER_URL ?? 'https://keycloak.example.internal/realms/devos',
@@ -128,7 +128,7 @@ const mockWidgetPreview: Record<string, string[]> = {
 
 export function App() {
   const [status, setStatus] = useState('');
-  const [items, setItems] = useState<Array<{ id: string; title: string; type: string; status: string; dueAt?: string | null; mergeRequestState?: string | null; pipelineStatus?: string | null; coderWorkspaceName?: string | null; coderWorkspaceStatus?: string | null; required?: boolean }>>([]);
+  const [items, setItems] = useState<Array<{ id: string; title: string; type: string; status: string; dueAt?: string | null; mergeRequestState?: string | null; pipelineStatus?: string | null; coderWorkspaceName?: string | null; coderWorkspaceStatus?: string | null; required?: boolean; gitlabLinks?: Array<{ gitlabProjectId: string; issueIid: number }> }>>([]);
   const [workspaceLinks, setWorkspaceLinks] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState(() => readUrlFilter('all'));
   const [title, setTitle] = useState('');
@@ -181,7 +181,8 @@ export function App() {
   const [wazuhAlerts, setWazuhAlerts] = useState<Array<{ id: string; ruleDescription: string; level: number; timestamp: string }> | null>(null);
   const [content, setContent] = useState('');
   const [dashboardDay, setDashboardDay] = useState<'today' | 'tomorrow'>('today');
-  const [dashboardItems, setDashboardItems] = useState<Array<{ id: string; title: string; type: string; dueAt?: string | null }>>([]);
+  const [dashboardItems, setDashboardItems] = useState<Array<{ id: string; title: string; type: string; status: string; dueAt?: string | null; mergeRequestState?: string | null; pipelineStatus?: string | null; gitlabLinks?: Array<{ gitlabProjectId: string; issueIid: number }> }>>([]);
+  const [detailItemId, setDetailItemId] = useState<string | null>(null);
   const [cycles, setCycles] = useState<Array<{ id: string; name: string; closedAt?: string | null }>>([]);
   const [triage, setTriage] = useState<Array<{ id: string; title: string; type: string }>>([]);
   const [activeTimers, setActiveTimers] = useState<Record<string, string>>({});
@@ -501,6 +502,7 @@ export function App() {
     if (response.ok) {
       const updated = await response.json();
       setItems((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
+      setDashboardItems((current) => current.map((entry) => entry.id === updated.id ? { ...entry, status: updated.status, mergeRequestState: updated.mergeRequestState, pipelineStatus: updated.pipelineStatus } : entry));
     }
   }
 
@@ -619,7 +621,6 @@ export function App() {
     { id: 'today', label: 'Aujourd’hui', icon: 'clock', group: 'Travail' },
     { id: 'catalog', label: 'Catalogue', icon: 'layers', group: 'Infrastructure' },
     { id: 'network', label: 'Topologie réseau', icon: 'network', group: 'Infrastructure' },
-    { id: 'integrations', label: 'Intégrations', icon: 'widget', group: 'Infrastructure' },
     { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: 'Infrastructure' },
     { id: 'widgets', label: 'Widgets', icon: 'widget', group: 'Infrastructure' },
     { id: 'settings', label: 'Paramètres', icon: 'gear', group: 'Autres' },
@@ -638,7 +639,7 @@ export function App() {
       {item.badge ? <span className="nav-badge">{item.badge}</span> : null}
     </button>
   );
-  const itemCard = (item: typeof items[number]) =><article className={item.required ? 'item item-required' : 'item'} key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><span className="item-title"><strong>{item.title}</strong>{item.required && <span className="required-badge" title="Item obligatoire">Obligatoire</span>}</span><span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}{item.coderWorkspaceStatus && ` · Workspace ${item.coderWorkspaceStatus}`}</span><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><span className="item-actions"><button className={item.required ? 'required-toggle active' : 'required-toggle'} type="button" aria-pressed={Boolean(item.required)} aria-label={item.required ? `Retirer le caractère obligatoire de ${item.title}` : `Marquer ${item.title} comme obligatoire`} onClick={() => void toggleRequired(item)}>{item.required ? 'Obligatoire ✓' : 'Marquer obligatoire'}</button>{item.type === 'task' && <button className="open-workspace" type="button" onClick={() => void openWorkspace(item)}>{item.coderWorkspaceName ? 'Ouvrir dans VS Code' : 'Ouvrir un environnement'}</button>}<button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></span></article>;
+  const itemCard = (item: typeof items[number]) =><article className={item.required ? 'item item-required' : 'item'} key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><span className="item-title"><strong>{item.title}</strong>{item.required && <span className="required-badge" title="Item obligatoire">Obligatoire</span>}</span><span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}{item.coderWorkspaceStatus && ` · Workspace ${item.coderWorkspaceStatus}`}</span><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><span className="item-actions"><button className={item.required ? 'required-toggle active' : 'required-toggle'} type="button" aria-pressed={Boolean(item.required)} aria-label={item.required ? `Retirer le caractère obligatoire de ${item.title}` : `Marquer ${item.title} comme obligatoire`} onClick={() => void toggleRequired(item)}>{item.required ? 'Obligatoire ✓' : 'Marquer obligatoire'}</button>{item.type === 'task' && <button className="open-workspace" type="button" onClick={() => void openWorkspace(item)}>{item.coderWorkspaceName ? 'Ouvrir dans VS Code' : 'Ouvrir un environnement'}</button>}<button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="detail-open" type="button" onClick={() => setDetailItemId(item.id)}>Détail</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></span></article>;
 
   return (
     <div className={`shell layout-${navLayout}`}>
@@ -766,6 +767,11 @@ export function App() {
                 <span className="timeline-time">{item.dueAt ? new Date(item.dueAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
                 <span className={`type type-${item.type}`}>{item.type}</span>
                 <strong>{item.title}</strong>
+                <span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}</span>
+                <select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}>
+                  <option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option>
+                </select>
+                <button className="detail-open" type="button" onClick={() => setDetailItemId(item.id)}>Détail</button>
               </article>
             ))}
             {dashboardItems.length === 0 && <p className="empty">Aucun item programmé pour {dashboardDay === 'today' ? "aujourd'hui" : 'demain'}.</p>}
@@ -776,8 +782,6 @@ export function App() {
             {!networkError && !networkGraph && <p className="empty">Chargement de la topologie…</p>}
             {!networkError && networkGraph && <NetworkGraph nodes={networkGraph.nodes} edges={networkGraph.edges} />}
           </div>
-        ) : panel === 'integrations' ? (
-          <IntegrationsPanel />
         ) : panel === 'haproxy' ? (
           <div className="items haproxy-panel">
             {haproxyError && <p className="error" role="alert">{haproxyError}</p>}
@@ -915,6 +919,18 @@ export function App() {
           />
         ) : panel === 'triage' ? <div className="items triage-list">{triage.map((item) => <article className="item" key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><strong>{item.title}</strong><button type="button" onClick={() => void transitionTriage(item.id, 'accept')}>Accepter</button><button className="delete" type="button" aria-label={`Rejeter ${item.title}`} onClick={() => void transitionTriage(item.id, 'reject')}>×</button></article>)}{triage.length === 0 && <p className="empty">La file de triage est vide.</p>}</div> : null}
       </main>
+      {detailItemId && (() => {
+        const detailItem = items.find((entry) => entry.id === detailItemId) ?? dashboardItems.find((entry) => entry.id === detailItemId);
+        if (!detailItem) return null;
+        return (
+          <TaskDetailPanel
+            item={detailItem}
+            apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}
+            onClose={() => setDetailItemId(null)}
+            onStatusChange={(target, nextStatus) => void updateStatus(target, nextStatus)}
+          />
+        );
+      })()}
       {status && <span className="status" role="status">{status}</span>}
       <Command.Dialog open={paletteOpen} onOpenChange={setPaletteOpen} label="Palette de commandes">
         <Command.Input placeholder="Rechercher une commande..." />

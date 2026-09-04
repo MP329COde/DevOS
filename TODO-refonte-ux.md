@@ -124,9 +124,9 @@ Contexte : la documentation doit se limiter à la documentation de DevOS lui-mê
 
 Contexte : demande d'une vraie vue "tâches du jour" pilotable depuis l'app, et d'un vrai module développement pour GitLab (pas seulement un badge de statut) — pouvoir ouvrir une tâche liée à une issue/MR, voir son état, et ajouter un commentaire qui se propage vers GitLab sans changer d'outil.
 
-- [ ] Vérifier/étendre la vue "Aujourd'hui" existante (Phase 3) pour permettre de contrôler une tâche directement (changer statut, voir détail) sans changer de panel
-- [ ] Ajouter la possibilité de poster un commentaire sur un item lié à une issue GitLab depuis l'interface DevOS, propagé via `GitLabClient` existant (note sur l'issue), avec historique des commentaires affiché sur la tâche
-- [ ] Vérifier Playwright : ajout d'un commentaire depuis l'UI, apparition dans l'historique
+- [x] Vérifier/étendre la vue "Aujourd'hui" existante (Phase 3) pour permettre de contrôler une tâche directement (changer statut, voir détail) sans changer de panel
+- [x] Ajouter la possibilité de poster un commentaire sur un item lié à une issue GitLab depuis l'interface DevOS, propagé via `GitLabClient` existant (note sur l'issue), avec historique des commentaires affiché sur la tâche
+- [x] Vérifier Playwright : ajout d'un commentaire depuis l'UI, apparition dans l'historique
 
 ## O. Dashboard — cases de stats éditables + widget performance machine + grille responsive avec prévisualisation
 
@@ -167,8 +167,8 @@ Contexte : les widgets doivent être personnalisables et il doit être possible 
 
 Contexte : le générateur d'intégration générique (section D) existe mais doit devenir une vraie page à l'intérieur de Paramètres (pas un panel séparé isolé), organisée en sections comme le reste de J plutôt qu'en bloc unique.
 
-- [ ] Déplacer/lier le panel "Intégrations" (section D) comme sous-section de Paramètres, cohérent avec le regroupement en sections de la section J
-- [ ] Vérifier Playwright : accès aux intégrations depuis Paramètres, navigation par section
+- [x] Déplacer/lier le panel "Intégrations" (section D) comme sous-section de Paramètres, cohérent avec le regroupement en sections de la section J
+- [x] Vérifier Playwright : accès aux intégrations depuis Paramètres, navigation par section
 
 ---
 

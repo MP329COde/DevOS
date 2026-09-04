@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { SecretsPanel } from './SecretsPanel.js';
+import { IntegrationsPanel } from './IntegrationsPanel.js';
 import { THEME_COLOR_SETTINGS } from '../theme.js';
 
 const apiBase = () => import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
@@ -171,21 +172,32 @@ export function SettingsPanel({ navLayout, setNavLayout, themeMode, setThemeMode
 
       <SecretsPanel />
 
+      <details
+        id="settings-section-integration-builder"
+        className="widget-card settings-section"
+        open={openSection === 'integration-builder'}
+        onToggle={(event) => { if ((event.target as HTMLDetailsElement).open) setOpenSection('integration-builder'); }}
+      >
+        <summary>Générateur d'intégration (custom)</summary>
+        <IntegrationsPanel />
+      </details>
+
       {error && <p className="error" role="alert">{error}</p>}
       {!error && known.length === 0 && <p className="empty">Chargement des paramètres…</p>}
 
-      {known.length > 0 && (
-        <section className="widget-card settings-toc" aria-label="Sections des intégrations">
-          <h3>Intégrations</h3>
-          <div className="filters">
-            {SETTINGS_SECTIONS.map((section) => (
-              <button key={section.id} type="button" className={openSection === section.id ? 'filter active' : 'filter'} onClick={() => scrollToSection(section.id)}>
-                {section.label}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      <section className="widget-card settings-toc" aria-label="Sections des intégrations">
+        <h3>Intégrations</h3>
+        <div className="filters">
+          <button type="button" className={openSection === 'integration-builder' ? 'filter active' : 'filter'} onClick={() => scrollToSection('integration-builder')}>
+            Générateur d'intégration
+          </button>
+          {SETTINGS_SECTIONS.map((section) => (
+            <button key={section.id} type="button" className={openSection === section.id ? 'filter active' : 'filter'} onClick={() => scrollToSection(section.id)}>
+              {section.label}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {SETTINGS_SECTIONS.map((section) => {
         const sectionKeys = genericKeys.filter((key) => section.keys.includes(key));
