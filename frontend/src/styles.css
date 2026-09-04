@@ -69,6 +69,13 @@ input { flex: 1; min-width: 0; }
 .timer { padding: 8px 10px; color: #fffdf4; background: #49634c; }
 .open-workspace { padding: 8px 10px; color: #fffdf4; background: #7a632d; }
 .integrations { font: 11px Arial, sans-serif; color: #a34f31; }
+.item-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.item-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.item-required { border-left-color: #a34f31; }
+.required-badge { flex-shrink: 0; display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font: 700 10px sans-serif; text-transform: uppercase; letter-spacing: .04em; color: #fffdf4; background: #a34f31; }
+.required-toggle { padding: 8px 10px; color: #a34f31; background: rgba(163, 79, 49, .1); }
+.required-toggle:hover { background: rgba(163, 79, 49, .2); }
+.required-toggle.active { color: #fffdf4; background: #a34f31; }
 .timeline-entry { grid-template-columns: 64px auto 1fr; }
 .timeline-time { font: 700 13px Arial, sans-serif; color: #49634c; }
 .haproxy-server { grid-template-columns: 1fr auto; }
