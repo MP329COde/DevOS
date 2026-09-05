@@ -16,9 +16,31 @@ export interface CreateDevTemplateInput {
   integrableTools?: string[];
   generatedItems?: string[];
   isDefault?: boolean;
+  /** "custom" (créé dans DevOS, défaut) ou "community" (importé d'un registre/dépôt public). */
+  source?: string;
+  /** Registre du gabarit communautaire, ex. "npm", "github". */
+  registry?: string;
+  /** Identifiant à référencer côté projet créé : nom de paquet npm ou "org/repo" GitHub. */
+  packageName?: string;
+  /** URL du dépôt source du gabarit communautaire. */
+  repositoryUrl?: string;
 }
 
 export type UpdateDevTemplateInput = Partial<CreateDevTemplateInput> & { active?: boolean };
+
+export interface ListDevTemplatesOptions {
+  includeInactive?: boolean;
+  /** Filtre par type (ex. "api", "web-app"). */
+  type?: string;
+  /** Filtre par source ("custom" | "community"). */
+  source?: string;
+  /** Filtre : le template doit inclure cette technologie (ex. "node", "npm"). */
+  technology?: string;
+  /** Recherche texte libre sur le nom/description. */
+  search?: string;
+  sortBy?: 'name' | 'updatedAt' | 'version';
+  sortDirection?: 'asc' | 'desc';
+}
 
 /**
  * Catalogue de templates du module Développement (section AM.3). Sert de base à l'assistant de
@@ -29,10 +51,27 @@ export type UpdateDevTemplateInput = Partial<CreateDevTemplateInput> & { active?
 export class DevTemplateService {
   public constructor(private readonly database: PrismaClient) {}
 
-  public list(includeInactive = true): Promise<DevTemplate[]> {
+  /**
+   * Liste filtrable/triable pour le catalogue (panel de gestion et sélecteur du wizard de
+   * création de projet) : filtres par type, source (custom/community) et technologie, tri par
+   * nom/version/dernière mise à jour. Sans options, conserve le comportement historique (tout,
+   * trié par défaut puis nom).
+   */
+  public list(options: ListDevTemplatesOptions = {}): Promise<DevTemplate[]> {
+    const { includeInactive = true, type, source, technology, search, sortBy, sortDirection = 'asc' } = options;
     return this.database.devTemplate.findMany({
-      where: includeInactive ? undefined : { active: true },
-      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+      where: {
+        ...(includeInactive ? {} : { active: true }),
+        ...(type ? { type } : {}),
+        ...(source ? { source } : {}),
+        ...(technology ? { technologies: { has: technology } } : {}),
+        ...(search
+          ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { description: { contains: search, mode: 'insensitive' } }] }
+          : {}),
+      },
+      orderBy: sortBy
+        ? [{ [sortBy]: sortDirection }]
+        : [{ isDefault: 'desc' }, { name: 'asc' }],
     });
   }
 
@@ -61,6 +100,10 @@ export class DevTemplateService {
         generatedItems: input.generatedItems ?? [],
         isDefault: Boolean(input.isDefault),
         active: true,
+        source: input.source?.trim() || 'custom',
+        registry: input.registry?.trim() || null,
+        packageName: input.packageName?.trim() || null,
+        repositoryUrl: input.repositoryUrl?.trim() || null,
       },
     });
   }
@@ -83,6 +126,10 @@ export class DevTemplateService {
         ...(input.generatedItems !== undefined ? { generatedItems: input.generatedItems } : {}),
         ...(input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
         ...(input.active !== undefined ? { active: input.active } : {}),
+        ...(input.source !== undefined ? { source: input.source.trim() || 'custom' } : {}),
+        ...(input.registry !== undefined ? { registry: input.registry.trim() || null } : {}),
+        ...(input.packageName !== undefined ? { packageName: input.packageName.trim() || null } : {}),
+        ...(input.repositoryUrl !== undefined ? { repositoryUrl: input.repositoryUrl.trim() || null } : {}),
       },
     });
   }
@@ -114,6 +161,10 @@ export class DevTemplateService {
         isDefault: Boolean(changes.isDefault),
         active: true,
         previousVersionId: previous.id,
+        source: changes.source?.trim() || previous.source,
+        registry: changes.registry !== undefined ? (changes.registry.trim() || null) : previous.registry,
+        packageName: changes.packageName !== undefined ? (changes.packageName.trim() || null) : previous.packageName,
+        repositoryUrl: changes.repositoryUrl !== undefined ? (changes.repositoryUrl.trim() || null) : previous.repositoryUrl,
       },
     });
   }

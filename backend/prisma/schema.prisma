@@ -171,6 +171,11 @@ model DevProject {
   plannedStartAt DateTime?           @map("planned_start_at")
   plannedEndAt   DateTime?           @map("planned_end_at")
   deliveryGoal   String?             @map("delivery_goal") @db.Text
+  /// Gabarit à partir duquel ce projet a été créé (assistant de création, AM.2) ; null pour un
+  /// projet vierge ou créé avant l'ajout de cette relation. `onDelete: SetNull` : supprimer un
+  /// template du catalogue ne doit jamais casser les projets déjà créés à partir de lui.
+  templateId     String?             @map("template_id") @db.Uuid
+  template       DevTemplate?        @relation(fields: [templateId], references: [id], onDelete: SetNull)
   items          Item[]
   releases       Release[]
   environments   Environment[]
@@ -179,6 +184,7 @@ model DevProject {
   updatedAt      DateTime            @updatedAt @map("updated_at")
 
   @@index([status])
+  @@index([templateId])
   @@map("dev_projects")
 }
 
@@ -420,23 +426,34 @@ model ItemLink {
  * créés à partir de lui restent inchangés).
  */
 model DevTemplate {
-  id                String   @id @default(uuid()) @db.Uuid
-  name              String   @db.VarChar(200)
-  type              String   @map("type") @db.VarChar(50)
-  description       String?  @db.Text
-  technologies      String[] @map("technologies")
-  dependencies      Json     @default("[]") @map("dependencies")
-  version           String   @default("1.0.0") @db.VarChar(50)
-  environments      String[] @map("environments")
-  integrableTools   String[] @map("integrable_tools")
-  generatedItems    String[] @map("generated_items")
-  isDefault         Boolean  @default(false) @map("is_default")
-  active            Boolean  @default(true)
-  previousVersionId String?  @map("previous_version_id") @db.Uuid
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id                String       @id @default(uuid()) @db.Uuid
+  name              String       @db.VarChar(200)
+  type              String       @map("type") @db.VarChar(50)
+  description       String?      @db.Text
+  technologies      String[]     @map("technologies")
+  dependencies      Json         @default("[]") @map("dependencies")
+  version           String       @default("1.0.0") @db.VarChar(50)
+  environments      String[]     @map("environments")
+  integrableTools   String[]     @map("integrable_tools")
+  generatedItems    String[]     @map("generated_items")
+  isDefault         Boolean      @default(false) @map("is_default")
+  active            Boolean      @default(true)
+  previousVersionId String?      @map("previous_version_id") @db.Uuid
+  /// "custom" (créé dans DevOS) ou "community" (importé d'un registre/dépôt public, ex. npm create-*).
+  source            String       @default("custom") @db.VarChar(20)
+  /// Registre du gabarit communautaire, ex. "npm", "github". Null pour les templates "custom".
+  registry          String?      @db.VarChar(20)
+  /// Identifiant à référencer côté projet créé : nom de paquet npm (ex. "create-vite") pour
+  /// registry="npm", ou "org/repo" pour registry="github".
+  packageName       String?      @map("package_name") @db.VarChar(300)
+  /// URL du dépôt source du gabarit communautaire (affichage + lien direct), optionnelle.
+  repositoryUrl     String?      @map("repository_url") @db.VarChar(500)
+  projects          DevProject[]
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
 
   @@index([active])
+  @@index([source, type])
   @@map("dev_templates")
 }
 

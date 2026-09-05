@@ -67,5 +67,6 @@ function parseInput(body: unknown, partial = false): DevProjectInput {
   if ('plannedStartAt' in b) input.plannedStartAt = (b.plannedStartAt as string | null) ?? null;
   if ('plannedEndAt' in b) input.plannedEndAt = (b.plannedEndAt as string | null) ?? null;
   if ('deliveryGoal' in b) input.deliveryGoal = (b.deliveryGoal as string | null) ?? null;
+  if ('templateId' in b) input.templateId = (b.templateId as string | null) ?? null;
   return input;
 }

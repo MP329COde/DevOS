@@ -91,6 +91,6 @@ test('createNewVersion creates a new row carrying previousVersionId and inherite
 test('list orders default-first then by name', async () => {
   const { database, calls } = makeDatabase();
   const service = new DevTemplateService(database);
-  await service.list(false);
+  await service.list({ includeInactive: false });
   assert.deepEqual(calls.findMany[0], { where: { active: true }, orderBy: [{ isDefault: 'desc' }, { name: 'asc' }] });
 });

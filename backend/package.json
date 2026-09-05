@@ -6,6 +6,7 @@
     "db:validate": "prisma validate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
+    "db:seed-templates": "node scripts/seed-community-templates.mjs",
     "test": "node --test --import tsx src/*.test.ts src/**/*.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "npm run typecheck",

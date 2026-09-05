@@ -1,7 +1,7 @@
-import type { CreateDevTemplateInput, DevTemplateDependency, UpdateDevTemplateInput } from './dev-template-service.js';
+import type { CreateDevTemplateInput, DevTemplateDependency, ListDevTemplatesOptions, UpdateDevTemplateInput } from './dev-template-service.js';
 
 export interface DevTemplateHttpService {
-  list(): Promise<unknown>;
+  list(options?: ListDevTemplatesOptions): Promise<unknown>;
   get(id: string): Promise<unknown>;
   create(input: CreateDevTemplateInput): Promise<unknown>;
   update(id: string, input: UpdateDevTemplateInput): Promise<unknown>;
@@ -16,9 +16,11 @@ export interface DevTemplateHttpResponse {
   body: unknown;
 }
 
-export async function handleDevTemplateRequest(method: string, path: string, body: unknown, service: DevTemplateHttpService): Promise<DevTemplateHttpResponse> {
+export async function handleDevTemplateRequest(method: string, url: string, body: unknown, service: DevTemplateHttpService): Promise<DevTemplateHttpResponse> {
   try {
-    if (method === 'GET' && path === '/api/dev/templates') return { status: 200, body: await service.list() };
+    const [path, query] = url.split('?');
+
+    if (method === 'GET' && path === '/api/dev/templates') return { status: 200, body: await service.list(parseListOptions(query)) };
     if (method === 'POST' && path === '/api/dev/templates') return { status: 201, body: await service.create(parseCreateInput(body)) };
 
     const item = path.match(/^\/api\/dev\/templates\/([^/]+)$/);
@@ -54,6 +56,22 @@ export async function handleDevTemplateRequest(method: string, path: string, bod
   }
 }
 
+function parseListOptions(query: string | undefined): ListDevTemplatesOptions {
+  const params = new URLSearchParams(query ?? '');
+  const sortByRaw = params.get('sortBy');
+  const sortBy = sortByRaw === 'name' || sortByRaw === 'updatedAt' || sortByRaw === 'version' ? sortByRaw : undefined;
+  const sortDirection = params.get('sortDirection') === 'desc' ? 'desc' : 'asc';
+  return {
+    includeInactive: params.get('includeInactive') !== 'false',
+    type: params.get('type') || undefined,
+    source: params.get('source') || undefined,
+    technology: params.get('technology') || undefined,
+    search: params.get('search') || undefined,
+    sortBy,
+    sortDirection,
+  };
+}
+
 function parseCreateInput(body: unknown): CreateDevTemplateInput {
   if (!body || typeof body !== 'object') throw new Error('Corps de requête manquant');
   const b = body as Record<string, unknown>;
@@ -70,6 +88,10 @@ function parseCreateInput(body: unknown): CreateDevTemplateInput {
     integrableTools: parseStringArray(b.integrableTools),
     generatedItems: parseStringArray(b.generatedItems),
     isDefault: typeof b.isDefault === 'boolean' ? b.isDefault : undefined,
+    source: typeof b.source === 'string' ? b.source : undefined,
+    registry: typeof b.registry === 'string' ? b.registry : undefined,
+    packageName: typeof b.packageName === 'string' ? b.packageName : undefined,
+    repositoryUrl: typeof b.repositoryUrl === 'string' ? b.repositoryUrl : undefined,
   };
 }
 
@@ -87,6 +109,10 @@ function parseUpdateInput(body: unknown): UpdateDevTemplateInput {
     generatedItems: parseStringArray(b.generatedItems),
     isDefault: typeof b.isDefault === 'boolean' ? b.isDefault : undefined,
     active: typeof b.active === 'boolean' ? b.active : undefined,
+    source: typeof b.source === 'string' ? b.source : undefined,
+    registry: typeof b.registry === 'string' ? b.registry : undefined,
+    packageName: typeof b.packageName === 'string' ? b.packageName : undefined,
+    repositoryUrl: typeof b.repositoryUrl === 'string' ? b.repositoryUrl : undefined,
   };
 }
 

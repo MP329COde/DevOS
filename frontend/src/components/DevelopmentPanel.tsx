@@ -16,8 +16,24 @@ export interface DevProject {
   plannedStartAt?: string | null;
   plannedEndAt?: string | null;
   deliveryGoal?: string | null;
+  templateId?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface DevTemplateOption {
+  id: string;
+  name: string;
+  type: string;
+  description?: string | null;
+  technologies: string[];
+  version: string;
+  isDefault: boolean;
+  active: boolean;
+  source: string;
+  registry?: string | null;
+  packageName?: string | null;
+  repositoryUrl?: string | null;
 }
 
 interface DevProjectDashboardSection {
@@ -109,12 +125,24 @@ const strings = {
     creationFailed: 'La création du projet a échoué. Vérifiez que le backend est démarré.',
     wizardStepsAria: 'Étapes de création de projet',
     templateHeading: 'Template de départ',
-    templateHint: 'Le catalogue de templates détaillé arrivera dans une prochaine itération ; ce choix reste modifiable jusqu\'au résumé.',
+    templateHint: 'Choisissez un template du catalogue (interne ou communautaire) ou partez d\'un projet vierge ; ce choix reste modifiable jusqu\'au résumé.',
     templateAria: 'Template',
     templateBlank: 'Projet vierge',
-    templateApiNode: 'API Node.js',
-    templateFrontendReact: 'Frontend React',
-    templateWorker: 'Worker / job planifié',
+    templateLoadFailed: 'Impossible de charger le catalogue de templates.',
+    templateSourceFilterAria: 'Filtrer par source',
+    templateSourceAll: 'Toutes les sources',
+    templateSourceCustom: 'Templates internes',
+    templateSourceCommunity: 'Templates communautaires',
+    templateTypeFilterAria: 'Filtrer par type',
+    templateTypeAll: 'Tous les types',
+    templateSortAria: 'Trier par',
+    templateSortDefault: 'Par défaut',
+    templateSortName: 'Nom',
+    templateSortUpdated: 'Dernière mise à jour',
+    templateCommunityBadge: 'Communautaire',
+    templatePackageLabel: (registry: string, name: string) => `${registry} : ${name}`,
+    templateSelectedNone: 'Aucun template sélectionné (projet vierge)',
+    templateSelected: (name: string) => `Template sélectionné : ${name}`,
     stackHeading: 'Langage, framework et gestionnaire de paquets',
     stackAria: 'Stack technique',
     environmentsHeading: 'Environnements de déploiement',
@@ -189,12 +217,24 @@ const strings = {
     creationFailed: 'Failed to create the project. Check that the backend is running.',
     wizardStepsAria: 'Project creation steps',
     templateHeading: 'Starting template',
-    templateHint: 'The detailed template catalog will arrive in a future iteration; this choice can still be changed until the summary.',
+    templateHint: 'Choose a template from the catalog (internal or community) or start from a blank project; this choice can still be changed until the summary.',
     templateAria: 'Template',
     templateBlank: 'Blank project',
-    templateApiNode: 'Node.js API',
-    templateFrontendReact: 'React frontend',
-    templateWorker: 'Worker / scheduled job',
+    templateLoadFailed: 'Unable to load the template catalog.',
+    templateSourceFilterAria: 'Filter by source',
+    templateSourceAll: 'All sources',
+    templateSourceCustom: 'Internal templates',
+    templateSourceCommunity: 'Community templates',
+    templateTypeFilterAria: 'Filter by type',
+    templateTypeAll: 'All types',
+    templateSortAria: 'Sort by',
+    templateSortDefault: 'Default',
+    templateSortName: 'Name',
+    templateSortUpdated: 'Last updated',
+    templateCommunityBadge: 'Community',
+    templatePackageLabel: (registry: string, name: string) => `${registry}: ${name}`,
+    templateSelectedNone: 'No template selected (blank project)',
+    templateSelected: (name: string) => `Selected template: ${name}`,
     stackHeading: 'Language, framework and package manager',
     stackAria: 'Technical stack',
     environmentsHeading: 'Deployment environments',
@@ -434,7 +474,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
   const [step, setStep] = useState<WizardStep>('template');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [template, setTemplate] = useState('vierge');
+  const [selectedTemplate, setSelectedTemplate] = useState<DevTemplateOption | null>(null);
   const [stack, setStack] = useState('node-npm');
   const [environments, setEnvironments] = useState<string[]>(['dev', 'staging', 'prod']);
   const [gitProvider, setGitProvider] = useState<'gitlab' | 'github'>('gitlab');
@@ -442,7 +482,28 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const [templates, setTemplates] = useState<DevTemplateOption[]>([]);
+  const [templateLoadError, setTemplateLoadError] = useState('');
+  const [templateSourceFilter, setTemplateSourceFilter] = useState<'' | 'custom' | 'community'>('');
+  const [templateTypeFilter, setTemplateTypeFilter] = useState('');
+  const [templateSort, setTemplateSort] = useState<'' | 'name' | 'updatedAt'>('');
+
+  useEffect(() => {
+    const params = new URLSearchParams({ includeInactive: 'false' });
+    if (templateSourceFilter) params.set('source', templateSourceFilter);
+    if (templateTypeFilter) params.set('type', templateTypeFilter);
+    if (templateSort) params.set('sortBy', templateSort);
+    void fetch(`${apiBase}/api/dev/templates?${params.toString()}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        setTemplates(await response.json());
+        setTemplateLoadError('');
+      })
+      .catch(() => setTemplateLoadError(s.templateLoadFailed));
+  }, [apiBase, templateSourceFilter, templateTypeFilter, templateSort, s.templateLoadFailed]);
+
   const stepIndex = WIZARD_STEPS.indexOf(step);
+  const templateTypes = Array.from(new Set(templates.map((t) => t.type))).sort();
 
   function toggleEnvironment(env: string) {
     setEnvironments((current) => (current.includes(env) ? current.filter((e) => e !== env) : [...current, env]));
@@ -462,13 +523,14 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
           description: description.trim() || undefined,
           owner: owner.trim() || undefined,
           status: 'planning',
-          deliveryGoal: s.deliveryGoal(template, stack, environments.join(', ') || s.none, gitProvider),
+          templateId: selectedTemplate?.id,
+          deliveryGoal: s.deliveryGoal(selectedTemplate?.name ?? s.templateBlank, stack, environments.join(', ') || s.none, gitProvider),
         }),
       });
       if (!response.ok) throw new Error();
       const created = await response.json();
       onCreated(created);
-      setName(''); setDescription(''); setOwner(''); setStep('template');
+      setName(''); setDescription(''); setOwner(''); setStep('template'); setSelectedTemplate(null);
     } catch {
       setError(s.creationFailed);
     } finally {
@@ -493,15 +555,62 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
       </nav>
 
       {step === 'template' && (
-        <section className="view-group">
+        <section className="view-group template-picker">
           <h3>{s.templateHeading}</h3>
           <p className="empty">{s.templateHint}</p>
-          <select aria-label={s.templateAria} value={template} onChange={(event) => setTemplate(event.target.value)}>
-            <option value="vierge">{s.templateBlank}</option>
-            <option value="api-node">{s.templateApiNode}</option>
-            <option value="frontend-react">{s.templateFrontendReact}</option>
-            <option value="worker">{s.templateWorker}</option>
-          </select>
+
+          <div className="template-picker-filters">
+            <select aria-label={s.templateSourceFilterAria} value={templateSourceFilter} onChange={(event) => setTemplateSourceFilter(event.target.value as '' | 'custom' | 'community')}>
+              <option value="">{s.templateSourceAll}</option>
+              <option value="custom">{s.templateSourceCustom}</option>
+              <option value="community">{s.templateSourceCommunity}</option>
+            </select>
+            <select aria-label={s.templateTypeFilterAria} value={templateTypeFilter} onChange={(event) => setTemplateTypeFilter(event.target.value)}>
+              <option value="">{s.templateTypeAll}</option>
+              {templateTypes.map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+            <select aria-label={s.templateSortAria} value={templateSort} onChange={(event) => setTemplateSort(event.target.value as '' | 'name' | 'updatedAt')}>
+              <option value="">{s.templateSortDefault}</option>
+              <option value="name">{s.templateSortName}</option>
+              <option value="updatedAt">{s.templateSortUpdated}</option>
+            </select>
+          </div>
+
+          {templateLoadError && <p className="error" role="alert">{templateLoadError}</p>}
+
+          <div className="template-picker-grid" role="listbox" aria-label={s.templateAria}>
+            <button
+              type="button"
+              role="option"
+              aria-selected={selectedTemplate === null}
+              className={`template-picker-card${selectedTemplate === null ? ' selected' : ''}`}
+              onClick={() => setSelectedTemplate(null)}
+            >
+              <strong>{s.templateBlank}</strong>
+            </button>
+            {templates.map((tpl) => (
+              <button
+                key={tpl.id}
+                type="button"
+                role="option"
+                aria-selected={selectedTemplate?.id === tpl.id}
+                className={`template-picker-card${selectedTemplate?.id === tpl.id ? ' selected' : ''}`}
+                onClick={() => setSelectedTemplate(tpl)}
+              >
+                <strong>{tpl.name}</strong>{' '}
+                <span className="type type-template">{tpl.type}</span>{' '}
+                {tpl.source === 'community' && <span className="status-badge status-badge-community">{s.templateCommunityBadge}</span>}
+                {tpl.description && <p className="template-picker-desc">{tpl.description}</p>}
+                {tpl.registry && tpl.packageName && (
+                  <p className="template-picker-desc">{s.templatePackageLabel(tpl.registry, tpl.packageName)}</p>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <p className="empty">{selectedTemplate ? s.templateSelected(selectedTemplate.name) : s.templateSelectedNone}</p>
         </section>
       )}
 
@@ -550,7 +659,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
           <label htmlFor="dev-wizard-owner">{s.owner}</label>
           <input id="dev-wizard-owner" aria-label={s.ownerAria} placeholder={s.owner} value={owner} onChange={(event) => setOwner(event.target.value)} />
           <ul>
-            <li>{s.summaryTemplate(template)}</li>
+            <li>{s.summaryTemplate(selectedTemplate?.name ?? s.templateBlank)}</li>
             <li>{s.summaryStack(stack)}</li>
             <li>{s.summaryEnvironments(environments.join(', ') || s.none)}</li>
             <li>{s.summaryGitProvider(gitProvider)}</li>

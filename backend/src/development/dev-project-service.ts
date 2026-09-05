@@ -9,6 +9,8 @@ export interface DevProjectInput {
   plannedStartAt?: string | null;
   plannedEndAt?: string | null;
   deliveryGoal?: string | null;
+  /** Template du catalogue (`DevTemplate`) à partir duquel ce projet est créé (assistant AM.2). */
+  templateId?: string | null;
 }
 
 /**
@@ -66,6 +68,7 @@ export class DevProjectService {
         plannedStartAt: input.plannedStartAt ? new Date(input.plannedStartAt) : null,
         plannedEndAt: input.plannedEndAt ? new Date(input.plannedEndAt) : null,
         deliveryGoal: input.deliveryGoal ?? null,
+        templateId: input.templateId ?? null,
       },
     });
   }
@@ -83,6 +86,7 @@ export class DevProjectService {
     if (input.plannedStartAt !== undefined) data.plannedStartAt = input.plannedStartAt ? new Date(input.plannedStartAt) : null;
     if (input.plannedEndAt !== undefined) data.plannedEndAt = input.plannedEndAt ? new Date(input.plannedEndAt) : null;
     if (input.deliveryGoal !== undefined) data.deliveryGoal = input.deliveryGoal;
+    if (input.templateId !== undefined) data.templateId = input.templateId;
     return this.database.devProject.update({ where: { id }, data });
   }
 
