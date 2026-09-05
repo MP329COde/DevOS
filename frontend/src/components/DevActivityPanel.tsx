@@ -116,7 +116,7 @@ export function DevActivityPanel({ apiBase }: { apiBase: string }) {
         <button className={tab === 'search' ? 'filter active' : 'filter'} type="button" onClick={() => setTab('search')}>Recherche globale</button>
         <button className={tab === 'integrations' ? 'filter active' : 'filter'} type="button" onClick={() => setTab('integrations')}>Intégrations dev</button>
         <button className={tab === 'dashboard' ? 'filter active' : 'filter'} type="button" onClick={() => setTab('dashboard')}>Dashboard personnel</button>
-        <button className={tab === 'ai' ? 'filter active' : 'filter'} type="button" onClick={() => setTab('ai')}>Assistant IA (stub)</button>
+        <button className={tab === 'ai' ? 'filter active' : 'filter'} type="button" onClick={() => setTab('ai')}>Assistant IA (aperçu)</button>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
 
@@ -187,7 +187,7 @@ export function DevActivityPanel({ apiBase }: { apiBase: string }) {
 
       {tab === 'ai' && (
         <div>
-          <p className="empty">Assistant/agent IA développement : aucune vraie API IA n'est branchée pour ce module. Les réponses ci-dessous sont un stub explicite.</p>
+          <p className="empty">Assistant/agent IA développement : aucune vraie API IA n'est branchée pour ce module. Les réponses ci-dessous sont un aperçu de démonstration, pas une réponse générée par un modèle réel.</p>
           <form className="new-item" onSubmit={(event) => void askAssistant(event)}>
             <input aria-label="Question à l'assistant IA" placeholder="Question sur le projet..." value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} />
             <button type="submit">Demander</button>

@@ -341,7 +341,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
       {step === 'template' && (
         <section className="view-group">
           <h3>Template de départ</h3>
-          <p className="empty">Le catalogue de templates détaillé arrive avec la section AM.3 ; ce choix reste modifiable jusqu'au résumé.</p>
+          <p className="empty">Le catalogue de templates détaillé arrivera dans une prochaine itération ; ce choix reste modifiable jusqu'au résumé.</p>
           <select aria-label="Template" value={template} onChange={(event) => setTemplate(event.target.value)}>
             <option value="vierge">Projet vierge</option>
             <option value="api-node">API Node.js</option>
@@ -382,7 +382,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
             <option value="gitlab">GitLab</option>
             <option value="github">GitHub</option>
           </select>
-          <p className="empty">La création effective du dépôt + branches est prise en charge par la section AM.4 (Dépôts Git centralisés) ; le choix ici est mémorisé pour cette sous-vague.</p>
+          <p className="empty">La création effective du dépôt et des branches est prise en charge par la sous-vue Dépôts (Dépôts Git centralisés) ; le choix ici est mémorisé pour la suite de l'assistant.</p>
         </section>
       )}
 

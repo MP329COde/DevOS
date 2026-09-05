@@ -96,7 +96,7 @@ export function DevReposPanel({ apiBase }: { apiBase: string }) {
 
   return (
     <div className="items dev-repos-panel">
-      <p className="empty">Vue dépôt unifiée GitHub/GitLab (section AM.4) : fournisseur, branche par défaut, dernière activité, pipeline, branches, MR/PR.</p>
+      <p className="empty">Vue dépôt unifiée GitHub/GitLab : fournisseur, branche par défaut, dernière activité, pipeline, branches, MR/PR.</p>
 
       {error && <p className="error" role="alert">{error}</p>}
 
