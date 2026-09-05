@@ -1,7 +1,15 @@
 import { readFileSync } from 'node:fs';
 
+export interface UpdateChangelogEntry {
+  tag: string;
+  title: string | null;
+  releasedAt: string | null;
+}
+
 export interface UpdateCheckClient {
   getLatestReleaseTag(): Promise<string | null>;
+  /** Optional: when present, the changelog entry for the latest release is included in the result. */
+  getLatestReleaseInfo?(): Promise<UpdateChangelogEntry | null>;
 }
 
 export type UpdateStatus = 'up-to-date' | 'update-available' | 'ahead';
@@ -10,6 +18,7 @@ export interface UpdateCheckResult {
   current: string;
   latest: string | null;
   status: UpdateStatus | 'unknown';
+  changelog?: UpdateChangelogEntry | null;
 }
 
 /**
@@ -71,5 +80,9 @@ export async function checkForUpdate(packageJsonPath: string, client: UpdateChec
     return { current, latest: null, status: 'unknown' };
   }
 
-  return { current, latest, status: compareVersions(current, latest) };
+  const result: UpdateCheckResult = { current, latest, status: compareVersions(current, latest) };
+  if (client.getLatestReleaseInfo) {
+    result.changelog = await client.getLatestReleaseInfo();
+  }
+  return result;
 }

@@ -34,9 +34,34 @@ export class ArgoCDClient {
     return response.status?.history ?? [];
   }
 
-  private async request<T>(path: string): Promise<T> {
-    const response = await this.fetchImpl(`${this.options.baseUrl}${path}`, { headers: { authorization: `Bearer ${this.options.token}` } });
+  /** Reads the revision ArgoCD is currently synced to for the given Application. */
+  public async getCurrentRevision(name: string): Promise<string | null> {
+    const response = await this.request<{ status?: { sync?: { revision?: string } } }>(`/api/v1/applications/${encodeURIComponent(name)}`);
+    return response.status?.sync?.revision ?? null;
+  }
+
+  /**
+   * Triggers a sync of the given Application (ArgoCD API: POST /api/v1/applications/{name}/sync).
+   * When `revision` is omitted, ArgoCD syncs to the target revision already configured on the
+   * Application (typically the tracked branch/tag HEAD) — used both for "update to latest" and,
+   * with an explicit prior revision, for rollback.
+   */
+  public async syncApplication(name: string, revision?: string): Promise<void> {
+    await this.request(`/api/v1/applications/${encodeURIComponent(name)}/sync`, {
+      method: 'POST',
+      body: JSON.stringify(revision ? { revision } : {}),
+    });
+  }
+
+  private async request<T>(path: string, init?: { method?: string; body?: string }): Promise<T> {
+    const response = await this.fetchImpl(`${this.options.baseUrl}${path}`, {
+      method: init?.method ?? 'GET',
+      headers: { authorization: `Bearer ${this.options.token}`, 'content-type': 'application/json' },
+      body: init?.body,
+    });
     if (!response.ok) throw new Error(`ArgoCD API request failed (${response.status})`);
-    return (await response.json()) as T;
+    if (response.status === 204) return undefined as T;
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 }

@@ -43,3 +43,34 @@ test('returns an empty history when none is present', async () => {
 test('rejects failed ArgoCD API responses', async () => {
   await assert.rejects(() => client(async () => new Response('{}', { status: 401 })).listApplications(), /failed \(401\)/);
 });
+
+test('getCurrentRevision reads the synced revision from status.sync', async () => {
+  const revision = await client(async () => new Response(JSON.stringify({ status: { sync: { revision: 'abc123' } } }), { status: 200 })).getCurrentRevision('devos');
+  assert.equal(revision, 'abc123');
+});
+
+test('getCurrentRevision returns null when no revision is reported', async () => {
+  const revision = await client(async () => new Response(JSON.stringify({}), { status: 200 })).getCurrentRevision('devos');
+  assert.equal(revision, null);
+});
+
+test('syncApplication POSTs to the sync endpoint with no body when no revision is given', async () => {
+  let requestedUrl = '';
+  let requestedMethod = '';
+  let requestedBody = '';
+  await client(async (input, init) => {
+    requestedUrl = String(input);
+    requestedMethod = init?.method ?? '';
+    requestedBody = String(init?.body ?? '');
+    return new Response('', { status: 200 });
+  }).syncApplication('devos');
+  assert.equal(requestedUrl, 'https://argocd.test/api/v1/applications/devos/sync');
+  assert.equal(requestedMethod, 'POST');
+  assert.equal(requestedBody, '{}');
+});
+
+test('syncApplication includes the target revision when rolling back', async () => {
+  let requestedBody = '';
+  await client(async (_input, init) => { requestedBody = String(init?.body ?? ''); return new Response('', { status: 200 }); }).syncApplication('devos', 'abc123');
+  assert.deepEqual(JSON.parse(requestedBody), { revision: 'abc123' });
+});

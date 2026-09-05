@@ -71,6 +71,25 @@ test('checkForUpdate returns update-available with a mocked client', async () =>
   }
 });
 
+test('checkForUpdate includes the changelog entry when the client provides one', async () => {
+  const { path, cleanup } = withPackageJson({ version: '1.0.0' });
+  try {
+    const client: UpdateCheckClient = {
+      getLatestReleaseTag: async () => 'v1.1.0',
+      getLatestReleaseInfo: async () => ({ tag: 'v1.1.0', title: 'Release 1.1.0', releasedAt: '2026-09-01T00:00:00Z' }),
+    };
+    const result = await checkForUpdate(path, client);
+    assert.deepEqual(result, {
+      current: '1.0.0',
+      latest: 'v1.1.0',
+      status: 'update-available',
+      changelog: { tag: 'v1.1.0', title: 'Release 1.1.0', releasedAt: '2026-09-01T00:00:00Z' },
+    });
+  } finally {
+    cleanup();
+  }
+});
+
 test('checkForUpdate returns unknown when the client has no release tag', async () => {
   const { path, cleanup } = withPackageJson({ version: '1.0.0' });
   try {

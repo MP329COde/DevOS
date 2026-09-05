@@ -49,7 +49,13 @@ import { listDevRepos, getDevRepoDetail, listDevRepoBranches, type DevReposConfi
 import { buildMcpToolDefinitions } from './integrations/mcp-server.js';
 import { OllamaClient } from './integrations/ollama.js';
 import { WoodpeckerClient } from './integrations/woodpecker.js';
-import { checkForUpdate, readCurrentVersion } from './integrations/update-checker.js';
+import { checkForUpdate, readCurrentVersion, type UpdateChangelogEntry } from './integrations/update-checker.js';
+import { applyUpdate, rollbackUpdate, resolveUpdateMechanism } from './integrations/update-apply-service.js';
+import { checkPlatformHealth } from './integrations/platform-health.js';
+import { AuditLogService } from './integrations/audit-log-service.js';
+import { handleUpdatesRequest, type UpdatesHttpService } from './tasks/updates-http.js';
+import { exec as execCallback } from 'node:child_process';
+import { promisify } from 'node:util';
 import { GrafanaClient } from './catalog/grafana.js';
 import { HarborClient } from './catalog/harbor.js';
 import { ProxmoxClient } from './catalog/proxmox.js';
@@ -137,6 +143,7 @@ export function createServer(
   environments?: EnvironmentHttpService,
   profiles?: ProfileHttpService,
   search?: SearchHttpService,
+  updates?: UpdatesHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -409,6 +416,14 @@ export function createServer(
       return;
     }
 
+    if (request.url?.startsWith('/api/updates')) {
+      if (!updates) { writeJson(response, 503, { error: 'Updates are not configured' }); return; }
+      const role = parseRole(headerValue(request.headers['x-devos-role']));
+      const result = await handleUpdatesRequest(request.method ?? 'GET', request.url, role, updates);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.url?.startsWith('/api/settings')) {
       if (!settings) { writeJson(response, 503, { error: 'Settings are not configured' }); return; }
       const method = request.method ?? 'GET';
@@ -552,7 +567,8 @@ if (require.main === module) {
     await profileService.ensureSystemRoles();
     const profiles: ProfileHttpService = profileService;
     const search: SearchHttpService = new SearchService(database);
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp, roadmap, devProjects, devTemplates, deployment, workflow, cicd, devActivity, releases, environments, profiles, search).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const updates = buildUpdatesServiceFromEnv(database, settingsService);
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp, roadmap, devProjects, devTemplates, deployment, workflow, cicd, devActivity, releases, environments, profiles, search, updates).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -690,6 +706,126 @@ async function buildAuthServiceFromEnv(): Promise<Pick<KeycloakAuthService, 'com
   await redis.connect();
   const sessions = new RedisSessionStore(redis);
   return new KeycloakAuthService(config, secretReader, sessions);
+}
+
+const execAsync = promisify(execCallback);
+
+/**
+ * Wires the update-checker/update-apply-service to the environment. Three layers, as requested:
+ * (a) detection reuses `checkForUpdate` (already wired via extras.checkForUpdate) plus a minimal
+ * changelog (release title/date from the same GitLab releases call); (b) if ARGOCD_BASE_URL/TOKEN
+ * and ARGOCD_APP_NAME are set, "apply" triggers an ArgoCD sync of that Application, with the
+ * pre-sync revision persisted via SettingsService for rollback; (c) otherwise, if
+ * UPDATE_DEPLOY_WEBHOOK_URL or UPDATE_DEPLOY_COMMAND is set, "apply" calls that webhook/command —
+ * both come only from server-side env, never from the request body, so no request can inject an
+ * arbitrary command. Every trigger is health-gated (checkPlatformHealth) and journaled via
+ * AuditLogService (entityType "platform_update", reusing its generic audit_logs table).
+ */
+function buildUpdatesServiceFromEnv(database: PrismaClient, settings: SettingsService): UpdatesHttpService | undefined {
+  const gitlabBaseUrl = process.env.GITLAB_BASE_URL;
+  const gitlabToken = process.env.GITLAB_TOKEN;
+  const gitlabProjectId = process.env.GITLAB_PROJECT_ID;
+  const argoBaseUrl = process.env.ARGOCD_BASE_URL;
+  const argoToken = process.env.ARGOCD_TOKEN;
+  const argoAppName = process.env.ARGOCD_APP_NAME;
+  const deployWebhookUrl = process.env.UPDATE_DEPLOY_WEBHOOK_URL;
+  const deployCommand = process.env.UPDATE_DEPLOY_COMMAND;
+
+  const hasArgo = Boolean(argoBaseUrl && argoToken && argoAppName);
+  const hasFallback = Boolean(deployWebhookUrl || deployCommand);
+  if (!hasArgo && !hasFallback && !(gitlabBaseUrl && gitlabToken && gitlabProjectId)) return undefined;
+
+  const auditLog = new AuditLogService(database);
+  const lastRevisionKey = 'platform.update.lastRevision';
+
+  async function checkHealth() {
+    const result = await checkPlatformHealth({
+      async pingDatabase() { await database.$queryRaw`SELECT 1`; },
+      ...(process.env.REDIS_URL ? {
+        async pingRedis() {
+          const client = createRedisClients(process.env.REDIS_URL).cache;
+          try {
+            await client.connect();
+            await client.ping();
+          } finally {
+            await client.quit();
+          }
+        },
+      } : {}),
+    });
+    return result;
+  }
+
+  const argocdClient = hasArgo ? new ArgoCDClient({ baseUrl: argoBaseUrl as string, token: argoToken as string }) : undefined;
+  const argocd = argocdClient ? {
+    appName: argoAppName as string,
+    getCurrentRevision: () => argocdClient.getCurrentRevision(argoAppName as string),
+    sync: (revision?: string) => argocdClient.syncApplication(argoAppName as string, revision),
+  } : undefined;
+
+  const fallback = hasFallback ? {
+    async trigger() {
+      if (deployWebhookUrl) {
+        const response = await fetch(deployWebhookUrl, { method: 'POST' });
+        if (!response.ok) throw new Error(`Update deploy webhook failed (${response.status})`);
+        return;
+      }
+      // deployCommand comes exclusively from server-side environment configuration, never from a
+      // request — this is not user-controlled input, so it is safe to execute.
+      await execAsync(deployCommand as string);
+    },
+  } : undefined;
+
+  const mechanism = resolveUpdateMechanism({ argocd, fallback });
+
+  return {
+    async getStatus() {
+      if (!(gitlabBaseUrl && gitlabToken && gitlabProjectId)) {
+        const packageJsonPath = process.env.DEVOS_PACKAGE_JSON_PATH ?? join(__dirname, '../../package.json');
+        return { current: readCurrentVersion(packageJsonPath), latest: null, status: 'unknown' as const, mechanism };
+      }
+      const packageJsonPath = process.env.DEVOS_PACKAGE_JSON_PATH ?? join(__dirname, '../../package.json');
+      const result = await checkForUpdate(packageJsonPath, {
+        async getLatestReleaseTag() {
+          const response = await fetch(`${gitlabBaseUrl}/projects/${encodeURIComponent(gitlabProjectId)}/releases`, { headers: { 'private-token': gitlabToken } });
+          if (!response.ok) return null;
+          const releases = (await response.json()) as Array<{ tag_name?: string }>;
+          return releases[0]?.tag_name ?? null;
+        },
+        async getLatestReleaseInfo(): Promise<UpdateChangelogEntry | null> {
+          const response = await fetch(`${gitlabBaseUrl}/projects/${encodeURIComponent(gitlabProjectId)}/releases`, { headers: { 'private-token': gitlabToken } });
+          if (!response.ok) return null;
+          const releases = (await response.json()) as Array<{ tag_name?: string; name?: string; released_at?: string }>;
+          const latest = releases[0];
+          if (!latest?.tag_name) return null;
+          return { tag: latest.tag_name, title: latest.name ?? null, releasedAt: latest.released_at ?? null };
+        },
+      });
+      return { ...result, mechanism };
+    },
+    async applyUpdate(role) {
+      assertCan(role, 'execute_infrastructure');
+      return applyUpdate({
+        checkHealth,
+        argocd,
+        fallback,
+        getLastKnownRevision: () => settings.get(lastRevisionKey),
+        setLastKnownRevision: (revision) => (revision ? settings.set(lastRevisionKey, revision) : settings.delete(lastRevisionKey)),
+        recordAudit: (action, mechanism) => auditLog.recordEvent('platform_update', mechanism, action),
+      });
+    },
+    async rollback(role) {
+      assertCan(role, 'execute_infrastructure');
+      return rollbackUpdate({
+        checkHealth,
+        argocd,
+        fallback,
+        getLastKnownRevision: () => settings.get(lastRevisionKey),
+        setLastKnownRevision: (revision) => (revision ? settings.set(lastRevisionKey, revision) : settings.delete(lastRevisionKey)),
+        recordAudit: (action, mechanism) => auditLog.recordEvent('platform_update', mechanism, action),
+      });
+    },
+  };
 }
 
 function buildExtrasServiceFromEnv(items: ItemService): ExtrasHttpService {
@@ -896,7 +1032,7 @@ function buildExtrasServiceFromEnv(items: ItemService): ExtrasHttpService {
   }
 
   extras.checkForUpdate = async () => {
-    const packageJsonPath = process.env.DEVOS_PACKAGE_JSON_PATH ?? join(__dirname, '../../../package.json');
+    const packageJsonPath = process.env.DEVOS_PACKAGE_JSON_PATH ?? join(__dirname, '../../package.json');
     const gitlabBaseUrl = process.env.GITLAB_BASE_URL;
     const gitlabToken = process.env.GITLAB_TOKEN;
     const gitlabProjectId = process.env.GITLAB_PROJECT_ID;
