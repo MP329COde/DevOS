@@ -8,7 +8,6 @@ import { useLanguage, useStrings } from '../i18n/LanguageContext.js';
 const strings = {
   fr: {
     integrationUnavailable: "Aucun dépôt configuré ou intégration indisponible (GITLAB_BASE_URL/TOKEN/PROJECT_ID, GITHUB_TOKEN/GITHUB_REPOS).",
-    intro: 'Vue dépôt unifiée GitHub/GitLab : fournisseur, branche par défaut, dernière activité, pipeline, branches, MR/PR.',
     noRepo: "Aucun dépôt disponible pour l'instant.",
     defaultBranch: 'Branche par défaut :',
     branchCount: (count: number) => `${count} branche(s)`,
@@ -38,7 +37,6 @@ const strings = {
   },
   en: {
     integrationUnavailable: 'No repository configured or integration unavailable (GITLAB_BASE_URL/TOKEN/PROJECT_ID, GITHUB_TOKEN/GITHUB_REPOS).',
-    intro: 'Unified GitHub/GitLab repository view: provider, default branch, latest activity, pipeline, branches, MR/PR.',
     noRepo: 'No repository available yet.',
     defaultBranch: 'Default branch:',
     branchCount: (count: number) => `${count} branch(es)`,
@@ -164,8 +162,6 @@ export function DevReposPanel({ apiBase }: { apiBase: string }) {
 
   return (
     <div className="items dev-repos-panel">
-      <p className="empty">{s.intro}</p>
-
       {error && <p className="error" role="alert">{error}</p>}
 
       {!error && repos.length === 0 && <p className="empty">{s.noRepo}</p>}

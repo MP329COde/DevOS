@@ -57,13 +57,6 @@ const strings = {
     unreachable: 'Impossible de joindre le serveur.',
     deleteFailed: 'Échec de la suppression du widget.',
     panelTitle: 'Widgets custom',
-    intro: (
-      <>
-        Crée un widget pour le Dashboard à partir d'une source de données déjà branchée
-        (<code>/api/extras/*</code>) : choisis la source, la clé du champ à afficher et son libellé.
-        Aucune exécution de code côté serveur.
-      </>
-    ),
     widgetTitleLabel: 'Titre du widget',
     widgetTitlePlaceholder: 'Titre du widget',
     sourceLabel: 'Source de données',
@@ -83,13 +76,6 @@ const strings = {
     unreachable: 'Could not reach the server.',
     deleteFailed: 'Failed to delete the widget.',
     panelTitle: 'Custom widgets',
-    intro: (
-      <>
-        Create a Dashboard widget from an already connected data source
-        (<code>/api/extras/*</code>): choose the source, the field key to display, and its label.
-        No code is executed on the server.
-      </>
-    ),
     widgetTitleLabel: 'Widget title',
     widgetTitlePlaceholder: 'Widget title',
     sourceLabel: 'Data source',
@@ -158,9 +144,6 @@ export function CustomWidgetsPanel({ onChange }: CustomWidgetsPanelProps) {
   return (
     <section className="view-group custom-widgets-panel">
       <h3>{s.panelTitle}</h3>
-      <p className="empty">
-        {s.intro}
-      </p>
       <form className="new-item custom-widget-form" onSubmit={(event) => void createWidget(event)}>
         <input aria-label={s.widgetTitleLabel} placeholder={s.widgetTitlePlaceholder} value={title} onChange={(event) => setTitle(event.target.value)} required />
         <select aria-label={s.sourceLabel} value={sourcePath} onChange={(event) => setSourcePath(event.target.value)}>

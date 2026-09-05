@@ -7,12 +7,16 @@ import { ProxmoxPanel } from './components/ProxmoxPanel.js';
 import { DeploymentPanel } from './components/DeploymentPanel.js';
 import { CustomWidgetsPanel, type CustomWidget } from './components/CustomWidgetsPanel.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
+import { ProfileSettingsPanel } from './components/ProfileSettingsPanel.js';
+import { SetupWizard } from './components/SetupWizard.js';
+import { UpdatesPanel } from './components/UpdatesPanel.js';
 import { NotesPanel } from './components/NotesPanel.js';
 import { DevelopmentPanel } from './components/DevelopmentPanel.js';
 import { DevTemplatesPanel } from './components/DevTemplatesPanel.js';
 import { TaskDetailPanel } from './components/TaskDetailPanel.js';
 import { ActivityTimelineDrawer } from './components/ActivityTimelineDrawer.js';
 import { Icon } from './components/Icon.js';
+import { Logo } from './components/Logo.js';
 import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js';
 import { THEME_COLOR_SETTINGS, THEME_PRESETS, type ThemeMode, type ThemePreset } from './theme.js';
 import { useLanguage } from './i18n/LanguageContext.js';
@@ -20,7 +24,26 @@ import { useLanguage } from './i18n/LanguageContext.js';
 // TODO(AM.1/AM.2) : 'dev-templates' est un panel autonome temporaire (catalogue de templates,
 // section AM.3) en attendant le panel racine "Développement" avec sous-navigation. À rattacher
 // comme sous-vue de ce module une fois posé, plutôt que de rester une entrée de nav séparée.
-const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'settings', 'network', 'dev-templates', 'development', 'deployment', 'login'] as const;
+const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'profile', 'settings-admin', 'network', 'dev-templates', 'development', 'deployment', 'login'] as const;
+
+// Descriptions de fonctionnement des pages, centralisées ici (documentation) plutôt
+// qu'affichées en intro sur chaque page.
+const PAGE_GUIDES = {
+  fr: [
+    { title: 'Notes', description: 'Notes libres et todo-lists personnelles, indépendantes des projets — jamais mélangées aux tâches.' },
+    { title: 'Dépôts', description: 'Vue dépôt unifiée GitHub/GitLab : fournisseur, branche par défaut, dernière activité, pipeline, branches, MR/PR.' },
+    { title: 'Intégrations', description: "Teste la connectivité d'une API via une URL + un mode d'authentification, avec détection best-effort OpenAPI/Swagger. Il ne s'agit pas d'une découverte magique universelle : au-delà d'un health check et d'une recherche de document OpenAPI standard, aucune donnée n'est inventée." },
+    { title: 'Déploiement', description: "Assistant V1 volontairement simple : le type de projet est détecté à partir des fichiers présents dans le dépôt source (ex. package.json, go.mod), sans exécuter ni analyser le code. Les manifests Kubernetes et l'ApplicationSet ArgoCD générés restent à copier manuellement — rien n'est poussé automatiquement." },
+    { title: 'Widgets custom', description: "Crée un widget pour le Dashboard à partir d'une source de données déjà branchée (/api/extras/*) : choisis la source, la clé du champ à afficher et son libellé. Aucune exécution de code côté serveur." },
+  ],
+  en: [
+    { title: 'Notes', description: 'Free-form notes and personal to-do lists, independent from projects — never mixed with tasks.' },
+    { title: 'Repositories', description: 'Unified GitHub/GitLab repository view: provider, default branch, latest activity, pipeline, branches, MR/PR.' },
+    { title: 'Integrations', description: 'Tests API connectivity via a URL and an authentication mode, with best-effort OpenAPI/Swagger detection. This is not universal magic discovery: beyond a health check and a search for a standard OpenAPI document, no data is invented.' },
+    { title: 'Deployment', description: 'Deliberately simple V1 assistant: the project type is detected from files present in the source repository (e.g. package.json, go.mod), without executing or analyzing the code. The generated Kubernetes manifests and ArgoCD ApplicationSet must still be copied manually — nothing is pushed automatically.' },
+    { title: 'Custom widgets', description: 'Create a Dashboard widget from an already connected data source (/api/extras/*): choose the source, the field key to display, and its label. No code is executed on the server.' },
+  ],
+} as const;
 
 // Sous-onglets internes du panel "Travail" (section X) : fusionne les anciens panels séparés
 // Tâches/Triage/Aujourd'hui en un seul onglet cohérent, sans perdre de fonctionnalité — seule
@@ -135,6 +158,27 @@ export function App() {
   const [view, setView] = useState<'list' | 'board' | 'gantt' | 'calendar'>('list');
   const [itemsError, setItemsError] = useState('');
   const [panel, setPanel] = useState<(typeof PANEL_IDS)[number]>(() => readUrlPanel(PANEL_IDS, 'home'));
+  // Assistant de configuration initiale (setup wizard) : `null` tant que /api/settings n'a pas
+  // répondu (on ne bloque/débloque jamais l'app sur un état inconnu), puis true/false selon
+  // "platform.initialized". Même limitation dev-only que le reste de l'app pour le rôle
+  // (voir TODO x-devos-role) : la garde ci-dessous ne s'applique qu'à l'écran de login lui-même,
+  // jamais au flux Keycloak/auth/callback.
+  const [platformInitialized, setPlatformInitialized] = useState<boolean | null>(null);
+  const [platformName, setPlatformName] = useState<string | undefined>(undefined);
+  const [platformLogo, setPlatformLogo] = useState<string | undefined>(undefined);
+  const [setupWizardEmbedded, setSetupWizardEmbedded] = useState(false);
+  useEffect(() => {
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings`)
+      .then(async (response) => {
+        if (!response.ok) { setPlatformInitialized(true); return; }
+        const data = await response.json();
+        const values: Record<string, string> = data.values ?? {};
+        setPlatformInitialized(values['platform.initialized'] === 'true');
+        setPlatformName(values['platform.name']);
+        setPlatformLogo(values['platform.logo']);
+      })
+      .catch(() => setPlatformInitialized(true));
+  }, []);
   const [workTab, setWorkTab] = useState<WorkTab>(() => readUrlWorkTab('tasks'));
   const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => (localStorage.getItem('devos.theme') as ThemeMode | null) ?? 'system');
@@ -355,7 +399,7 @@ export function App() {
   const [loginMessage, setLoginMessage] = useState('');
   const titleInput = useRef<HTMLInputElement>(null);
 
-  useUrlState(panel, setPanel, PANEL_IDS, filter, setFilter);
+  useUrlState(panel, setPanel, PANEL_IDS, filter, setFilter, 'home');
 
   // Garde le sous-onglet du panel Travail synchronisé avec `?sub=`, sur le même principe que
   // `useUrlState` pour panel/filter (deep links, retour arrière navigateur).
@@ -386,6 +430,27 @@ export function App() {
   }, []);
 
   useEffect(() => { localStorage.setItem('devos.sidebarCollapsed', sidebarCollapsed ? '1' : '0'); }, [sidebarCollapsed]);
+
+  // Ferme les popovers header (notifications, menu profil) au clic en dehors ou avec Échap — même
+  // comportement que le tiroir historique (ActivityTimelineDrawer), qui gère déjà ça pour lui-même.
+  useEffect(() => {
+    if (!notificationsOpen && !profileMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Element;
+      if (target.closest('.notification-popover, .header-profile-menu, [data-notifications-toggle], [data-profile-toggle]')) return;
+      setNotificationsOpen(false);
+      setProfileMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setNotificationsOpen(false); setProfileMenuOpen(false); }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [notificationsOpen, profileMenuOpen]);
 
   // Applique le thème effectif (clair/sombre) au DOM avec une courte transition fade (section AB) ;
   // en mode "auto", l'heure courante décide entre les créneaux configurés (themeAutoStart/End).
@@ -960,7 +1025,7 @@ export function App() {
     { id: 'proxmox', label: language === 'fr' ? 'VMs Proxmox' : 'Proxmox VMs', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'widgets', label: 'Widgets', icon: 'widget', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'deployment', label: language === 'fr' ? 'Déploiement' : 'Deployment', icon: 'layers', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
-    { id: 'settings', label: language === 'fr' ? 'Paramètres' : 'Settings', icon: 'gear', group: language === 'fr' ? 'Autres' : 'Other' },
+    { id: 'settings-admin', label: language === 'fr' ? 'Administration' : 'Administration', icon: 'gear', group: language === 'fr' ? 'Autres' : 'Other' },
     { id: 'docs', label: 'Docs', icon: 'doc', group: language === 'fr' ? 'Autres' : 'Other' },
   ];
   const navGroups = navItems.reduce<Array<{ group: string; items: typeof navItems }>>((groups, item) => {
@@ -1019,12 +1084,22 @@ export function App() {
   );
   const itemCard = (item: typeof items[number]) =><article className={item.required ? 'item item-required' : 'item'} key={item.id}><span className={`type type-${item.type}`}>{item.type}</span>{item.type === 'bug' && item.severity && <span className={`badge severity-${item.severity}`}>{item.severity}</span>}<span className="item-title"><strong>{item.title}</strong>{item.required && <span className="required-badge" title="Item obligatoire">Obligatoire</span>}</span><span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}{item.coderWorkspaceStatus && ` · Workspace ${item.coderWorkspaceStatus}`}</span><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><span className="item-actions"><button className={item.required ? 'required-toggle active' : 'required-toggle'} type="button" aria-pressed={Boolean(item.required)} aria-label={item.required ? `Retirer le caractère obligatoire de ${item.title}` : `Marquer ${item.title} comme obligatoire`} onClick={() => void toggleRequired(item)}>{item.required ? 'Obligatoire ✓' : 'Marquer obligatoire'}</button>{item.type === 'task' && <button className="open-workspace" type="button" onClick={() => void openWorkspace(item)}>{item.coderWorkspaceName ? 'Ouvrir dans VS Code' : 'Ouvrir un environnement'}</button>}<button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="detail-open" type="button" onClick={() => setDetailItemId(item.id)}>Détail</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></span></article>;
 
+  // Écrans "sans chrome" : pas de header/sidebar/topnav (ex. la page de connexion, avant toute
+  // session utilisateur — la navigation applicative n'a pas de sens tant qu'on n'est pas connecté).
+  const isChromeless = panel === 'login';
+  const hasPendingOidcCallback = new URLSearchParams(window.location.search).has('code');
+  const setupRequired = platformInitialized === false && panel !== 'login' && !hasPendingOidcCallback;
+
+  if (setupRequired) {
+    return <SetupWizard onComplete={(adminName) => { if (adminName && !profileName) setProfileName(adminName); setPlatformInitialized(true); }} />;
+  }
+
   return (
-    <div className={`shell layout-${navLayout}`}>
-      <header className="topbar">
+    <div className={isChromeless ? 'shell shell-chromeless' : `shell layout-${navLayout}`}>
+      {!isChromeless && <header className="topbar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true"><Icon name="network" size={18} /></span>
-          <div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">{navItems.find((n) => n.id === panel)?.label ?? (panel === 'login' ? (language === 'fr' ? 'Connexion' : 'Sign in') : 'Dashboard')}</h1></div>
+          <span className="brand-mark" aria-hidden="true"><Logo size={30} src={platformLogo} /></span>
+          <div><div className="eyebrow">{platformName ? platformName.toUpperCase() : 'DEVOS'} / HOMELAB COMMAND</div><h1 id="title">{navItems.find((n) => n.id === panel)?.label ?? (panel === 'profile' ? (language === 'fr' ? 'Profil' : 'Profile') : 'Dashboard')}</h1></div>
         </div>
         <div className="header-actions">
           <div className="header-search">
@@ -1070,15 +1145,15 @@ export function App() {
               </div>
             )}
           </div>
-          <button type="button" className="header-icon-button" aria-label="Historique" aria-expanded={historyOpen} onClick={() => setHistoryOpen((open) => !open)}>
+          <button type="button" className="header-icon-button" data-history-toggle aria-label="Historique" aria-expanded={historyOpen} onClick={() => setHistoryOpen((open) => !open)}>
             <Icon name="clock" />
           </button>
-          <button type="button" className="header-icon-button" aria-label={language === 'fr' ? 'Notifications' : 'Notifications'} aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen((open) => !open); refreshStoredNotifications(); }}>
+          <button type="button" className="header-icon-button" data-notifications-toggle aria-label={language === 'fr' ? 'Notifications' : 'Notifications'} aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen((open) => !open); refreshStoredNotifications(); }}>
             <Icon name="inbox" />
             {(triage.length + (wazuhAlerts?.filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).length ?? 0) + storedNotifications.filter((n) => !n.readAt).length) > 0 && <span className="header-notification-badge">{triage.length + (wazuhAlerts?.filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).length ?? 0) + storedNotifications.filter((n) => !n.readAt).length}</span>}
           </button>
           <button type="button" className="header-language" aria-label={language === 'fr' ? 'Changer de langue' : 'Change language'} onClick={() => setLanguage(language === 'fr' ? 'en' : 'fr')}>{language.toUpperCase()}</button>
-          <button type="button" className="header-profile" aria-label={language === 'fr' ? 'Menu profil' : 'Profile menu'} aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen((open) => !open)}>
+          <button type="button" className="header-profile" data-profile-toggle aria-label={language === 'fr' ? 'Menu profil' : 'Profile menu'} aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen((open) => !open)}>
             {profileAvatarUrl ? <img src={profileAvatarUrl} alt="" /> : (profileName ? profileName.slice(0, 2).toUpperCase() : '??')}
           </button>
         </div>
@@ -1095,27 +1170,27 @@ export function App() {
               <button type="button" className="notification-entry-delete" aria-label={language === 'fr' ? `Supprimer la notification ${notification.title}` : `Delete notification ${notification.title}`} onClick={() => deleteStoredNotification(notification.id)}>×</button>
             </div>
           ))}
-          <button type="button" className="filter" onClick={() => { setPanel('settings'); setNotificationsOpen(false); }}>{language === 'fr' ? 'Configurer dans Administration' : 'Configure in Administration'}</button>
+          <button type="button" className="filter" onClick={() => { setPanel('settings-admin'); setNotificationsOpen(false); }}>{language === 'fr' ? 'Configurer dans Administration' : 'Configure in Administration'}</button>
         </aside>}
         {profileMenuOpen && <aside className="header-profile-menu" aria-label={language === 'fr' ? 'Menu profil' : 'Profile menu'}>
           <div className="header-profile-menu-header">
             <span className="header-profile-menu-avatar">{profileAvatarUrl ? <img src={profileAvatarUrl} alt="" /> : (profileName ? profileName.slice(0, 2).toUpperCase() : '??')}</span>
             <span className="header-profile-menu-name">{profileName || (language === 'fr' ? 'Utilisateur' : 'User')}</span>
           </div>
-          <button type="button" onClick={() => { setPanel('settings'); setProfileMenuOpen(false); }}>
-            <Icon name="gear" size={14} />{language === 'fr' ? 'Profil' : 'Profile'}
+          <button type="button" onClick={() => { setPanel('profile'); setProfileMenuOpen(false); }}>
+            <Icon name="user" size={14} />{language === 'fr' ? 'Profil' : 'Profile'}
           </button>
           <input ref={avatarFileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleAvatarFile(file); event.target.value = ''; }} />
           <button type="button" onClick={() => avatarFileInput.current?.click()} disabled={avatarUploading}>
             <Icon name="layers" size={14} />{avatarUploading ? (language === 'fr' ? 'Envoi...' : 'Uploading...') : (language === 'fr' ? 'Changer la photo' : 'Change photo')}
           </button>
           <button type="button" className="danger" onClick={signOut}>
-            <Icon name="chevron" size={14} />{language === 'fr' ? 'Déconnexion' : 'Sign out'}
+            <Icon name="logout" size={14} />{language === 'fr' ? 'Déconnexion' : 'Sign out'}
           </button>
         </aside>}
-      </header>
-      <ActivityTimelineDrawer apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} open={historyOpen} onClose={() => setHistoryOpen(false)} />
-      {navLayout === 'sidebar' && (
+      </header>}
+      {!isChromeless && <ActivityTimelineDrawer apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} open={historyOpen} onClose={() => setHistoryOpen(false)} />}
+      {!isChromeless && navLayout === 'sidebar' && (
         <nav className={collapsed ? 'sidebar collapsed' : 'sidebar'} aria-label="Navigation">
           <button type="button" className="sidebar-collapse" aria-label={collapsed ? 'Déplier la navigation' : 'Replier la navigation'} onClick={() => setSidebarCollapsed((c) => !c)}>
             <Icon name="chevron" />
@@ -1129,7 +1204,7 @@ export function App() {
         </nav>
       )}
       <main className="workspace" aria-labelledby="items-title">
-        {navLayout === 'topbar' && <nav className="views topnav" aria-label="Navigation">{navItems.map(navButton)}</nav>}
+        {!isChromeless && navLayout === 'topbar' && <nav className="views topnav" aria-label="Navigation">{navItems.map(navButton)}</nav>}
         {panel === 'home' ? (
           <div className="home-dashboard">
             <div className="home-header">
@@ -1188,8 +1263,14 @@ export function App() {
                   : (w.id === 'alerts' ? !widgetData
                   : (!statDef && (extraDataForWidget === 'error' || extraDataForWidget === undefined)));
                 const preview = homeEditMode && unconfigured ? mockWidgetPreview[w.id] : undefined;
+                const statValue = statDef ? (statDef.statusKey ? (statusCounts[statDef.statusKey] ?? 0) : items.length) : 0;
                 const body = statDef
-                  ? <span className="stat-widget-value">{statDef.statusKey ? (statusCounts[statDef.statusKey] ?? 0) : items.length}</span>
+                  ? <>
+                      <span className="stat-widget-value">{statValue}</span>
+                      {statDef.statusKey && items.length > 0 && (
+                        <span className="stat-widget-subtext ultra-wide-only">{Math.round((statValue / items.length) * 100)}% du total</span>
+                      )}
+                    </>
                   : preview
                   ? <>
                       <p className="widget-preview-label">Aperçu (données d'exemple) — intégration non configurée</p>
@@ -1413,7 +1494,18 @@ export function App() {
           </div>
         ) : panel === 'docs' ? (
           <div className="items docs-panel">
-            <p className="empty">Documentation DevOS uniquement — guides d'usage et de fonctionnement de la plateforme (pas de contenu de dépôts externes).</p>
+            <p className="empty">{language === 'fr'
+              ? "Documentation DevOS uniquement — guides d'usage et de fonctionnement de la plateforme (pas de contenu de dépôts externes)."
+              : 'DevOS documentation only — usage and how-it-works guides for the platform (no external repository content).'}</p>
+            <section className="view-group page-guides">
+              <h3>{language === 'fr' ? 'Guide des pages' : 'Page guide'}</h3>
+              {(language === 'fr' ? PAGE_GUIDES.fr : PAGE_GUIDES.en).map((guide) => (
+                <article className="item page-guide" key={guide.title}>
+                  <span className="item-title"><strong>{guide.title}</strong></span>
+                  <p className="empty">{guide.description}</p>
+                </article>
+              ))}
+            </section>
             <form className="new-item onboarding-form" onSubmit={(event) => void createOnboardingPage(event)}>
               <input aria-label="Titre de la fiche onboarding" placeholder="Titre (ex: Arrivée sur le projet DevOS)" value={onboardingTitle} onChange={(event) => setOnboardingTitle(event.target.value)} />
               <button type="submit">Créer une fiche onboarding</button>
@@ -1458,8 +1550,8 @@ export function App() {
                 .catch(() => undefined);
             }} />
           </div>
-        ) : panel === 'settings' ? (
-          <SettingsPanel
+        ) : panel === 'profile' ? (
+          <ProfileSettingsPanel
             navLayout={navLayout}
             setNavLayout={setNavLayout}
             themeMode={themeMode}
@@ -1473,10 +1565,7 @@ export function App() {
             setThemeAutoStart={setThemeAutoStart}
             themeAutoEnd={themeAutoEnd}
             setThemeAutoEnd={setThemeAutoEnd}
-            adminLoginThemeId={adminLoginThemeId}
-            setAdminLoginThemeId={setAdminLoginThemeId}
-            platformThemePresets={platformThemePresets}
-            addPlatformThemePreset={addPlatformThemePreset}
+            allThemePresets={allThemePresets}
             customThemePresets={customThemePresets}
             saveCustomThemePreset={saveCustomThemePreset}
             deleteCustomThemePreset={deleteCustomThemePreset}
@@ -1486,6 +1575,34 @@ export function App() {
             notificationPermission={notificationPermission}
             onRequestNotificationPermission={() => void Notification.requestPermission().then(setNotificationPermission)}
           />
+        ) : panel === 'settings-admin' ? (
+          <>
+          <UpdatesPanel isAdmin />
+          <section className="widget-card">
+            <h3>{language === 'fr' ? 'Configuration initiale' : 'Initial setup'}</h3>
+            <p className="empty">
+              {language === 'fr'
+                ? "Identité de la plateforme, compte administrateur, intégrations coeur — reprend l'assistant affiché au premier lancement."
+                : 'Platform identity, administrator account, core integrations — reopens the wizard shown on first launch.'}
+            </p>
+            <button type="button" onClick={() => setSetupWizardEmbedded(true)}>
+              {language === 'fr' ? "Rouvrir l'assistant de configuration" : 'Reopen the setup wizard'}
+            </button>
+          </section>
+          {setupWizardEmbedded && (
+            <SetupWizard
+              embedded
+              onCancelEmbedded={() => setSetupWizardEmbedded(false)}
+              onComplete={(adminName) => { if (adminName && !profileName) setProfileName(adminName); setPlatformInitialized(true); setSetupWizardEmbedded(false); }}
+            />
+          )}
+          <SettingsPanel
+            adminLoginThemeId={adminLoginThemeId}
+            setAdminLoginThemeId={setAdminLoginThemeId}
+            platformThemePresets={platformThemePresets}
+            addPlatformThemePreset={addPlatformThemePreset}
+          />
+          </>
         ) : panel === 'login' ? (
           <section className="login-screen" style={loginThemeVars as CSSProperties}>
             <div className="login-screen-panel login-screen-brand">

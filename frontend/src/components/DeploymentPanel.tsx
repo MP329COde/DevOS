@@ -7,12 +7,6 @@ const strings = {
     selectAtLeastOneEnv: 'Sélectionnez au moins un environnement.',
     generationFailed: 'La génération des manifests a échoué.',
     generateTitle: 'Générer des manifests de déploiement',
-    intro: (
-      <>
-        Assistant V1 volontairement simple : le type de projet est détecté à partir des fichiers présents dans le dépôt source (ex. <code>package.json</code>, <code>go.mod</code>),
-        sans exécuter ni analyser le code. Les manifests Kubernetes et l'ApplicationSet ArgoCD générés restent à copier manuellement — rien n'est poussé automatiquement.
-      </>
-    ),
     sourceProjectLabel: 'Projet source (GitLab/GitHub, optionnel)',
     sourceProjectPlaceholder: 'Projet source (ex. groupe/projet, optionnel)',
     appNameLabel: "Nom de l'application",
@@ -42,12 +36,6 @@ const strings = {
     selectAtLeastOneEnv: 'Select at least one environment.',
     generationFailed: 'Manifest generation failed.',
     generateTitle: 'Generate deployment manifests',
-    intro: (
-      <>
-        Deliberately simple V1 assistant: the project type is detected from files present in the source repository (e.g. <code>package.json</code>, <code>go.mod</code>),
-        without executing or analyzing the code. The generated Kubernetes manifests and ArgoCD ApplicationSet must still be copied manually — nothing is pushed automatically.
-      </>
-    ),
     sourceProjectLabel: 'Source project (GitLab/GitHub, optional)',
     sourceProjectPlaceholder: 'Source project (e.g. group/project, optional)',
     appNameLabel: 'Application name',
@@ -178,9 +166,6 @@ export function DeploymentPanel({ apiBase }: { apiBase: string }) {
     <div className="items deployment-panel">
       <section className="view-group deployment-form">
         <h3>{s.generateTitle}</h3>
-        <p className="empty">
-          {s.intro}
-        </p>
         <form className="new-item" onSubmit={(event) => void generate(event)}>
           <input aria-label={s.sourceProjectLabel} placeholder={s.sourceProjectPlaceholder} value={sourceProject} onChange={(event) => setSourceProject(event.target.value)} />
           <input aria-label={s.appNameLabel} placeholder={s.appNamePlaceholder} value={appName} onChange={(event) => setAppName(event.target.value)} required />

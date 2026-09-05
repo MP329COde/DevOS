@@ -7,7 +7,6 @@ const strings = {
     loadError: 'Impossible de charger les notes. Démarrez le backend pour connecter vos données.',
     createError: 'La création de la note a échoué.',
     updateError: 'La mise à jour de la note a échoué.',
-    intro: 'Notes libres et todo-lists personnelles, indépendantes des projets — jamais mélangées aux tâches.',
     titlePlaceholder: 'Titre de la note',
     createButton: 'Créer une note',
     newContentLabel: 'Contenu de la nouvelle note',
@@ -24,7 +23,6 @@ const strings = {
     loadError: 'Could not load notes. Start the backend to connect your data.',
     createError: 'Failed to create the note.',
     updateError: 'Failed to update the note.',
-    intro: 'Free-form notes and personal to-do lists, independent from projects — never mixed with tasks.',
     titlePlaceholder: 'Note title',
     createButton: 'Create note',
     newContentLabel: 'New note content',
@@ -115,7 +113,6 @@ export function NotesPanel({ apiBase }: { apiBase: string }) {
 
   return (
     <div className="items notes-panel">
-      <p className="empty">{s.intro}</p>
       <form className="new-item" onSubmit={(event) => void createNote(event)}>
         <input aria-label={s.titlePlaceholder} placeholder={s.titlePlaceholder} value={title} onChange={(event) => setTitle(event.target.value)} />
         <button type="submit">{s.createButton}</button>

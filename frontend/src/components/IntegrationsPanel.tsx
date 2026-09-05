@@ -5,7 +5,6 @@ type AuthType = 'none' | 'basic' | 'bearer' | 'apiKey';
 
 const strings = {
   fr: {
-    intro: "Teste la connectivité d'une API via une URL + un mode d'authentification, avec détection best-effort OpenAPI/Swagger. Il ne s'agit pas d'une découverte magique universelle : au-delà d'un health check et d'une recherche de document OpenAPI standard, aucune donnée n'est inventée.",
     nameLabel: "Nom de l'intégration",
     namePlaceholder: 'Nom (ex: grafana-secondaire)',
     baseUrlLabel: 'URL de base',
@@ -37,7 +36,6 @@ const strings = {
     noSaved: 'Aucune intégration custom enregistrée.',
   },
   en: {
-    intro: "Tests API connectivity via a URL and an authentication mode, with best-effort OpenAPI/Swagger detection. This is not universal magic discovery: beyond a health check and a search for a standard OpenAPI document, no data is invented.",
     nameLabel: 'Integration name',
     namePlaceholder: 'Name (e.g. grafana-secondary)',
     baseUrlLabel: 'Base URL',
@@ -153,9 +151,6 @@ export function IntegrationsPanel() {
 
   return (
     <div className="items integrations-panel">
-      <p className="empty">
-        {s.intro}
-      </p>
       <form className="new-item integration-form" onSubmit={(event) => void testConnection(event)}>
         <input aria-label={s.nameLabel} placeholder={s.namePlaceholder} value={name} onChange={(event) => setName(event.target.value)} />
         <input aria-label={s.baseUrlLabel} placeholder="https://service.example.internal" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} required />

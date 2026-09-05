@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Icon } from './Icon.js';
 import { useLanguage, useStrings } from '../i18n/LanguageContext.js';
@@ -63,6 +63,24 @@ export function ActivityTimelineDrawer({ apiBase, open, onClose }: { apiBase: st
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [typeFilter, setTypeFilter] = useState<'all' | TimelineEntry['type']>('all');
   const [error, setError] = useState('');
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const [rendered, setRendered] = useState(open);
+  const [closing, setClosing] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setRendered(true);
+      setClosing(false);
+      return;
+    }
+    if (!rendered) return;
+    setClosing(true);
+    const timeout = setTimeout(() => {
+      setRendered(false);
+      setClosing(false);
+    }, 160);
+    return () => clearTimeout(timeout);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -77,10 +95,22 @@ export function ActivityTimelineDrawer({ apiBase, open, onClose }: { apiBase: st
       .catch(() => setError(s.loadError));
   }, [apiBase, open, typeFilter]);
 
-  if (!open) return null;
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (drawerRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest('[data-history-toggle]')) return;
+      onClose();
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [open, onClose]);
+
+  if (!rendered) return null;
 
   return (
-    <aside className="history-drawer" aria-label={s.ariaLabel}>
+    <aside className={closing ? 'history-drawer closing' : 'history-drawer'} aria-label={s.ariaLabel} ref={drawerRef}>
       <div className="history-drawer-header">
         <h3>{s.title}</h3>
         <button type="button" className="header-icon-button" aria-label={s.close} onClick={onClose}><Icon name="x" size={14} /></button>
