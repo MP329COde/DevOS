@@ -1,11 +1,13 @@
-import type { CreateItemInput, UpdateItemInput } from './item-service.js';
+import type { CreateItemInput, ListItemsFilter, UpdateItemInput } from './item-service.js';
 
 export interface ItemHttpService {
-  list(): Promise<unknown>;
+  list(filter?: ListItemsFilter): Promise<unknown>;
   create(input: CreateItemInput): Promise<unknown>;
   update(id: string, input: UpdateItemInput): Promise<unknown>;
   delete(id: string): Promise<unknown>;
 }
+
+const ITEM_TYPES = ['task', 'doc', 'goal', 'note', 'bug'] as const;
 
 export interface ItemHttpResponse {
   status: number;
@@ -19,7 +21,12 @@ export async function handleItemRequest(
   service: ItemHttpService,
 ): Promise<ItemHttpResponse> {
   try {
-    if (method === 'GET' && path === '/api/items') return { status: 200, body: await service.list() };
+    if (method === 'GET' && path.startsWith('/api/items') && !path.match(/^\/api\/items\/[^/]+$/)) {
+      const url = new URL(path, 'http://localhost');
+      const type = url.searchParams.get('type') ?? undefined;
+      const devProjectId = url.searchParams.get('devProjectId') ?? undefined;
+      return { status: 200, body: await service.list({ type, devProjectId }) };
+    }
     if (method === 'POST' && path === '/api/items') return { status: 201, body: await service.create(parseCreate(body)) };
 
     const match = path.match(/^\/api\/items\/([^/]+)$/);
@@ -39,16 +46,27 @@ export async function handleItemRequest(
 function parseCreate(body: unknown) {
   if (!body || typeof body !== 'object') throw new Error('Invalid item payload');
   const input = body as Record<string, unknown>;
-  if (!['task', 'doc', 'goal', 'note'].includes(String(input.type)) || typeof input.title !== 'string') {
+  if (!ITEM_TYPES.includes(String(input.type) as typeof ITEM_TYPES[number]) || typeof input.title !== 'string') {
     throw new Error('Item type and title are required');
   }
   return {
-    type: input.type as 'task' | 'doc' | 'goal' | 'note',
+    type: input.type as typeof ITEM_TYPES[number],
     title: input.title,
     ...(Array.isArray(input.labels) ? { labels: input.labels.filter((label): label is string => typeof label === 'string') } : {}),
     ...(typeof input.dueAt === 'string' ? { dueAt: input.dueAt } : {}),
     ...(typeof input.description === 'string' ? { description: input.description } : {}),
     ...(typeof input.content === 'string' ? { content: input.content } : {}),
+    ...(typeof input.devProjectId === 'string' ? { devProjectId: input.devProjectId } : {}),
+    ...(typeof input.severity === 'string' ? { severity: input.severity as CreateItemInput['severity'] } : {}),
+    ...(typeof input.environment === 'string' ? { environment: input.environment } : {}),
+    ...(typeof input.versionAffected === 'string' ? { versionAffected: input.versionAffected } : {}),
+    ...(typeof input.expectedBehavior === 'string' ? { expectedBehavior: input.expectedBehavior } : {}),
+    ...(typeof input.observedBehavior === 'string' ? { observedBehavior: input.observedBehavior } : {}),
+    ...(typeof input.reproSteps === 'string' ? { reproSteps: input.reproSteps } : {}),
+    ...(typeof input.logs === 'string' ? { logs: input.logs } : {}),
+    ...(Array.isArray(input.screenshots) ? { screenshots: input.screenshots.filter((s): s is string => typeof s === 'string') } : {}),
+    ...(typeof input.releaseRef === 'string' ? { releaseRef: input.releaseRef } : {}),
+    ...(typeof input.commitRef === 'string' ? { commitRef: input.commitRef } : {}),
   };
 }
 
@@ -62,5 +80,15 @@ function parseUpdate(body: unknown) {
     ...(typeof input.status === 'string' ? { status: input.status } : {}),
     ...(typeof input.required === 'boolean' ? { required: input.required } : {}),
     ...('releaseId' in input ? { releaseId: (input.releaseId as string | null) ?? null } : {}),
+    ...(typeof input.severity === 'string' ? { severity: input.severity as UpdateItemInput['severity'] } : {}),
+    ...(typeof input.environment === 'string' ? { environment: input.environment } : {}),
+    ...(typeof input.versionAffected === 'string' ? { versionAffected: input.versionAffected } : {}),
+    ...(typeof input.expectedBehavior === 'string' ? { expectedBehavior: input.expectedBehavior } : {}),
+    ...(typeof input.observedBehavior === 'string' ? { observedBehavior: input.observedBehavior } : {}),
+    ...(typeof input.reproSteps === 'string' ? { reproSteps: input.reproSteps } : {}),
+    ...(typeof input.logs === 'string' ? { logs: input.logs } : {}),
+    ...(Array.isArray(input.screenshots) ? { screenshots: input.screenshots.filter((s): s is string => typeof s === 'string') } : {}),
+    ...(typeof input.releaseRef === 'string' ? { releaseRef: input.releaseRef } : {}),
+    ...(typeof input.commitRef === 'string' ? { commitRef: input.commitRef } : {}),
   };
 }

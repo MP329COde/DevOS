@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
 
-import { DevActivityPanel } from './DevActivityPanel.js';
+import { DevActivityPanel, type DevActivityTab } from './DevActivityPanel.js';
 import { DevReposPanel } from './DevReposPanel.js';
-import { DevCiCdPanel } from './DevCiCdPanel.js';
+import { DevCiCdPanel, type CiCdSubView } from './DevCiCdPanel.js';
 import { DevTasksPanel } from './DevTasksPanel.js';
+import { useStrings } from '../i18n/LanguageContext.js';
 
 export interface DevProject {
   id: string;
@@ -43,35 +44,185 @@ interface DevOverview {
   archived: DevProject[];
 }
 
-const STATUS_LABELS: Record<DevProject['status'], string> = {
-  planning: 'Planification',
-  development: 'Développement',
-  maintenance: 'Maintenance',
-  done: 'Terminé',
-  archived: 'Archivé',
-};
-
 const WIZARD_STEPS = ['template', 'stack', 'environnements', 'git', 'résumé'] as const;
 type WizardStep = (typeof WIZARD_STEPS)[number];
 
-const WIZARD_STEP_LABELS: Record<WizardStep, string> = {
-  template: 'Template',
-  stack: 'Langage & gestionnaire de paquets',
-  environnements: 'Environnements',
-  git: 'Fournisseur Git',
-  résumé: 'Résumé',
-};
-
-/** Sous-navigation interne du module Développement (section AM). Pensée pour accueillir les
- * futurs sous-modules des autres sous-vagues (dépôts AM.4, tâches/bugs AM.5, roadmap AM.6,
- * CI/CD AM.7, doc/architecture/membres AM.8) sans restructurer ce composant : chaque nouvel
- * onglet s'ajoute à `DEV_TABS` et à son rendu conditionnel, exactement comme les onglets déjà
- * présents. */
-const DEV_TABS = ['overview', 'new', 'dashboard', 'repos', 'tasks', 'activity', 'cicd'] as const;
+/** Sous-navigation interne du module Développement (section AM), à plat : les sous-onglets qui
+ * appartenaient auparavant à "Activité & recherche" et "CI/CD & sécurité" (2 niveaux de nav
+ * imbriqués) sont remontés ici au même niveau que les autres onglets, dans une seule barre
+ * scrollable — chaque nouvel onglet s'ajoute simplement à `DEV_TABS` et à son rendu conditionnel. */
+const DEV_TABS = [
+  'overview', 'new', 'dashboard', 'repos', 'tasks',
+  'activity-search', 'activity-integrations', 'activity-dashboard', 'activity-ai',
+  'cicd-pipelines', 'cicd-deployments', 'cicd-tests', 'cicd-quality',
+] as const;
 type DevTab = (typeof DEV_TABS)[number];
-const DEV_TAB_LABELS: Record<DevTab, string> = { overview: 'Vue globale', new: 'Nouveau projet', dashboard: 'Dashboard projet', repos: 'Dépôts', tasks: 'Tâches & bugs', activity: 'Activité & recherche', cicd: 'CI/CD & sécurité' };
+
+const strings = {
+  fr: {
+    statusLabels: {
+      planning: 'Planification', development: 'Développement', maintenance: 'Maintenance',
+      done: 'Terminé', archived: 'Archivé',
+    } as Record<DevProject['status'], string>,
+    wizardStepLabels: {
+      template: 'Template', stack: 'Langage & gestionnaire de paquets', environnements: 'Environnements',
+      git: 'Fournisseur Git', résumé: 'Résumé',
+    } as Record<WizardStep, string>,
+    devTabLabels: {
+      overview: 'Vue globale', new: 'Nouveau projet', dashboard: 'Dashboard projet', repos: 'Dépôts',
+      tasks: 'Workflow', 'activity-search': 'Recherche globale', 'activity-integrations': 'Intégrations dev',
+      'activity-dashboard': 'Dashboard perso', 'activity-ai': 'Assistant IA (aperçu)', 'cicd-pipelines': 'CI/CD',
+      'cicd-deployments': 'Déploiements', 'cicd-tests': 'Tests', 'cicd-quality': 'Qualité & sécurité',
+    } as Record<DevTab, string>,
+    subViewsAria: 'Sous-vues Développement',
+    overviewLoadFailed: 'Impossible de charger les projets de développement. Démarrez le backend pour connecter vos données.',
+    dashboardLoadFailed: 'Impossible de charger le dashboard de ce projet.',
+    searchProjectAria: 'Rechercher un projet de développement',
+    searchProjectPlaceholder: 'Rechercher un projet…',
+    noProjectsYet: 'Aucun projet de développement pour l\'instant. Créez-en un depuis "Nouveau projet".',
+    groupActive: 'Actifs',
+    groupWaiting: 'En attente',
+    groupDone: 'Terminés',
+    groupArchived: 'Archivés',
+    ownerLabel: (owner: string) => `Responsable : ${owner}`,
+    membersLabel: (members: string) => `Membres : ${members}`,
+    openDashboard: 'Ouvrir le dashboard',
+    chooseProjectHint: 'Choisissez un projet pour afficher son dashboard.',
+    chooseProjectAria: 'Choisir un projet',
+    selectProjectOption: 'Sélectionner un projet…',
+    loadingDashboard: 'Chargement du dashboard…',
+    lastRelease: 'Dernière version',
+    pipeline: 'Pipeline',
+    deployment: 'Déploiement',
+    openTasks: 'Tâches ouvertes',
+    knownBugs: 'Bugs connus',
+    security: 'Sécurité',
+    deliveryGoalLabel: 'Objectif de livraison :',
+    plannedStart: (date: string) => `Début prévu : ${date}`,
+    plannedEnd: (date: string) => `Fin prévue : ${date}`,
+    progress: 'Avancement',
+    progressDone: (percent: number, done: number, total: number) => `${percent}% (${done}/${total} tâches terminées)`,
+    progressUnavailable: 'Non disponible — aucune tâche liée à ce projet pour l\'instant.',
+    lastActivity: (value: string) => `Dernière activité : ${value}`,
+    notAvailable: 'Non disponible',
+    projectNameRequired: 'Le titre du projet est requis.',
+    creationFailed: 'La création du projet a échoué. Vérifiez que le backend est démarré.',
+    wizardStepsAria: 'Étapes de création de projet',
+    templateHeading: 'Template de départ',
+    templateHint: 'Le catalogue de templates détaillé arrivera dans une prochaine itération ; ce choix reste modifiable jusqu\'au résumé.',
+    templateAria: 'Template',
+    templateBlank: 'Projet vierge',
+    templateApiNode: 'API Node.js',
+    templateFrontendReact: 'Frontend React',
+    templateWorker: 'Worker / job planifié',
+    stackHeading: 'Langage, framework et gestionnaire de paquets',
+    stackAria: 'Stack technique',
+    environmentsHeading: 'Environnements de déploiement',
+    gitHeading: 'Fournisseur Git — création auto du dépôt et des branches',
+    gitAria: 'Fournisseur Git',
+    gitHint: 'La création effective du dépôt et des branches est prise en charge par la sous-vue Dépôts (Dépôts Git centralisés) ; le choix ici est mémorisé pour la suite de l\'assistant.',
+    summaryHeading: 'Résumé avant validation',
+    projectTitle: 'Titre du projet',
+    description: 'Description',
+    descriptionAria: 'Description du projet',
+    owner: 'Responsable',
+    ownerAria: 'Responsable du projet',
+    summaryTemplate: (value: string) => `Template : ${value}`,
+    summaryStack: (value: string) => `Stack : ${value}`,
+    summaryEnvironments: (value: string) => `Environnements : ${value}`,
+    summaryGitProvider: (value: string) => `Fournisseur Git : ${value}`,
+    none: 'aucun',
+    creating: 'Création…',
+    createProject: 'Créer le projet',
+    previous: 'Précédent',
+    next: 'Suivant',
+    deliveryGoal: (template: string, stack: string, environments: string, gitProvider: string) =>
+      `Template ${template} · stack ${stack} · environnements ${environments} · dépôt ${gitProvider}`,
+  },
+  en: {
+    statusLabels: {
+      planning: 'Planning', development: 'In development', maintenance: 'Maintenance',
+      done: 'Done', archived: 'Archived',
+    } as Record<DevProject['status'], string>,
+    wizardStepLabels: {
+      template: 'Template', stack: 'Language & package manager', environnements: 'Environments',
+      git: 'Git provider', résumé: 'Summary',
+    } as Record<WizardStep, string>,
+    devTabLabels: {
+      overview: 'Overview', new: 'New project', dashboard: 'Project dashboard', repos: 'Repositories',
+      tasks: 'Workflow', 'activity-search': 'Global search', 'activity-integrations': 'Dev integrations',
+      'activity-dashboard': 'Personal dashboard', 'activity-ai': 'AI assistant (preview)', 'cicd-pipelines': 'CI/CD',
+      'cicd-deployments': 'Deployments', 'cicd-tests': 'Tests', 'cicd-quality': 'Quality & security',
+    } as Record<DevTab, string>,
+    subViewsAria: 'Development sub-views',
+    overviewLoadFailed: 'Unable to load development projects. Start the backend to connect your data.',
+    dashboardLoadFailed: 'Unable to load this project\'s dashboard.',
+    searchProjectAria: 'Search a development project',
+    searchProjectPlaceholder: 'Search a project…',
+    noProjectsYet: 'No development projects yet. Create one from "New project".',
+    groupActive: 'Active',
+    groupWaiting: 'Waiting',
+    groupDone: 'Done',
+    groupArchived: 'Archived',
+    ownerLabel: (owner: string) => `Owner: ${owner}`,
+    membersLabel: (members: string) => `Members: ${members}`,
+    openDashboard: 'Open dashboard',
+    chooseProjectHint: 'Choose a project to display its dashboard.',
+    chooseProjectAria: 'Choose a project',
+    selectProjectOption: 'Select a project…',
+    loadingDashboard: 'Loading dashboard…',
+    lastRelease: 'Last release',
+    pipeline: 'Pipeline',
+    deployment: 'Deployment',
+    openTasks: 'Open tasks',
+    knownBugs: 'Known bugs',
+    security: 'Security',
+    deliveryGoalLabel: 'Delivery goal:',
+    plannedStart: (date: string) => `Planned start: ${date}`,
+    plannedEnd: (date: string) => `Planned end: ${date}`,
+    progress: 'Progress',
+    progressDone: (percent: number, done: number, total: number) => `${percent}% (${done}/${total} tasks done)`,
+    progressUnavailable: 'Not available — no task linked to this project yet.',
+    lastActivity: (value: string) => `Last activity: ${value}`,
+    notAvailable: 'Not available',
+    projectNameRequired: 'The project title is required.',
+    creationFailed: 'Failed to create the project. Check that the backend is running.',
+    wizardStepsAria: 'Project creation steps',
+    templateHeading: 'Starting template',
+    templateHint: 'The detailed template catalog will arrive in a future iteration; this choice can still be changed until the summary.',
+    templateAria: 'Template',
+    templateBlank: 'Blank project',
+    templateApiNode: 'Node.js API',
+    templateFrontendReact: 'React frontend',
+    templateWorker: 'Worker / scheduled job',
+    stackHeading: 'Language, framework and package manager',
+    stackAria: 'Technical stack',
+    environmentsHeading: 'Deployment environments',
+    gitHeading: 'Git provider — automatic repository and branch creation',
+    gitAria: 'Git provider',
+    gitHint: 'The actual creation of the repository and branches is handled by the Repositories sub-view (centralized Git repositories); the choice here is remembered for the rest of the wizard.',
+    summaryHeading: 'Summary before submission',
+    projectTitle: 'Project title',
+    description: 'Description',
+    descriptionAria: 'Project description',
+    owner: 'Owner',
+    ownerAria: 'Project owner',
+    summaryTemplate: (value: string) => `Template: ${value}`,
+    summaryStack: (value: string) => `Stack: ${value}`,
+    summaryEnvironments: (value: string) => `Environments: ${value}`,
+    summaryGitProvider: (value: string) => `Git provider: ${value}`,
+    none: 'none',
+    creating: 'Creating…',
+    createProject: 'Create project',
+    previous: 'Previous',
+    next: 'Next',
+    deliveryGoal: (template: string, stack: string, environments: string, gitProvider: string) =>
+      `Template ${template} · stack ${stack} · environments ${environments} · repo ${gitProvider}`,
+  },
+} as const;
 
 export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
+  const s = useStrings(strings);
   const [tab, setTab] = useState<DevTab>('overview');
   const [overview, setOverview] = useState<DevOverview | null>(null);
   const [search, setSearch] = useState('');
@@ -87,7 +238,7 @@ export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
         setOverview(await response.json());
         setError('');
       })
-      .catch(() => setError('Impossible de charger les projets de développement. Démarrez le backend pour connecter vos données.'));
+      .catch(() => setError(s.overviewLoadFailed));
   };
 
   useEffect(() => { loadOverview(search); }, [apiBase]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -100,7 +251,7 @@ export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
         setDashboard(await response.json());
         setDashboardError('');
       })
-      .catch(() => setDashboardError('Impossible de charger le dashboard de ce projet.'));
+      .catch(() => setDashboardError(s.dashboardLoadFailed));
   }, [apiBase, tab, selectedProjectId]);
 
   function openDashboard(projectId: string) {
@@ -110,10 +261,10 @@ export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
 
   return (
     <div className="items dev-panel">
-      <nav className="views" aria-label="Sous-vues Développement">
+      <nav className="views" aria-label={s.subViewsAria}>
         {DEV_TABS.map((value) => (
           <button key={value} className={tab === value ? 'filter active' : 'filter'} type="button" onClick={() => setTab(value)}>
-            {DEV_TAB_LABELS[value]}
+            {s.devTabLabels[value]}
           </button>
         ))}
       </nav>
@@ -149,9 +300,9 @@ export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
 
       {tab === 'tasks' && <DevTasksPanel apiBase={apiBase} devProjectId={selectedProjectId} />}
 
-      {tab === 'activity' && <DevActivityPanel apiBase={apiBase} />}
+      {tab.startsWith('activity-') && <DevActivityPanel apiBase={apiBase} tab={tab.slice('activity-'.length) as DevActivityTab} />}
 
-      {tab === 'cicd' && <DevCiCdPanel apiBase={apiBase} />}
+      {tab.startsWith('cicd-') && <DevCiCdPanel apiBase={apiBase} subView={(tab === 'cicd-pipelines' ? 'cicd' : tab.slice('cicd-'.length)) as CiCdSubView} />}
     </div>
   );
 }
@@ -163,23 +314,24 @@ function DevOverviewTab({ overview, error, search, onSearchChange, onOpen }: {
   onSearchChange: (value: string) => void;
   onOpen: (id: string) => void;
 }) {
+  const s = useStrings(strings);
   const groups: Array<{ key: keyof DevOverview; label: string }> = [
-    { key: 'active', label: 'Actifs' },
-    { key: 'waiting', label: 'En attente' },
-    { key: 'done', label: 'Terminés' },
-    { key: 'archived', label: 'Archivés' },
+    { key: 'active', label: s.groupActive },
+    { key: 'waiting', label: s.groupWaiting },
+    { key: 'done', label: s.groupDone },
+    { key: 'archived', label: s.groupArchived },
   ];
 
   return (
     <div className="dev-overview">
       <input
-        aria-label="Rechercher un projet de développement"
-        placeholder="Rechercher un projet…"
+        aria-label={s.searchProjectAria}
+        placeholder={s.searchProjectPlaceholder}
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
       />
       {error && <p className="error" role="alert">{error}</p>}
-      {!error && overview && groups.every((g) => overview[g.key].length === 0) && <p className="empty">Aucun projet de développement pour l'instant. Créez-en un depuis "Nouveau projet".</p>}
+      {!error && overview && groups.every((g) => overview[g.key].length === 0) && <p className="empty">{s.noProjectsYet}</p>}
       {!error && overview && groups.map(({ key, label }) => overview[key].length > 0 && (
         <section className="view-group" key={key}>
           <h3>{label} ({overview[key].length})</h3>
@@ -187,15 +339,15 @@ function DevOverviewTab({ overview, error, search, onSearchChange, onOpen }: {
             <article className="item widget-card dev-project-card" key={project.id}>
               <span className="item-title">
                 <strong>{project.name}</strong>
-                <span className={`status-badge status-${project.status}`}>{STATUS_LABELS[project.status]}</span>
+                <span className={`status-badge status-${project.status}`}>{s.statusLabels[project.status]}</span>
               </span>
               {project.description && <p className="empty">{project.description}</p>}
               <span className="item-meta">
-                {project.owner && <span>Responsable : {project.owner}</span>}
-                {project.members.length > 0 && <span>Membres : {project.members.join(', ')}</span>}
+                {project.owner && <span>{s.ownerLabel(project.owner)}</span>}
+                {project.members.length > 0 && <span>{s.membersLabel(project.members.join(', '))}</span>}
               </span>
               <span className="item-actions">
-                <button type="button" onClick={() => onOpen(project.id)}>Ouvrir le dashboard</button>
+                <button type="button" onClick={() => onOpen(project.id)}>{s.openDashboard}</button>
               </span>
             </article>
           ))}
@@ -212,13 +364,14 @@ function DevProjectDashboardTab({ projectId, dashboard, error, allProjects, onSe
   allProjects: DevProject[];
   onSelect: (id: string) => void;
 }) {
+  const s = useStrings(strings);
   if (!projectId) {
     return (
       <div className="dev-dashboard">
-        <p className="empty">Choisissez un projet pour afficher son dashboard.</p>
+        <p className="empty">{s.chooseProjectHint}</p>
         {allProjects.length > 0 && (
-          <select aria-label="Choisir un projet" defaultValue="" onChange={(event) => event.target.value && onSelect(event.target.value)}>
-            <option value="" disabled>Sélectionner un projet…</option>
+          <select aria-label={s.chooseProjectAria} defaultValue="" onChange={(event) => event.target.value && onSelect(event.target.value)}>
+            <option value="" disabled>{s.selectProjectOption}</option>
             {allProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
           </select>
         )}
@@ -227,41 +380,41 @@ function DevProjectDashboardTab({ projectId, dashboard, error, allProjects, onSe
   }
 
   if (error) return <p className="error" role="alert">{error}</p>;
-  if (!dashboard) return <p className="empty">Chargement du dashboard…</p>;
+  if (!dashboard) return <p className="empty">{s.loadingDashboard}</p>;
 
   const { project, progress, lastActivityAt } = dashboard;
   const sections: Array<{ label: string; section: DevProjectDashboardSection }> = [
-    { label: 'Dernière version', section: dashboard.lastRelease },
-    { label: 'Pipeline', section: dashboard.pipeline },
-    { label: 'Déploiement', section: dashboard.deployment },
-    { label: 'Tâches ouvertes', section: dashboard.openTasks },
-    { label: 'Bugs connus', section: dashboard.knownBugs },
-    { label: 'Sécurité', section: dashboard.security },
+    { label: s.lastRelease, section: dashboard.lastRelease },
+    { label: s.pipeline, section: dashboard.pipeline },
+    { label: s.deployment, section: dashboard.deployment },
+    { label: s.openTasks, section: dashboard.openTasks },
+    { label: s.knownBugs, section: dashboard.knownBugs },
+    { label: s.security, section: dashboard.security },
   ];
 
   return (
     <div className="dev-dashboard">
       <header className="dev-dashboard-header">
         <h2>{project.name}</h2>
-        <span className={`status-badge status-${project.status}`}>{STATUS_LABELS[project.status]}</span>
+        <span className={`status-badge status-${project.status}`}>{s.statusLabels[project.status]}</span>
       </header>
       {project.description && <p className="empty">{project.description}</p>}
-      {project.deliveryGoal && <p><strong>Objectif de livraison :</strong> {project.deliveryGoal}</p>}
+      {project.deliveryGoal && <p><strong>{s.deliveryGoalLabel}</strong> {project.deliveryGoal}</p>}
       <span className="item-meta">
-        {project.owner && <span>Responsable : {project.owner}</span>}
-        {project.members.length > 0 && <span>Membres : {project.members.join(', ')}</span>}
-        {project.plannedStartAt && <span>Début prévu : {new Date(project.plannedStartAt).toLocaleDateString('fr-FR')}</span>}
-        {project.plannedEndAt && <span>Fin prévue : {new Date(project.plannedEndAt).toLocaleDateString('fr-FR')}</span>}
+        {project.owner && <span>{s.ownerLabel(project.owner)}</span>}
+        {project.members.length > 0 && <span>{s.membersLabel(project.members.join(', '))}</span>}
+        {project.plannedStartAt && <span>{s.plannedStart(new Date(project.plannedStartAt).toLocaleDateString('fr-FR'))}</span>}
+        {project.plannedEndAt && <span>{s.plannedEnd(new Date(project.plannedEndAt).toLocaleDateString('fr-FR'))}</span>}
       </span>
 
       <section className="view-group">
-        <h3>Avancement</h3>
+        <h3>{s.progress}</h3>
         <p>
           {progress.totalTasks > 0
-            ? `${progress.percentDone ?? 0}% (${progress.totalTasks - progress.openTasks}/${progress.totalTasks} tâches terminées)`
-            : 'Non disponible — aucune tâche liée à ce projet pour l\'instant.'}
+            ? s.progressDone(progress.percentDone ?? 0, progress.totalTasks - progress.openTasks, progress.totalTasks)
+            : s.progressUnavailable}
         </p>
-        <p className="empty">Dernière activité : {lastActivityAt ? new Date(lastActivityAt).toLocaleString('fr-FR') : 'Non disponible'}</p>
+        <p className="empty">{s.lastActivity(lastActivityAt ? new Date(lastActivityAt).toLocaleString('fr-FR') : s.notAvailable)}</p>
       </section>
 
       <section className="view-group dev-dashboard-grid">
@@ -277,6 +430,7 @@ function DevProjectDashboardTab({ projectId, dashboard, error, allProjects, onSe
 }
 
 function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: (project: DevProject) => void }) {
+  const s = useStrings(strings);
   const [step, setStep] = useState<WizardStep>('template');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -296,7 +450,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!name.trim()) { setError('Le titre du projet est requis.'); setStep('résumé'); return; }
+    if (!name.trim()) { setError(s.projectNameRequired); setStep('résumé'); return; }
     setSubmitting(true);
     setError('');
     try {
@@ -308,7 +462,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
           description: description.trim() || undefined,
           owner: owner.trim() || undefined,
           status: 'planning',
-          deliveryGoal: `Template ${template} · stack ${stack} · environnements ${environments.join(', ') || 'aucun'} · dépôt ${gitProvider}`,
+          deliveryGoal: s.deliveryGoal(template, stack, environments.join(', ') || s.none, gitProvider),
         }),
       });
       if (!response.ok) throw new Error();
@@ -316,7 +470,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
       onCreated(created);
       setName(''); setDescription(''); setOwner(''); setStep('template');
     } catch {
-      setError('La création du projet a échoué. Vérifiez que le backend est démarré.');
+      setError(s.creationFailed);
     } finally {
       setSubmitting(false);
     }
@@ -324,7 +478,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
 
   return (
     <form className="dev-wizard" onSubmit={(event) => void submit(event)}>
-      <nav className="views" aria-label="Étapes de création de projet">
+      <nav className="views" aria-label={s.wizardStepsAria}>
         {WIZARD_STEPS.map((value, index) => (
           <button
             key={value}
@@ -333,28 +487,28 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
             aria-current={step === value ? 'step' : undefined}
             onClick={() => setStep(value)}
           >
-            {index + 1}. {WIZARD_STEP_LABELS[value]}
+            {index + 1}. {s.wizardStepLabels[value]}
           </button>
         ))}
       </nav>
 
       {step === 'template' && (
         <section className="view-group">
-          <h3>Template de départ</h3>
-          <p className="empty">Le catalogue de templates détaillé arrivera dans une prochaine itération ; ce choix reste modifiable jusqu'au résumé.</p>
-          <select aria-label="Template" value={template} onChange={(event) => setTemplate(event.target.value)}>
-            <option value="vierge">Projet vierge</option>
-            <option value="api-node">API Node.js</option>
-            <option value="frontend-react">Frontend React</option>
-            <option value="worker">Worker / job planifié</option>
+          <h3>{s.templateHeading}</h3>
+          <p className="empty">{s.templateHint}</p>
+          <select aria-label={s.templateAria} value={template} onChange={(event) => setTemplate(event.target.value)}>
+            <option value="vierge">{s.templateBlank}</option>
+            <option value="api-node">{s.templateApiNode}</option>
+            <option value="frontend-react">{s.templateFrontendReact}</option>
+            <option value="worker">{s.templateWorker}</option>
           </select>
         </section>
       )}
 
       {step === 'stack' && (
         <section className="view-group">
-          <h3>Langage, framework et gestionnaire de paquets</h3>
-          <select aria-label="Stack technique" value={stack} onChange={(event) => setStack(event.target.value)}>
+          <h3>{s.stackHeading}</h3>
+          <select aria-label={s.stackAria} value={stack} onChange={(event) => setStack(event.target.value)}>
             <option value="node-npm">Node.js / npm</option>
             <option value="node-pnpm">Node.js / pnpm</option>
             <option value="python-pip">Python / pip</option>
@@ -365,7 +519,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
 
       {step === 'environnements' && (
         <section className="view-group">
-          <h3>Environnements de déploiement</h3>
+          <h3>{s.environmentsHeading}</h3>
           {['dev', 'staging', 'prod'].map((env) => (
             <label key={env} className="note-checkbox">
               <input type="checkbox" checked={environments.includes(env)} onChange={() => toggleEnvironment(env)} />
@@ -377,39 +531,39 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
 
       {step === 'git' && (
         <section className="view-group">
-          <h3>Fournisseur Git — création auto du dépôt et des branches</h3>
-          <select aria-label="Fournisseur Git" value={gitProvider} onChange={(event) => setGitProvider(event.target.value as 'gitlab' | 'github')}>
+          <h3>{s.gitHeading}</h3>
+          <select aria-label={s.gitAria} value={gitProvider} onChange={(event) => setGitProvider(event.target.value as 'gitlab' | 'github')}>
             <option value="gitlab">GitLab</option>
             <option value="github">GitHub</option>
           </select>
-          <p className="empty">La création effective du dépôt et des branches est prise en charge par la sous-vue Dépôts (Dépôts Git centralisés) ; le choix ici est mémorisé pour la suite de l'assistant.</p>
+          <p className="empty">{s.gitHint}</p>
         </section>
       )}
 
       {step === 'résumé' && (
         <section className="view-group">
-          <h3>Résumé avant validation</h3>
-          <label htmlFor="dev-wizard-name">Titre du projet</label>
-          <input id="dev-wizard-name" aria-label="Titre du projet" placeholder="Titre du projet" value={name} onChange={(event) => setName(event.target.value)} />
-          <label htmlFor="dev-wizard-description">Description</label>
-          <textarea id="dev-wizard-description" className="doc-editor" aria-label="Description du projet" value={description} onChange={(event) => setDescription(event.target.value)} />
-          <label htmlFor="dev-wizard-owner">Responsable</label>
-          <input id="dev-wizard-owner" aria-label="Responsable du projet" placeholder="Responsable" value={owner} onChange={(event) => setOwner(event.target.value)} />
+          <h3>{s.summaryHeading}</h3>
+          <label htmlFor="dev-wizard-name">{s.projectTitle}</label>
+          <input id="dev-wizard-name" aria-label={s.projectTitle} placeholder={s.projectTitle} value={name} onChange={(event) => setName(event.target.value)} />
+          <label htmlFor="dev-wizard-description">{s.description}</label>
+          <textarea id="dev-wizard-description" className="doc-editor" aria-label={s.descriptionAria} value={description} onChange={(event) => setDescription(event.target.value)} />
+          <label htmlFor="dev-wizard-owner">{s.owner}</label>
+          <input id="dev-wizard-owner" aria-label={s.ownerAria} placeholder={s.owner} value={owner} onChange={(event) => setOwner(event.target.value)} />
           <ul>
-            <li>Template : {template}</li>
-            <li>Stack : {stack}</li>
-            <li>Environnements : {environments.join(', ') || 'aucun'}</li>
-            <li>Fournisseur Git : {gitProvider}</li>
+            <li>{s.summaryTemplate(template)}</li>
+            <li>{s.summaryStack(stack)}</li>
+            <li>{s.summaryEnvironments(environments.join(', ') || s.none)}</li>
+            <li>{s.summaryGitProvider(gitProvider)}</li>
           </ul>
           {error && <p className="error" role="alert">{error}</p>}
-          <button type="submit" disabled={submitting}>{submitting ? 'Création…' : 'Créer le projet'}</button>
+          <button type="submit" disabled={submitting}>{submitting ? s.creating : s.createProject}</button>
         </section>
       )}
 
       {step !== 'résumé' && (
         <div className="item-actions">
-          {stepIndex > 0 && <button type="button" onClick={() => setStep(WIZARD_STEPS[stepIndex - 1])}>Précédent</button>}
-          <button type="button" onClick={() => setStep(WIZARD_STEPS[stepIndex + 1])}>Suivant</button>
+          {stepIndex > 0 && <button type="button" onClick={() => setStep(WIZARD_STEPS[stepIndex - 1])}>{s.previous}</button>}
+          <button type="button" onClick={() => setStep(WIZARD_STEPS[stepIndex + 1])}>{s.next}</button>
         </div>
       )}
     </form>

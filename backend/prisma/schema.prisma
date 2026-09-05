@@ -12,6 +12,7 @@ enum ItemType {
   doc
   goal
   note
+  bug
 }
 
 enum TaskLevel {
@@ -132,7 +133,16 @@ model Item {
   docLinks             DocLink[]
   attachments          ItemAttachment[]
   codeReferences       ItemCodeReference[]
-  bugs                 Bug[]
+  severity             BugSeverity?        @map("severity")
+  environment          String?             @db.VarChar(100)
+  versionAffected      String?             @map("version_affected") @db.VarChar(100)
+  expectedBehavior     String?             @map("expected_behavior") @db.Text
+  observedBehavior     String?             @map("observed_behavior") @db.Text
+  reproSteps           String?             @map("repro_steps") @db.Text
+  logs                 String?             @db.Text
+  screenshots          String[]            @default([])
+  releaseRef           String?             @map("release_ref") @db.VarChar(200)
+  commitRef            String?             @map("commit_ref") @db.VarChar(200)
   createdAt            DateTime            @default(now()) @map("created_at")
   updatedAt            DateTime            @updatedAt @map("updated_at")
 
@@ -162,7 +172,6 @@ model DevProject {
   plannedEndAt   DateTime?           @map("planned_end_at")
   deliveryGoal   String?             @map("delivery_goal") @db.Text
   items          Item[]
-  bugs           Bug[]
   releases       Release[]
   environments   Environment[]
   permissions    ProjectPermission[]
@@ -497,35 +506,6 @@ model WorkflowStatus {
  * `itemId` relie optionnellement le bug à un item de suivi (ex. tâche de correction) sans
  * dupliquer son cycle de vie ; `devProjectId` rattache le bug à un projet une fois AM.1 en place.
  */
-model Bug {
-  id               String      @id @default(uuid()) @db.Uuid
-  title            String      @db.VarChar(300)
-  description      String?     @db.Text
-  severity         BugSeverity @default(medium)
-  status           String      @default("open") @db.VarChar(50)
-  environment      String?     @db.VarChar(100)
-  versionAffected  String?     @map("version_affected") @db.VarChar(100)
-  expectedBehavior String?     @map("expected_behavior") @db.Text
-  observedBehavior String?     @map("observed_behavior") @db.Text
-  reproSteps       String?     @map("repro_steps") @db.Text
-  logs             String?     @db.Text
-  screenshots      String[]    @default([])
-  releaseRef       String?     @map("release_ref") @db.VarChar(200)
-  commitRef        String?     @map("commit_ref") @db.VarChar(200)
-  itemId           String?     @map("item_id") @db.Uuid
-  item             Item?       @relation(fields: [itemId], references: [id], onDelete: SetNull)
-  devProjectId     String?     @map("dev_project_id") @db.Uuid
-  devProject       DevProject? @relation(fields: [devProjectId], references: [id], onDelete: SetNull)
-  createdAt        DateTime    @default(now()) @map("created_at")
-  updatedAt        DateTime    @updatedAt @map("updated_at")
-
-  @@index([status])
-  @@index([severity])
-  @@index([itemId])
-  @@index([devProjectId])
-  @@map("bugs")
-}
-
 enum AvailabilityStatus {
   available
   busy
@@ -548,6 +528,7 @@ model UserProfile {
   displayName        String              @map("display_name") @db.VarChar(150)
   avatarEmoji        String?             @map("avatar_emoji") @db.VarChar(16)
   avatarColor        String?             @map("avatar_color") @db.VarChar(20)
+  avatarImageUrl     String?             @map("avatar_image_url") @db.VarChar(500)
   statusEmoji        String?             @map("status_emoji") @db.VarChar(16)
   statusMessage      String?             @map("status_message") @db.VarChar(200)
   availability       AvailabilityStatus  @default(available)
@@ -591,6 +572,25 @@ model Role {
  * Accès d'un profil à un `DevProject` donné, avec un rôle qui peut différer du rôle global du
  * profil (ex. Lecteur global mais Contributeur sur un projet précis). Section AC.
  */
+/**
+ * Notification persistée pour le centre de notifications (icône cloche). `readAt` marque la
+ * lecture ; `deletedAt` retire l'entrée du centre sans purger la ligne, pour conserver un
+ * historique consultable/auditable 60 jours après création (voir `purgeExpired` dans
+ * NotificationsService) avant suppression définitive.
+ */
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  title     String    @db.VarChar(300)
+  message   String    @db.Text
+  category  String?   @db.VarChar(50)
+  readAt    DateTime? @map("read_at")
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([deletedAt, createdAt])
+  @@map("notifications")
+}
+
 model ProjectPermission {
   id            String      @id @default(uuid()) @db.Uuid
   devProjectId  String      @map("dev_project_id") @db.Uuid

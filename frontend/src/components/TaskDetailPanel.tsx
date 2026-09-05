@@ -1,5 +1,54 @@
 import { useEffect, useState, type FormEvent } from 'react';
 
+import { useLanguage, useStrings } from '../i18n/LanguageContext.js';
+
+const strings = {
+  fr: {
+    commentsNotConfigured: 'Commentaires non configurés.',
+    cannotLoadComments: 'Impossible de charger les commentaires.',
+    commentSendFailed: "Échec de l'envoi du commentaire.",
+    detailOf: (title: string) => `Détail de ${title}`,
+    closeDetail: 'Fermer le détail',
+    status: 'Statut',
+    mrStatus: (state: string) => `MR ${state}`,
+    ciStatus: (status: string) => ` · CI ${status}`,
+    commentsTitle: 'Commentaires',
+    commentsTitleWithIssue: (issueIid: number) => `Commentaires — issue GitLab #${issueIid}`,
+    notLinkedHint: 'Item non lié à une issue GitLab : les commentaires restent locaux.',
+    loading: 'Chargement…',
+    noCommentYet: 'Aucun commentaire pour le moment.',
+    you: 'Vous',
+    propagatedToGitlab: 'Propagé vers GitLab',
+    newComment: 'Nouveau commentaire',
+    commentPlaceholderLinked: 'Écrire un commentaire (propagé vers GitLab)…',
+    commentPlaceholder: 'Écrire un commentaire…',
+    sending: 'Envoi…',
+    send: 'Envoyer',
+  },
+  en: {
+    commentsNotConfigured: 'Comments not configured.',
+    cannotLoadComments: 'Could not load comments.',
+    commentSendFailed: 'Failed to send the comment.',
+    detailOf: (title: string) => `Details for ${title}`,
+    closeDetail: 'Close details',
+    status: 'Status',
+    mrStatus: (state: string) => `MR ${state}`,
+    ciStatus: (status: string) => ` · CI ${status}`,
+    commentsTitle: 'Comments',
+    commentsTitleWithIssue: (issueIid: number) => `Comments — GitLab issue #${issueIid}`,
+    notLinkedHint: 'Item not linked to a GitLab issue: comments stay local.',
+    loading: 'Loading…',
+    noCommentYet: 'No comments yet.',
+    you: 'You',
+    propagatedToGitlab: 'Propagated to GitLab',
+    newComment: 'New comment',
+    commentPlaceholderLinked: 'Write a comment (propagated to GitLab)…',
+    commentPlaceholder: 'Write a comment…',
+    sending: 'Sending…',
+    send: 'Send',
+  },
+} as const;
+
 export interface TaskDetailItem {
   id: string;
   title: string;
@@ -36,6 +85,9 @@ export function TaskDetailPanel({
   onClose: () => void;
   onStatusChange: (item: { id: string }, nextStatus: string) => void;
 }) {
+  const s = useStrings(strings);
+  const { language } = useLanguage();
+  const locale = language === 'fr' ? 'fr-FR' : 'en-US';
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [commentsError, setCommentsError] = useState('');
   const [commentsLoading, setCommentsLoading] = useState(true);
@@ -50,12 +102,12 @@ export function TaskDetailPanel({
     setCommentsError('');
     fetch(`${apiBase}/api/items/${item.id}/comments`)
       .then((response) => {
-        if (response.status === 503) { setCommentsError('Commentaires non configurés.'); return []; }
+        if (response.status === 503) { setCommentsError(s.commentsNotConfigured); return []; }
         if (!response.ok) throw new Error('load-failed');
         return response.json();
       })
       .then((data) => { if (!cancelled) setComments(Array.isArray(data) ? data : []); })
-      .catch(() => { if (!cancelled) setCommentsError('Impossible de charger les commentaires.'); })
+      .catch(() => { if (!cancelled) setCommentsError(s.cannotLoadComments); })
       .finally(() => { if (!cancelled) setCommentsLoading(false); });
     return () => { cancelled = true; };
   }, [apiBase, item.id]);
@@ -77,23 +129,23 @@ export function TaskDetailPanel({
       setComments((current) => [...current, created]);
       setDraft('');
     } catch {
-      setCommentsError("Échec de l'envoi du commentaire.");
+      setCommentsError(s.commentSendFailed);
     } finally {
       setPosting(false);
     }
   }
 
   return (
-    <div className="detail-overlay" role="dialog" aria-modal="true" aria-label={`Détail de ${item.title}`} onClick={onClose}>
+    <div className="detail-overlay" role="dialog" aria-modal="true" aria-label={s.detailOf(item.title)} onClick={onClose}>
       <div className="detail-panel" onClick={(event) => event.stopPropagation()}>
         <header className="detail-header">
           <h2>{item.title}</h2>
-          <button type="button" className="detail-close" aria-label="Fermer le détail" onClick={onClose}>×</button>
+          <button type="button" className="detail-close" aria-label={s.closeDetail} onClick={onClose}>×</button>
         </header>
 
         <div className="detail-body">
           <label className="detail-field">
-            <span>Statut</span>
+            <span>{s.status}</span>
             <select
               className="item-status"
               value={item.status}
@@ -105,24 +157,24 @@ export function TaskDetailPanel({
 
           {(item.mergeRequestState || item.pipelineStatus) && (
             <p className="integrations">
-              {item.mergeRequestState && `MR ${item.mergeRequestState}`}
-              {item.pipelineStatus && ` · CI ${item.pipelineStatus}`}
+              {item.mergeRequestState && s.mrStatus(item.mergeRequestState)}
+              {item.pipelineStatus && s.ciStatus(item.pipelineStatus)}
             </p>
           )}
 
           <section className="detail-comments">
-            <h3>Commentaires{linkedIssue ? ` — issue GitLab #${linkedIssue.issueIid}` : ''}</h3>
-            {!linkedIssue && <p className="hint">Item non lié à une issue GitLab : les commentaires restent locaux.</p>}
-            {commentsLoading && <p className="empty">Chargement…</p>}
+            <h3>{linkedIssue ? s.commentsTitleWithIssue(linkedIssue.issueIid) : s.commentsTitle}</h3>
+            {!linkedIssue && <p className="hint">{s.notLinkedHint}</p>}
+            {commentsLoading && <p className="empty">{s.loading}</p>}
             {commentsError && <p className="empty">{commentsError}</p>}
-            {!commentsLoading && !commentsError && comments.length === 0 && <p className="empty">Aucun commentaire pour le moment.</p>}
+            {!commentsLoading && !commentsError && comments.length === 0 && <p className="empty">{s.noCommentYet}</p>}
             <ul className="comment-list">
               {comments.map((comment) => (
                 <li className="comment-entry" key={comment.id}>
                   <div className="comment-meta">
-                    <span>{comment.author ?? 'Vous'}</span>
-                    <span>{new Date(comment.createdAt).toLocaleString('fr-FR')}</span>
-                    {comment.propagatedToGitlab && <span className="comment-synced" title="Propagé vers GitLab">GitLab ✓</span>}
+                    <span>{comment.author ?? s.you}</span>
+                    <span>{new Date(comment.createdAt).toLocaleString(locale)}</span>
+                    {comment.propagatedToGitlab && <span className="comment-synced" title={s.propagatedToGitlab}>GitLab ✓</span>}
                   </div>
                   <p>{comment.body}</p>
                 </li>
@@ -130,13 +182,13 @@ export function TaskDetailPanel({
             </ul>
             <form className="comment-form" onSubmit={postComment}>
               <textarea
-                aria-label="Nouveau commentaire"
+                aria-label={s.newComment}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder={linkedIssue ? 'Écrire un commentaire (propagé vers GitLab)…' : 'Écrire un commentaire…'}
+                placeholder={linkedIssue ? s.commentPlaceholderLinked : s.commentPlaceholder}
                 rows={3}
               />
-              <button type="submit" className="filter" disabled={posting || !draft.trim()}>{posting ? 'Envoi…' : 'Envoyer'}</button>
+              <button type="submit" className="filter" disabled={posting || !draft.trim()}>{posting ? s.sending : s.send}</button>
             </form>
           </section>
         </div>

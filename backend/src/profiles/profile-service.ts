@@ -14,6 +14,7 @@ export interface UserProfileInput {
   displayName: string;
   avatarEmoji?: string | null;
   avatarColor?: string | null;
+  avatarImageUrl?: string | null;
   statusEmoji?: string | null;
   statusMessage?: string | null;
   availability?: AvailabilityStatus;
@@ -120,6 +121,7 @@ export class ProfileService {
         displayName,
         avatarEmoji: input.avatarEmoji ?? null,
         avatarColor: input.avatarColor ?? null,
+        avatarImageUrl: input.avatarImageUrl ?? null,
         statusEmoji: input.statusEmoji ?? null,
         statusMessage: input.statusMessage ?? null,
         availability: input.availability ?? 'available',
@@ -140,6 +142,7 @@ export class ProfileService {
     }
     if (input.avatarEmoji !== undefined) data.avatarEmoji = input.avatarEmoji;
     if (input.avatarColor !== undefined) data.avatarColor = input.avatarColor;
+    if (input.avatarImageUrl !== undefined) data.avatarImageUrl = input.avatarImageUrl;
     if (input.statusEmoji !== undefined) data.statusEmoji = input.statusEmoji;
     if (input.statusMessage !== undefined) data.statusMessage = input.statusMessage;
     if (input.availability !== undefined) data.availability = input.availability;

@@ -112,6 +112,7 @@ function parseProfileInput(body: unknown, partial = false): UserProfileInput {
   if (typeof b.displayName === 'string') input.displayName = b.displayName;
   if ('avatarEmoji' in b) input.avatarEmoji = (b.avatarEmoji as string | null) ?? null;
   if ('avatarColor' in b) input.avatarColor = (b.avatarColor as string | null) ?? null;
+  if ('avatarImageUrl' in b) input.avatarImageUrl = (b.avatarImageUrl as string | null) ?? null;
   if ('statusEmoji' in b) input.statusEmoji = (b.statusEmoji as string | null) ?? null;
   if ('statusMessage' in b) input.statusMessage = (b.statusMessage as string | null) ?? null;
   if (typeof b.availability === 'string') input.availability = b.availability as UserProfileInput['availability'];

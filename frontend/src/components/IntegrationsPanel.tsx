@@ -1,6 +1,74 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useStrings } from '../i18n/LanguageContext.js';
 
 type AuthType = 'none' | 'basic' | 'bearer' | 'apiKey';
+
+const strings = {
+  fr: {
+    intro: "Teste la connectivité d'une API via une URL + un mode d'authentification, avec détection best-effort OpenAPI/Swagger. Il ne s'agit pas d'une découverte magique universelle : au-delà d'un health check et d'une recherche de document OpenAPI standard, aucune donnée n'est inventée.",
+    nameLabel: "Nom de l'intégration",
+    namePlaceholder: 'Nom (ex: grafana-secondaire)',
+    baseUrlLabel: 'URL de base',
+    authTypeLabel: "Type d'authentification",
+    authNone: 'Aucune',
+    authBasic: 'Basic (utilisateur/mot de passe)',
+    authBearer: 'Bearer (token)',
+    authApiKey: 'Clé API (en-tête)',
+    usernameLabel: 'Utilisateur',
+    usernamePlaceholder: 'Utilisateur',
+    passwordLabel: 'Mot de passe',
+    passwordPlaceholder: 'Mot de passe',
+    tokenLabel: 'Token',
+    tokenPlaceholder: 'Token',
+    headerNameLabel: "Nom de l'en-tête",
+    apiKeyLabel: 'Clé API',
+    apiKeyPlaceholder: 'Clé API',
+    testing: 'Test en cours…',
+    testButton: 'Tester la connexion',
+    generatorNotConfigured: "Le générateur d'intégration n'est pas configuré côté serveur.",
+    unreachable: 'Impossible de joindre le serveur.',
+    nameAndUrlRequired: 'Nom et URL requis avant de sauvegarder.',
+    saveFailed: 'Échec de la sauvegarde.',
+    resultTitle: 'Résultat du test',
+    reachable: (reachable: boolean, status?: number) => `Joignable : ${reachable ? 'oui' : 'non'}${status ? ` (HTTP ${status})` : ''}`,
+    detectedApiType: (type: string) => `Type d'API détecté : ${type}`,
+    saveThisIntegration: 'Sauvegarder cette intégration',
+    savedTitle: 'Intégrations enregistrées',
+    noSaved: 'Aucune intégration custom enregistrée.',
+  },
+  en: {
+    intro: "Tests API connectivity via a URL and an authentication mode, with best-effort OpenAPI/Swagger detection. This is not universal magic discovery: beyond a health check and a search for a standard OpenAPI document, no data is invented.",
+    nameLabel: 'Integration name',
+    namePlaceholder: 'Name (e.g. grafana-secondary)',
+    baseUrlLabel: 'Base URL',
+    authTypeLabel: 'Authentication type',
+    authNone: 'None',
+    authBasic: 'Basic (username/password)',
+    authBearer: 'Bearer (token)',
+    authApiKey: 'API key (header)',
+    usernameLabel: 'Username',
+    usernamePlaceholder: 'Username',
+    passwordLabel: 'Password',
+    passwordPlaceholder: 'Password',
+    tokenLabel: 'Token',
+    tokenPlaceholder: 'Token',
+    headerNameLabel: 'Header name',
+    apiKeyLabel: 'API key',
+    apiKeyPlaceholder: 'API key',
+    testing: 'Testing…',
+    testButton: 'Test connection',
+    generatorNotConfigured: 'The integration generator is not configured on the server side.',
+    unreachable: 'Could not reach the server.',
+    nameAndUrlRequired: 'Name and URL are required before saving.',
+    saveFailed: 'Failed to save.',
+    resultTitle: 'Test result',
+    reachable: (reachable: boolean, status?: number) => `Reachable: ${reachable ? 'yes' : 'no'}${status ? ` (HTTP ${status})` : ''}`,
+    detectedApiType: (type: string) => `Detected API type: ${type}`,
+    saveThisIntegration: 'Save this integration',
+    savedTitle: 'Saved integrations',
+    noSaved: 'No custom integration saved.',
+  },
+} as const;
 
 interface SavedIntegration {
   name: string;
@@ -17,6 +85,7 @@ interface TestResult {
 const apiBase = () => import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 export function IntegrationsPanel() {
+  const s = useStrings(strings);
   const [name, setName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [authType, setAuthType] = useState<AuthType>('none');
@@ -56,17 +125,17 @@ export function IntegrationsPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ baseUrl, authType, credentials: credentials() }),
       });
-      if (response.status === 503) { setError('Le générateur d\'intégration n\'est pas configuré côté serveur.'); return; }
+      if (response.status === 503) { setError(s.generatorNotConfigured); return; }
       setTestResult(await response.json());
     } catch {
-      setError('Impossible de joindre le serveur.');
+      setError(s.unreachable);
     } finally {
       setTesting(false);
     }
   };
 
   const saveIntegration = async () => {
-    if (!name.trim() || !baseUrl.trim()) { setError('Nom et URL requis avant de sauvegarder.'); return; }
+    if (!name.trim() || !baseUrl.trim()) { setError(s.nameAndUrlRequired); return; }
     setError('');
     try {
       const response = await fetch(`${apiBase()}/api/integrations`, {
@@ -74,56 +143,54 @@ export function IntegrationsPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, config: { baseUrl, authType, credentials: credentials() } }),
       });
-      if (!response.ok) { setError('Échec de la sauvegarde.'); return; }
+      if (!response.ok) { setError(s.saveFailed); return; }
       setName('');
       loadSaved();
     } catch {
-      setError('Impossible de joindre le serveur.');
+      setError(s.unreachable);
     }
   };
 
   return (
     <div className="items integrations-panel">
       <p className="empty">
-        Teste la connectivité d'une API via une URL + un mode d'authentification, avec détection best-effort
-        OpenAPI/Swagger. Il ne s'agit pas d'une découverte magique universelle : au-delà d'un health check et
-        d'une recherche de document OpenAPI standard, aucune donnée n'est inventée.
+        {s.intro}
       </p>
       <form className="new-item integration-form" onSubmit={(event) => void testConnection(event)}>
-        <input aria-label="Nom de l'intégration" placeholder="Nom (ex: grafana-secondaire)" value={name} onChange={(event) => setName(event.target.value)} />
-        <input aria-label="URL de base" placeholder="https://service.example.internal" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} required />
-        <select aria-label="Type d'authentification" value={authType} onChange={(event) => setAuthType(event.target.value as AuthType)}>
-          <option value="none">Aucune</option>
-          <option value="basic">Basic (utilisateur/mot de passe)</option>
-          <option value="bearer">Bearer (token)</option>
-          <option value="apiKey">Clé API (en-tête)</option>
+        <input aria-label={s.nameLabel} placeholder={s.namePlaceholder} value={name} onChange={(event) => setName(event.target.value)} />
+        <input aria-label={s.baseUrlLabel} placeholder="https://service.example.internal" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} required />
+        <select aria-label={s.authTypeLabel} value={authType} onChange={(event) => setAuthType(event.target.value as AuthType)}>
+          <option value="none">{s.authNone}</option>
+          <option value="basic">{s.authBasic}</option>
+          <option value="bearer">{s.authBearer}</option>
+          <option value="apiKey">{s.authApiKey}</option>
         </select>
         {authType === 'basic' && (<>
-          <input aria-label="Utilisateur" placeholder="Utilisateur" value={username} onChange={(event) => setUsername(event.target.value)} />
-          <input aria-label="Mot de passe" type="password" placeholder="Mot de passe" value={password} onChange={(event) => setPassword(event.target.value)} />
+          <input aria-label={s.usernameLabel} placeholder={s.usernamePlaceholder} value={username} onChange={(event) => setUsername(event.target.value)} />
+          <input aria-label={s.passwordLabel} type="password" placeholder={s.passwordPlaceholder} value={password} onChange={(event) => setPassword(event.target.value)} />
         </>)}
         {authType === 'bearer' && (
-          <input aria-label="Token" type="password" placeholder="Token" value={token} onChange={(event) => setToken(event.target.value)} />
+          <input aria-label={s.tokenLabel} type="password" placeholder={s.tokenPlaceholder} value={token} onChange={(event) => setToken(event.target.value)} />
         )}
         {authType === 'apiKey' && (<>
-          <input aria-label="Nom de l'en-tête" placeholder="X-API-Key" value={apiKeyHeader} onChange={(event) => setApiKeyHeader(event.target.value)} />
-          <input aria-label="Clé API" type="password" placeholder="Clé API" value={apiKey} onChange={(event) => setApiKey(event.target.value)} />
+          <input aria-label={s.headerNameLabel} placeholder="X-API-Key" value={apiKeyHeader} onChange={(event) => setApiKeyHeader(event.target.value)} />
+          <input aria-label={s.apiKeyLabel} type="password" placeholder={s.apiKeyPlaceholder} value={apiKey} onChange={(event) => setApiKey(event.target.value)} />
         </>)}
-        <button type="submit" disabled={testing}>{testing ? 'Test en cours…' : 'Tester la connexion'}</button>
+        <button type="submit" disabled={testing}>{testing ? s.testing : s.testButton}</button>
       </form>
       {error && <p className="error" role="alert">{error}</p>}
       {testResult && (
         <div className="widget-card integration-test-result">
-          <h3>Résultat du test</h3>
-          <p className="empty">Joignable : {testResult.reachable ? 'oui' : 'non'}{testResult.status ? ` (HTTP ${testResult.status})` : ''}</p>
-          <p className="empty">Type d'API détecté : {testResult.detectedApiType}</p>
+          <h3>{s.resultTitle}</h3>
+          <p className="empty">{s.reachable(testResult.reachable, testResult.status)}</p>
+          <p className="empty">{s.detectedApiType(testResult.detectedApiType)}</p>
           {testResult.error && <p className="error" role="alert">{testResult.error}</p>}
-          {testResult.reachable && <button type="button" onClick={() => void saveIntegration()}>Sauvegarder cette intégration</button>}
+          {testResult.reachable && <button type="button" onClick={() => void saveIntegration()}>{s.saveThisIntegration}</button>}
         </div>
       )}
       <section className="view-group">
-        <h3>Intégrations enregistrées</h3>
-        {saved.length === 0 && <p className="empty">Aucune intégration custom enregistrée.</p>}
+        <h3>{s.savedTitle}</h3>
+        {saved.length === 0 && <p className="empty">{s.noSaved}</p>}
         {saved.map((integration) => (
           <article className="item" key={integration.name}>
             <strong>{integration.name}</strong>

@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 
+import { useStrings } from '../i18n/LanguageContext.js';
+
 export interface NetworkGraphNode {
   id: string;
   kind: 'proxmox-host' | 'proxmox-vm' | 'dns-record';
@@ -25,11 +27,34 @@ const kindColor: Record<NetworkGraphNode['kind'], string> = {
   'dns-record': '#667569',
 };
 
-const kindLabel: Record<NetworkGraphNode['kind'], string> = {
-  'proxmox-host': 'Hôte Proxmox',
-  'proxmox-vm': 'VM',
-  'dns-record': 'Enregistrement DNS',
-};
+const strings = {
+  fr: {
+    kindLabel: {
+      'proxmox-host': 'Hôte Proxmox', 'proxmox-vm': 'VM', 'dns-record': 'Enregistrement DNS',
+    } as Record<NetworkGraphNode['kind'], string>,
+    noTopologyData: 'Aucune donnée de topologie disponible.',
+    zoomIn: 'Zoom +',
+    zoomOut: 'Zoom -',
+    reset: 'Réinitialiser',
+    graphAria: 'Graphe de topologie réseau',
+    servicesCount: (count: number) => `, ${count} service(s)`,
+    servicesOnMachine: 'Services/outils sur cette machine :',
+    close: 'Fermer',
+  },
+  en: {
+    kindLabel: {
+      'proxmox-host': 'Proxmox host', 'proxmox-vm': 'VM', 'dns-record': 'DNS record',
+    } as Record<NetworkGraphNode['kind'], string>,
+    noTopologyData: 'No topology data available.',
+    zoomIn: 'Zoom +',
+    zoomOut: 'Zoom -',
+    reset: 'Reset',
+    graphAria: 'Network topology graph',
+    servicesCount: (count: number) => `, ${count} service(s)`,
+    close: 'Close',
+    servicesOnMachine: 'Services/tools on this machine:',
+  },
+} as const;
 
 const COL_WIDTH = 220;
 const ROW_HEIGHT = 90;
@@ -65,6 +90,7 @@ function computeCanvasSize(nodes: NetworkGraphNode[], positions: Map<string, { x
 }
 
 export function NetworkGraph({ nodes, edges }: NetworkGraphProps) {
+  const s = useStrings(strings);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [selected, setSelected] = useState<NetworkGraphNode | null>(null);
@@ -118,15 +144,15 @@ export function NetworkGraph({ nodes, edges }: NetworkGraphProps) {
   const onPointerUp = () => { dragState.current = null; };
 
   if (nodes.length === 0) {
-    return <p className="empty">Aucune donnée de topologie disponible.</p>;
+    return <p className="empty">{s.noTopologyData}</p>;
   }
 
   return (
     <div className="network-graph-shell">
       <div className="network-graph-toolbar">
-        <button type="button" className="filter" onClick={() => setScale((s) => Math.min(3, s + 0.2))}>Zoom +</button>
-        <button type="button" className="filter" onClick={() => setScale((s) => Math.max(0.3, s - 0.2))}>Zoom -</button>
-        <button type="button" className="filter" onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }); }}>Réinitialiser</button>
+        <button type="button" className="filter" onClick={() => setScale((current) => Math.min(3, current + 0.2))}>{s.zoomIn}</button>
+        <button type="button" className="filter" onClick={() => setScale((current) => Math.max(0.3, current - 0.2))}>{s.zoomOut}</button>
+        <button type="button" className="filter" onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }); }}>{s.reset}</button>
       </div>
       <svg
         className="network-graph"
@@ -138,7 +164,7 @@ export function NetworkGraph({ nodes, edges }: NetworkGraphProps) {
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
         role="img"
-        aria-label="Graphe de topologie réseau"
+        aria-label={s.graphAria}
       >
         <g transform={`translate(${offset.x}, ${offset.y}) scale(${scale})`}>
           {[...clusters.entries()].map(([clusterId, box]) => (
@@ -170,7 +196,7 @@ export function NetworkGraph({ nodes, edges }: NetworkGraphProps) {
                 onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(node); } }}
                 tabIndex={0}
                 role="button"
-                aria-label={`${kindLabel[node.kind]} ${node.label}${node.services?.length ? `, ${node.services.length} service(s)` : ''}`}
+                aria-label={`${s.kindLabel[node.kind]} ${node.label}${node.services?.length ? s.servicesCount(node.services.length) : ''}`}
               >
                 <circle r={22} fill={kindColor[node.kind]} />
                 {node.services && node.services.length > 0 && (
@@ -187,15 +213,15 @@ export function NetworkGraph({ nodes, edges }: NetworkGraphProps) {
       </svg>
       {selected && (
         <div className="network-node-detail">
-          <h4>{kindLabel[selected.kind]} · {selected.label}</h4>
+          <h4>{s.kindLabel[selected.kind]} · {selected.label}</h4>
           {selected.meta && Object.entries(selected.meta).map(([key, value]) => <p className="empty" key={key}>{key} : {value}</p>)}
           {selected.services && selected.services.length > 0 && (
             <div className="network-node-services">
-              <p className="empty">Services/outils sur cette machine :</p>
+              <p className="empty">{s.servicesOnMachine}</p>
               <ul>{selected.services.map((service) => <li key={service}>{service}</li>)}</ul>
             </div>
           )}
-          <button type="button" className="filter" onClick={() => setSelected(null)}>Fermer</button>
+          <button type="button" className="filter" onClick={() => setSelected(null)}>{s.close}</button>
         </div>
       )}
     </div>

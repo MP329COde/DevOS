@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Command } from 'cmdk';
 
 import { createAuthorizationRequest } from './auth/oidc.js';
@@ -11,8 +11,11 @@ import { NotesPanel } from './components/NotesPanel.js';
 import { DevelopmentPanel } from './components/DevelopmentPanel.js';
 import { DevTemplatesPanel } from './components/DevTemplatesPanel.js';
 import { TaskDetailPanel } from './components/TaskDetailPanel.js';
+import { ActivityTimelineDrawer } from './components/ActivityTimelineDrawer.js';
+import { Icon } from './components/Icon.js';
 import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js';
-import { THEME_COLOR_SETTINGS, THEME_PRESETS, type ThemeMode } from './theme.js';
+import { THEME_COLOR_SETTINGS, THEME_PRESETS, type ThemeMode, type ThemePreset } from './theme.js';
+import { useLanguage } from './i18n/LanguageContext.js';
 
 // TODO(AM.1/AM.2) : 'dev-templates' est un panel autonome temporaire (catalogue de templates,
 // section AM.3) en attendant le panel racine "Développement" avec sous-navigation. À rattacher
@@ -35,34 +38,6 @@ const oidcConfig = {
   clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? 'devos',
   redirectUri: `${window.location.origin}/auth/callback`,
 };
-
-const iconPaths: Record<string, string> = {
-  home: 'M3 10.5 10 4l7 6.5M5 9.5V17h10V9.5',
-  tasks: 'M4 6h12M4 10h12M4 14h8M4 6l0 0M3.5 6l1 1 1.5-1.7M3.5 10l1 1 1.5-1.7',
-  inbox: 'M3 5h14v7l-2.5 4h-9L3 12V5Z M3 12h4l1 2h4l1-2h4',
-  clock: 'M10 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12Zm0 3v3.2l2.2 1.3',
-  network: 'M10 3v4M4.5 16h11M10 7 5 12M10 7l5 5M4.5 16v-3M15.5 16v-3',
-  layers: 'M10 3 3 7l7 4 7-4-7-4Zm-7 7 7 4 7-4M3 13l7 4 7-4',
-  doc: 'M6 3h6l3 3v11H6V3Zm6 0v3h3M8 10h5M8 13h5',
-  widget: 'M4 4h5v5H4V4Zm7 0h5v5h-5V4ZM4 11h5v5H4v-5Zm7 0h5v5h-5v-5Z',
-  gear: 'M10 7.4A2.6 2.6 0 1 0 10 12.6 2.6 2.6 0 0 0 10 7.4ZM10 6.6A3.4 3.4 0 1 0 10 13.4 3.4 3.4 0 0 0 10 6.6ZM16.6 10L18.6 10M18.6 11.05L18.6 8.95M14.67 14.67L16.08 16.08M15.34 16.82L16.82 15.34M10 16.6L10 18.6M8.95 18.6L11.05 18.6M5.33 14.67L3.92 16.08M3.18 15.34L4.66 16.82M3.4 10L1.4 10M1.4 8.95L1.4 11.05M5.33 5.33L3.92 3.92M4.66 3.18L3.18 4.66M10 3.4L10 1.4M11.05 1.4L8.95 1.4M14.67 5.33L16.08 3.92M16.82 4.66L15.34 3.18',
-  pencil: 'M13.5 3.5 16.5 6.5 7 16H4v-3L13.5 3.5Z',
-  chevron: 'M7 5l6 5-6 5',
-  plus: 'M10 4v12M4 10h12',
-  up: 'M5 12l5-5 5 5',
-  down: 'M5 8l5 5 5-5',
-  x: 'M5 5l10 10M15 5 5 15',
-  dot: 'M10 10',
-  drag: 'M7 5.5h.01M13 5.5h.01M7 10h.01M13 10h.01M7 14.5h.01M13 14.5h.01',
-};
-
-function Icon({ name, size = 16 }: { name: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={iconPaths[name] ?? ''} />
-    </svg>
-  );
-}
 
 function StatusBadge({ state, label }: { state: 'ok' | 'warn' | 'off'; label: string }) {
   return (
@@ -147,13 +122,16 @@ const mockWidgetPreview: Record<string, string[]> = {
 
 export function App() {
   const [status, setStatus] = useState('');
-  const [items, setItems] = useState<Array<{ id: string; title: string; type: string; status: string; dueAt?: string | null; mergeRequestState?: string | null; pipelineStatus?: string | null; coderWorkspaceName?: string | null; coderWorkspaceStatus?: string | null; required?: boolean; gitlabLinks?: Array<{ gitlabProjectId: string; issueIid: number }> }>>([]);
+  const [items, setItems] = useState<Array<{ id: string; title: string; type: string; status: string; dueAt?: string | null; mergeRequestState?: string | null; pipelineStatus?: string | null; coderWorkspaceName?: string | null; coderWorkspaceStatus?: string | null; required?: boolean; severity?: string | null; environment?: string | null; reproSteps?: string | null; gitlabLinks?: Array<{ gitlabProjectId: string; issueIid: number }> }>>([]);
   const [workspaceLinks, setWorkspaceLinks] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState(() => readUrlFilter('all'));
   const [title, setTitle] = useState('');
   const [type, setType] = useState('task');
   const [labels, setLabels] = useState('');
   const [dueAt, setDueAt] = useState('');
+  const [severity, setSeverity] = useState('medium');
+  const [environment, setEnvironment] = useState('');
+  const [reproSteps, setReproSteps] = useState('');
   const [view, setView] = useState<'list' | 'board' | 'gantt' | 'calendar'>('list');
   const [itemsError, setItemsError] = useState('');
   const [panel, setPanel] = useState<(typeof PANEL_IDS)[number]>(() => readUrlPanel(PANEL_IDS, 'home'));
@@ -216,6 +194,83 @@ export function App() {
   const [profileName, setProfileName] = useState<string>(() => localStorage.getItem('devos.profileName') ?? '');
   const [editingProfileName, setEditingProfileName] = useState(false);
   useEffect(() => { localStorage.setItem('devos.profileName', profileName); }, [profileName]);
+  // Photo de profil (section AC) : uploadée vers le backend (fichier écrit sur disque, URL en base),
+  // avec repli local le temps de l'upload. Un profil local est créé à la volée (pas de vraie session
+  // Keycloak encore branchée côté frontend) pour rattacher l'avatar à une ligne UserProfile réelle.
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string>(() => localStorage.getItem('devos.profileAvatarUrl') ?? '');
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarFileInput = useRef<HTMLInputElement>(null);
+
+  async function ensureLocalProfileId(): Promise<string> {
+    const existing = localStorage.getItem('devos.localProfileId');
+    if (existing) return existing;
+    const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+    const response = await fetch(`${apiBase}/api/profiles`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: `local-${crypto.randomUUID()}@devos.local`, displayName: profileName || 'Utilisateur' }),
+    });
+    if (!response.ok) throw new Error('Impossible de créer le profil');
+    const created = await response.json() as { id: string };
+    localStorage.setItem('devos.localProfileId', created.id);
+    return created.id;
+  }
+
+  async function handleAvatarFile(file: File) {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    setAvatarUploading(true);
+    try {
+      const profileId = await ensureLocalProfileId();
+      const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+      const response = await fetch(`${apiBase}/api/profiles/${profileId}/avatar`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ imageBase64: dataUrl }),
+      });
+      if (!response.ok) throw new Error('Upload impossible');
+      const updated = await response.json() as { avatarImageUrl?: string | null };
+      const finalUrl = updated.avatarImageUrl ? `${apiBase}${updated.avatarImageUrl}` : dataUrl;
+      setProfileAvatarUrl(finalUrl);
+      localStorage.setItem('devos.profileAvatarUrl', finalUrl);
+    } catch {
+      setProfileAvatarUrl(dataUrl);
+      localStorage.setItem('devos.profileAvatarUrl', dataUrl);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
+  function signOut() {
+    localStorage.removeItem('devos.localProfileId');
+    setProfileMenuOpen(false);
+    setPanel('login');
+  }
+
+  // Barre de recherche du header : suggestions locales instantanées (pages, commandes, items déjà
+  // chargés) combinées à une recherche backend (`/api/search`, items + projets réels), avec
+  // complétion fantôme acceptable via Tab (cf. .header-search-ghost dans styles.css).
+  const [headerSearch, setHeaderSearch] = useState('');
+  const [headerSearchOpen, setHeaderSearchOpen] = useState(false);
+  const [headerSearchActive, setHeaderSearchActive] = useState(0);
+  const [headerSearchRemote, setHeaderSearchRemote] = useState<Array<{ kind: 'item' | 'project'; id: string; title: string; subtitle?: string }>>([]);
+  useEffect(() => {
+    const query = headerSearch.trim();
+    if (query.length < 2) { setHeaderSearchRemote([]); return; }
+    const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+    const handle = window.setTimeout(() => {
+      void fetch(`${apiBase}/api/search?q=${encodeURIComponent(query)}`)
+        .then((response) => (response.ok ? response.json() : { results: [] }))
+        .then((data: { results?: typeof headerSearchRemote }) => setHeaderSearchRemote(data.results ?? []))
+        .catch(() => setHeaderSearchRemote([]));
+    }, 200);
+    return () => window.clearTimeout(handle);
+  }, [headerSearch]);
   const [homeEditMode, setHomeEditMode] = useState(false);
   const [homeWidgets, setHomeWidgets] = useState<Array<{ id: string; visible: boolean }>>(() => {
     const saved = localStorage.getItem('devos.homeWidgets');
@@ -293,13 +348,14 @@ export function App() {
   const [calendarError, setCalendarError] = useState('');
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => (typeof Notification === 'undefined' ? 'denied' : Notification.permission));
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [language, setLanguage] = useState<'fr' | 'en'>(() => (localStorage.getItem('devos.language') as 'fr' | 'en' | null) ?? 'fr');
+  const [storedNotifications, setStoredNotifications] = useState<Array<{ id: string; title: string; message: string; category: string | null; readAt: string | null; createdAt: string }>>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const { language, setLanguage } = useLanguage();
   const [loginEmail, setLoginEmail] = useState('');
   const [loginMessage, setLoginMessage] = useState('');
   const titleInput = useRef<HTMLInputElement>(null);
 
   useUrlState(panel, setPanel, PANEL_IDS, filter, setFilter);
-  useEffect(() => { localStorage.setItem('devos.language', language); }, [language]);
 
   // Garde le sous-onglet du panel Travail synchronisé avec `?sub=`, sur le même principe que
   // `useUrlState` pour panel/filter (deep links, retour arrière navigateur).
@@ -377,6 +433,88 @@ export function App() {
     }
   }, [themeColors]);
 
+  // Thème principal de la plateforme, défini par l'administrateur (Paramètres → Administration).
+  // Sert de thème imposé sur l'écran de connexion, et de thème par défaut pour tout utilisateur
+  // n'ayant pas encore personnalisé son propre thème (voir effet de chargement ci-dessous).
+  // Persisté côté backend (clé `platform.theme` de /api/settings, écriture réservée aux Admin) pour
+  // s'appliquer à tous les utilisateurs/appareils, avec un repli localStorage hors-ligne.
+  const [adminLoginThemeId, setAdminLoginThemeIdState] = useState<string>(() => localStorage.getItem('devos.adminLoginTheme') ?? 'default');
+  // Presets additionnels ajoutés par l'administrateur à la bibliothèque de thèmes de la plateforme
+  // (au-delà des thèmes préconfigurés fixes de theme.ts), partagés avec tous les utilisateurs.
+  const [platformThemePresets, setPlatformThemePresets] = useState<ThemePreset[]>(() => {
+    try { return JSON.parse(localStorage.getItem('devos.platformThemePresets') ?? '[]'); } catch { return []; }
+  });
+  const allThemePresets = useMemo<ThemePreset[]>(() => [...THEME_PRESETS, ...platformThemePresets], [platformThemePresets]);
+  const platformDefaultApplied = useRef(false);
+  useEffect(() => {
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { values?: Record<string, string> } | null) => {
+        if (!data?.values) return;
+        const rawTheme = data.values['platform.theme'];
+        const rawPresets = data.values['platform.themePresets'];
+        let platformPresetId: string | undefined;
+        if (rawTheme) {
+          try {
+            const parsed = JSON.parse(rawTheme) as { presetId?: string };
+            if (parsed.presetId) { platformPresetId = parsed.presetId; setAdminLoginThemeIdState(parsed.presetId); }
+          } catch { /* valeur invalide ignorée, on garde le repli localStorage */ }
+        }
+        if (rawPresets) {
+          try {
+            const parsed = JSON.parse(rawPresets) as ThemePreset[];
+            setPlatformThemePresets(parsed);
+            localStorage.setItem('devos.platformThemePresets', rawPresets);
+          } catch { /* valeur invalide ignorée */ }
+        }
+        // Un utilisateur qui n'a jamais personnalisé son thème (aucune clé locale) hérite du thème
+        // principal de la plateforme plutôt que du thème "default" codé en dur.
+        if (!platformDefaultApplied.current && localStorage.getItem('devos.themeColors') === null && platformPresetId) {
+          const preset = [...THEME_PRESETS, ...(rawPresets ? (JSON.parse(rawPresets) as ThemePreset[]) : [])].find((p) => p.id === platformPresetId);
+          if (preset) setThemeColors({ ...preset.light });
+        }
+        platformDefaultApplied.current = true;
+      })
+      .catch(() => { /* backend indisponible : on reste sur les valeurs localStorage/par défaut */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const setAdminLoginThemeId = (id: string) => {
+    setAdminLoginThemeIdState(id);
+    localStorage.setItem('devos.adminLoginTheme', id);
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings/platform.theme`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-devos-role': 'Admin' },
+      body: JSON.stringify({ value: JSON.stringify({ presetId: id }) }),
+    }).catch(() => { /* backend indisponible : le choix reste appliqué localement */ });
+  };
+  // Ajoute un nouveau thème à la bibliothèque de la plateforme (visible par tous), à partir d'une
+  // palette clair/sombre — permet à l'administrateur de personnaliser la plateforme au-delà des
+  // thèmes préconfigurés fixes de theme.ts.
+  const addPlatformThemePreset = (name: string, light: Record<string, string>, dark: Record<string, string>) => {
+    const preset: ThemePreset = { id: `platform-${Date.now()}`, label: name, light, dark };
+    setPlatformThemePresets((current) => {
+      const next = [...current, preset];
+      const serialized = JSON.stringify(next);
+      localStorage.setItem('devos.platformThemePresets', serialized);
+      void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings/platform.themePresets`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', 'x-devos-role': 'Admin' },
+        body: JSON.stringify({ value: serialized }),
+      }).catch(() => { /* backend indisponible : le preset reste disponible localement */ });
+      return next;
+    });
+  };
+  const [isDarkEffective, setIsDarkEffective] = useState(() => document.documentElement.getAttribute('data-theme') === 'dark');
+  useEffect(() => {
+    const observer = new MutationObserver(() => setIsDarkEffective(document.documentElement.getAttribute('data-theme') === 'dark'));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+  const adminLoginTheme = allThemePresets.find((preset) => preset.id === adminLoginThemeId) ?? allThemePresets[0];
+  const loginThemeVars = Object.fromEntries(
+    Object.entries(isDarkEffective ? adminLoginTheme.dark : adminLoginTheme.light).map(([cssVar, value]) => [`--${cssVar}`, value]),
+  ) as Record<string, string>;
+
   useEffect(() => {
     if (notificationPermission !== 'granted') return;
     const notifiedKey = 'devos.notifiedIds';
@@ -397,6 +535,28 @@ export function App() {
     localStorage.setItem(notifiedKey, JSON.stringify([...notifiedSet]));
   }, [items, wazuhAlerts, notificationPermission]);
   useEffect(() => { localStorage.setItem('devos.homeWidgets', JSON.stringify(homeWidgets)); }, [homeWidgets]);
+
+  const notificationsApiBase = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/notifications`;
+  const refreshStoredNotifications = () => {
+    void fetch(notificationsApiBase)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => { if (data) setStoredNotifications(data.notifications); })
+      .catch(() => undefined);
+  };
+  useEffect(() => {
+    refreshStoredNotifications();
+    const interval = window.setInterval(refreshStoredNotifications, 60_000);
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const markNotificationAsRead = (id: string) => {
+    setStoredNotifications((current) => current.map((n) => (n.id === id ? { ...n, readAt: n.readAt ?? new Date().toISOString() } : n)));
+    void fetch(`${notificationsApiBase}/${id}/read`, { method: 'PATCH' }).catch(() => undefined);
+  };
+  const deleteStoredNotification = (id: string) => {
+    setStoredNotifications((current) => current.filter((n) => n.id !== id));
+    void fetch(`${notificationsApiBase}/${id}`, { method: 'DELETE' }).catch(() => undefined);
+  };
 
   const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null);
   const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null);
@@ -660,7 +820,7 @@ export function App() {
     event.preventDefault();
     if (!title.trim()) return;
     const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/items`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, title, labels: labels.split(',').map((label) => label.trim()).filter(Boolean), ...(dueAt ? { dueAt: new Date(`${dueAt}T12:00:00`).toISOString() } : {}), ...(type === 'doc' && content ? { content } : {}) }),
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, title, labels: labels.split(',').map((label) => label.trim()).filter(Boolean), ...(dueAt ? { dueAt: new Date(`${dueAt}T12:00:00`).toISOString() } : {}), ...(type === 'doc' && content ? { content } : {}), ...(type === 'bug' ? { severity, environment: environment || undefined, reproSteps: reproSteps || undefined } : {}) }),
     });
     if (!response.ok) { setItemsError('Création impossible.'); return; }
     const created = await response.json();
@@ -669,6 +829,9 @@ export function App() {
     setLabels('');
     setDueAt('');
     setContent('');
+    setSeverity('medium');
+    setEnvironment('');
+    setReproSteps('');
   }
 
   async function updateStatus(item: { id: string }, nextStatus: string) {
@@ -806,6 +969,47 @@ export function App() {
     return groups;
   }, []);
   const collapsed = navLayout === 'sidebar' && sidebarCollapsed;
+  type HeaderSuggestion = { kind: 'page' | 'item' | 'project'; id: string; label: string; meta?: string; onSelect: () => void };
+  const headerSearchQuery = headerSearch.trim().toLowerCase();
+  const headerSuggestions: HeaderSuggestion[] = headerSearchQuery.length === 0 ? [] : [
+    ...navItems
+      .filter((item) => item.label.toLowerCase().includes(headerSearchQuery))
+      .slice(0, 4)
+      .map((item): HeaderSuggestion => ({ kind: 'page', id: `page-${item.id}`, label: item.label, meta: language === 'fr' ? 'Page' : 'Page', onSelect: () => setPanel(item.id) })),
+    ...items
+      .filter((item) => item.title.toLowerCase().includes(headerSearchQuery))
+      .slice(0, 5)
+      .map((item): HeaderSuggestion => ({ kind: 'item', id: `item-${item.id}`, label: item.title, meta: item.type, onSelect: () => { setPanel('work'); setDetailItemId(item.id); } })),
+    ...headerSearchRemote
+      .filter((result) => !items.some((item) => item.id === result.id))
+      .slice(0, 6)
+      .map((result): HeaderSuggestion => result.kind === 'item'
+        ? { kind: 'item', id: `remote-item-${result.id}`, label: result.title, meta: result.subtitle, onSelect: () => { setPanel('work'); setDetailItemId(result.id); } }
+        : { kind: 'project', id: `remote-project-${result.id}`, label: result.title, meta: result.subtitle ?? (language === 'fr' ? 'Projet' : 'Project'), onSelect: () => setPanel('development') }),
+  ];
+  const headerGhostSuggestion = headerSuggestions.find((s) => s.label.toLowerCase().startsWith(headerSearchQuery));
+  function selectHeaderSuggestion(suggestion: HeaderSuggestion) {
+    suggestion.onSelect();
+    setHeaderSearch('');
+    setHeaderSearchOpen(false);
+    setHeaderSearchActive(0);
+  }
+  function handleHeaderSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Tab' && headerGhostSuggestion) {
+      event.preventDefault();
+      setHeaderSearch(headerGhostSuggestion.label);
+      return;
+    }
+    if (event.key === 'ArrowDown') { event.preventDefault(); setHeaderSearchActive((i) => Math.min(i + 1, headerSuggestions.length - 1)); return; }
+    if (event.key === 'ArrowUp') { event.preventDefault(); setHeaderSearchActive((i) => Math.max(i - 1, 0)); return; }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const target = headerSuggestions[headerSearchActive];
+      if (target) selectHeaderSuggestion(target);
+      return;
+    }
+    if (event.key === 'Escape') { setHeaderSearchOpen(false); (event.target as HTMLInputElement).blur(); }
+  }
   const navButton = (item: (typeof navItems)[number]) => (
     <button key={item.id} className={panel === item.id ? 'nav-link active' : 'nav-link'} type="button" aria-current={panel === item.id ? 'page' : undefined} title={collapsed ? item.label : undefined} onClick={() => setPanel(item.id)}>
       <Icon name={item.icon} />
@@ -813,7 +1017,7 @@ export function App() {
       {item.badge ? <span className="nav-badge">{item.badge}</span> : null}
     </button>
   );
-  const itemCard = (item: typeof items[number]) =><article className={item.required ? 'item item-required' : 'item'} key={item.id}><span className={`type type-${item.type}`}>{item.type}</span><span className="item-title"><strong>{item.title}</strong>{item.required && <span className="required-badge" title="Item obligatoire">Obligatoire</span>}</span><span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}{item.coderWorkspaceStatus && ` · Workspace ${item.coderWorkspaceStatus}`}</span><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><span className="item-actions"><button className={item.required ? 'required-toggle active' : 'required-toggle'} type="button" aria-pressed={Boolean(item.required)} aria-label={item.required ? `Retirer le caractère obligatoire de ${item.title}` : `Marquer ${item.title} comme obligatoire`} onClick={() => void toggleRequired(item)}>{item.required ? 'Obligatoire ✓' : 'Marquer obligatoire'}</button>{item.type === 'task' && <button className="open-workspace" type="button" onClick={() => void openWorkspace(item)}>{item.coderWorkspaceName ? 'Ouvrir dans VS Code' : 'Ouvrir un environnement'}</button>}<button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="detail-open" type="button" onClick={() => setDetailItemId(item.id)}>Détail</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></span></article>;
+  const itemCard = (item: typeof items[number]) =><article className={item.required ? 'item item-required' : 'item'} key={item.id}><span className={`type type-${item.type}`}>{item.type}</span>{item.type === 'bug' && item.severity && <span className={`badge severity-${item.severity}`}>{item.severity}</span>}<span className="item-title"><strong>{item.title}</strong>{item.required && <span className="required-badge" title="Item obligatoire">Obligatoire</span>}</span><span className="integrations">{item.mergeRequestState && `MR ${item.mergeRequestState}`}{item.pipelineStatus && ` · CI ${item.pipelineStatus}`}{item.coderWorkspaceStatus && ` · Workspace ${item.coderWorkspaceStatus}`}</span><select className="item-status" aria-label={`Statut de ${item.title}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value)}><option value="backlog">backlog</option><option value="in_progress">in progress</option><option value="done">done</option><option value="blocked">blocked</option></select><span className="item-actions"><button className={item.required ? 'required-toggle active' : 'required-toggle'} type="button" aria-pressed={Boolean(item.required)} aria-label={item.required ? `Retirer le caractère obligatoire de ${item.title}` : `Marquer ${item.title} comme obligatoire`} onClick={() => void toggleRequired(item)}>{item.required ? 'Obligatoire ✓' : 'Marquer obligatoire'}</button>{item.type === 'task' && <button className="open-workspace" type="button" onClick={() => void openWorkspace(item)}>{item.coderWorkspaceName ? 'Ouvrir dans VS Code' : 'Ouvrir un environnement'}</button>}<button className="timer" type="button" onClick={() => void toggleTimer(item)}>{activeTimers[item.id] ? 'Arrêter' : 'Démarrer'}</button><button className="detail-open" type="button" onClick={() => setDetailItemId(item.id)}>Détail</button><button className="delete" type="button" aria-label={`Supprimer ${item.title}`} onClick={() => void deleteItem(item)}>×</button></span></article>;
 
   return (
     <div className={`shell layout-${navLayout}`}>
@@ -823,21 +1027,94 @@ export function App() {
           <div><div className="eyebrow">DEVOS / HOMELAB COMMAND</div><h1 id="title">{navItems.find((n) => n.id === panel)?.label ?? (panel === 'login' ? (language === 'fr' ? 'Connexion' : 'Sign in') : 'Dashboard')}</h1></div>
         </div>
         <div className="header-actions">
-          <button type="button" className="header-icon-button" aria-label={language === 'fr' ? 'Notifications' : 'Notifications'} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}>
-            <Icon name="inbox" />
-            {(triage.length + (wazuhAlerts?.filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).length ?? 0)) > 0 && <span className="header-notification-badge">{triage.length + (wazuhAlerts?.filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).length ?? 0)}</span>}
+          <div className="header-search">
+            <Icon name="doc" size={14} />
+            <div className="header-search-field">
+              {headerGhostSuggestion && (
+                <div className="header-search-ghost" aria-hidden="true">
+                  <span className="typed">{headerSearch}</span>{headerGhostSuggestion.label.slice(headerSearch.length)}
+                </div>
+              )}
+              <input
+                type="text"
+                value={headerSearch}
+                placeholder={language === 'fr' ? 'Rechercher ou taper une commande...' : 'Search or type a command...'}
+                aria-label={language === 'fr' ? 'Recherche' : 'Search'}
+                onChange={(event) => { setHeaderSearch(event.target.value); setHeaderSearchOpen(true); setHeaderSearchActive(0); }}
+                onFocus={() => setHeaderSearchOpen(true)}
+                onBlur={() => window.setTimeout(() => setHeaderSearchOpen(false), 120)}
+                onKeyDown={handleHeaderSearchKeyDown}
+              />
+            </div>
+            {!headerSearch && <span className="header-search-hint">Tab</span>}
+            {headerSearchOpen && headerSearchQuery.length > 0 && (
+              <div className="header-search-results">
+                {headerSuggestions.length === 0 ? (
+                  <p className="header-search-empty">{language === 'fr' ? 'Aucun résultat.' : 'No results.'}</p>
+                ) : (
+                  <>
+                    {headerSuggestions.some((s) => s.kind === 'page') && <div className="header-search-group">{language === 'fr' ? 'Pages' : 'Pages'}</div>}
+                    {headerSuggestions.filter((s) => s.kind === 'page').map((s) => (
+                      <button type="button" key={s.id} className={headerSuggestions.indexOf(s) === headerSearchActive ? 'header-search-item active' : 'header-search-item'} onMouseDown={() => selectHeaderSuggestion(s)}>
+                        <Icon name="layers" size={13} />{s.label}<span className="meta">{s.meta}</span>
+                      </button>
+                    ))}
+                    {headerSuggestions.some((s) => s.kind === 'item' || s.kind === 'project') && <div className="header-search-group">{language === 'fr' ? 'Résultats' : 'Results'}</div>}
+                    {headerSuggestions.filter((s) => s.kind !== 'page').map((s) => (
+                      <button type="button" key={s.id} className={headerSuggestions.indexOf(s) === headerSearchActive ? 'header-search-item active' : 'header-search-item'} onMouseDown={() => selectHeaderSuggestion(s)}>
+                        <Icon name={s.kind === 'project' ? 'network' : 'tasks'} size={13} />{s.label}<span className="meta">{s.meta}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          <button type="button" className="header-icon-button" aria-label="Historique" aria-expanded={historyOpen} onClick={() => setHistoryOpen((open) => !open)}>
+            <Icon name="clock" />
           </button>
-          <button type="button" className="header-language" aria-label={language === 'fr' ? 'Changer de langue' : 'Change language'} onClick={() => setLanguage((current) => current === 'fr' ? 'en' : 'fr')}>{language.toUpperCase()}</button>
-          <button type="button" className="header-profile" onClick={() => setPanel('login')}>{profileName ? profileName.slice(0, 2).toUpperCase() : '??'}</button>
+          <button type="button" className="header-icon-button" aria-label={language === 'fr' ? 'Notifications' : 'Notifications'} aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen((open) => !open); refreshStoredNotifications(); }}>
+            <Icon name="inbox" />
+            {(triage.length + (wazuhAlerts?.filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).length ?? 0) + storedNotifications.filter((n) => !n.readAt).length) > 0 && <span className="header-notification-badge">{triage.length + (wazuhAlerts?.filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).length ?? 0) + storedNotifications.filter((n) => !n.readAt).length}</span>}
+          </button>
+          <button type="button" className="header-language" aria-label={language === 'fr' ? 'Changer de langue' : 'Change language'} onClick={() => setLanguage(language === 'fr' ? 'en' : 'fr')}>{language.toUpperCase()}</button>
+          <button type="button" className="header-profile" aria-label={language === 'fr' ? 'Menu profil' : 'Profile menu'} aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen((open) => !open)}>
+            {profileAvatarUrl ? <img src={profileAvatarUrl} alt="" /> : (profileName ? profileName.slice(0, 2).toUpperCase() : '??')}
+          </button>
         </div>
         {notificationsOpen && <aside className="notification-popover" aria-label="Centre de notifications">
           <h3>{language === 'fr' ? 'Notifications' : 'Notifications'}</h3>
-          {triage.length === 0 && !(wazuhAlerts?.some((alert) => alert.level >= CRITICAL_WAZUH_LEVEL)) && <p className="empty">{language === 'fr' ? 'Aucune notification urgente.' : 'No urgent notifications.'}</p>}
+          {triage.length === 0 && !(wazuhAlerts?.some((alert) => alert.level >= CRITICAL_WAZUH_LEVEL)) && storedNotifications.length === 0 && <p className="empty">{language === 'fr' ? 'Aucune notification urgente.' : 'No urgent notifications.'}</p>}
           {triage.slice(0, 5).map((item) => <button type="button" className="notification-entry" key={item.id} onClick={() => { setPanel('work'); setWorkTab('triage'); setNotificationsOpen(false); }}>Triage : {item.title}</button>)}
           {(wazuhAlerts ?? []).filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).slice(0, 5).map((alert) => <button type="button" className="notification-entry critical" key={alert.id} onClick={() => { setPanel('home'); setNotificationsOpen(false); }}>Sécurité : {alert.ruleDescription}</button>)}
+          {storedNotifications.slice(0, 10).map((notification) => (
+            <div className={notification.readAt ? 'notification-entry-row' : 'notification-entry-row unread'} key={notification.id}>
+              <button type="button" className="notification-entry" onClick={() => markNotificationAsRead(notification.id)}>
+                {notification.title} — {notification.message}
+              </button>
+              <button type="button" className="notification-entry-delete" aria-label={language === 'fr' ? `Supprimer la notification ${notification.title}` : `Delete notification ${notification.title}`} onClick={() => deleteStoredNotification(notification.id)}>×</button>
+            </div>
+          ))}
           <button type="button" className="filter" onClick={() => { setPanel('settings'); setNotificationsOpen(false); }}>{language === 'fr' ? 'Configurer dans Administration' : 'Configure in Administration'}</button>
         </aside>}
+        {profileMenuOpen && <aside className="header-profile-menu" aria-label={language === 'fr' ? 'Menu profil' : 'Profile menu'}>
+          <div className="header-profile-menu-header">
+            <span className="header-profile-menu-avatar">{profileAvatarUrl ? <img src={profileAvatarUrl} alt="" /> : (profileName ? profileName.slice(0, 2).toUpperCase() : '??')}</span>
+            <span className="header-profile-menu-name">{profileName || (language === 'fr' ? 'Utilisateur' : 'User')}</span>
+          </div>
+          <button type="button" onClick={() => { setPanel('settings'); setProfileMenuOpen(false); }}>
+            <Icon name="gear" size={14} />{language === 'fr' ? 'Profil' : 'Profile'}
+          </button>
+          <input ref={avatarFileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleAvatarFile(file); event.target.value = ''; }} />
+          <button type="button" onClick={() => avatarFileInput.current?.click()} disabled={avatarUploading}>
+            <Icon name="layers" size={14} />{avatarUploading ? (language === 'fr' ? 'Envoi...' : 'Uploading...') : (language === 'fr' ? 'Changer la photo' : 'Change photo')}
+          </button>
+          <button type="button" className="danger" onClick={signOut}>
+            <Icon name="chevron" size={14} />{language === 'fr' ? 'Déconnexion' : 'Sign out'}
+          </button>
+        </aside>}
       </header>
+      <ActivityTimelineDrawer apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} open={historyOpen} onClose={() => setHistoryOpen(false)} />
       {navLayout === 'sidebar' && (
         <nav className={collapsed ? 'sidebar collapsed' : 'sidebar'} aria-label="Navigation">
           <button type="button" className="sidebar-collapse" aria-label={collapsed ? 'Déplier la navigation' : 'Replier la navigation'} onClick={() => setSidebarCollapsed((c) => !c)}>
@@ -961,10 +1238,22 @@ export function App() {
         </nav>
         {workTab === 'tasks' ? (<>
         {cycles.length > 0 && <aside className="cycles" aria-label="Cycles"><span className="kicker">CYCLE ACTIF</span>{cycles.filter((cycle) => !cycle.closedAt).map((cycle) => <div className="cycle" key={cycle.id}><strong>{cycle.name}</strong><button type="button" onClick={() => void closeCycle(cycle.id)}>Clôturer</button></div>)}</aside>}
-        <div className="section-heading"><div><span className="kicker">WORK QUEUE</span><h2 id="items-title">Vos items</h2></div><div className="filters" aria-label="Filtrer les items">{['all', 'task', 'doc', 'goal', 'required'].map((value) => <button className={filter === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setFilter(value)}>{value === 'all' ? 'Tout' : value === 'required' ? 'Obligatoires' : value}</button>)}</div></div>
+        <div className="section-heading"><div><span className="kicker">WORK QUEUE</span><h2 id="items-title">Vos items</h2></div><div className="filters" aria-label="Filtrer les items">{['all', 'task', 'doc', 'goal', 'bug', 'required'].map((value) => <button className={filter === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setFilter(value)}>{value === 'all' ? 'Tout' : value === 'required' ? 'Obligatoires' : value}</button>)}</div></div>
         <nav className="views" aria-label="Vues">{(['list', 'board', 'gantt', 'calendar'] as const).map((value) => <button className={view === value ? 'filter active' : 'filter'} key={value} type="button" onClick={() => setView(value)}>{value === 'list' ? 'Liste' : value === 'board' ? 'Board' : value === 'gantt' ? 'Gantt' : 'Calendrier'}</button>)}</nav>
-        <form className="new-item" onSubmit={createItem}><select aria-label="Type" value={type} onChange={(event) => setType(event.target.value)}><option value="task">Tâche</option><option value="doc">Document</option><option value="goal">Objectif</option></select><input ref={titleInput} aria-label="Titre" placeholder="Ajouter un item..." value={title} onChange={(event) => setTitle(event.target.value)} /><input aria-label="Labels" placeholder="type::bug, priority::high" value={labels} onChange={(event) => setLabels(event.target.value)} /><input aria-label="Échéance" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /><button type="submit">Ajouter</button></form>
+        <form className="new-item" onSubmit={createItem}><select aria-label="Type" value={type} onChange={(event) => setType(event.target.value)}><option value="task">Tâche</option><option value="doc">Document</option><option value="goal">Objectif</option><option value="bug">Bug</option></select><input ref={titleInput} aria-label="Titre" placeholder="Ajouter un item..." value={title} onChange={(event) => setTitle(event.target.value)} /><input aria-label="Labels" placeholder="type::bug, priority::high" value={labels} onChange={(event) => setLabels(event.target.value)} /><input aria-label="Échéance" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /><button type="submit">Ajouter</button></form>
         {type === 'doc' && <textarea className="doc-editor" aria-label="Contenu du document" placeholder="Contenu Markdown du document..." value={content} onChange={(event) => setContent(event.target.value)} />}
+        {type === 'bug' && (
+          <div className="new-item bug-fields">
+            <select aria-label="Gravité" value={severity} onChange={(event) => setSeverity(event.target.value)}>
+              <option value="low">Faible</option>
+              <option value="medium">Moyenne</option>
+              <option value="high">Haute</option>
+              <option value="critical">Critique</option>
+            </select>
+            <input aria-label="Environnement" placeholder="Environnement (prod, staging...)" value={environment} onChange={(event) => setEnvironment(event.target.value)} />
+            <input aria-label="Étapes de reproduction" placeholder="Étapes de reproduction" value={reproSteps} onChange={(event) => setReproSteps(event.target.value)} />
+          </div>
+        )}
         {itemsError && <p className="error" role="alert">{itemsError}</p>}
         {view === 'calendar' && calendarError && <p className="empty calendar-integration-note">{calendarError}</p>}
         {view === 'calendar' && calendarEvents.length > 0 && (
@@ -1184,6 +1473,10 @@ export function App() {
             setThemeAutoStart={setThemeAutoStart}
             themeAutoEnd={themeAutoEnd}
             setThemeAutoEnd={setThemeAutoEnd}
+            adminLoginThemeId={adminLoginThemeId}
+            setAdminLoginThemeId={setAdminLoginThemeId}
+            platformThemePresets={platformThemePresets}
+            addPlatformThemePreset={addPlatformThemePreset}
             customThemePresets={customThemePresets}
             saveCustomThemePreset={saveCustomThemePreset}
             deleteCustomThemePreset={deleteCustomThemePreset}
@@ -1194,12 +1487,38 @@ export function App() {
             onRequestNotificationPermission={() => void Notification.requestPermission().then(setNotificationPermission)}
           />
         ) : panel === 'login' ? (
-          <section className="login-panel widget-card">
-            <span className="kicker">DEVOS ACCESS</span><h2>{language === 'fr' ? 'Connexion' : 'Sign in'}</h2>
-            <p className="empty">{language === 'fr' ? 'Connectez-vous avec votre adresse e-mail. Keycloak reste optionnel.' : 'Sign in with your email address. Keycloak remains optional.'}</p>
-            <form className="new-item" onSubmit={requestEmailLogin}><input aria-label="Adresse e-mail" type="email" autoComplete="email" placeholder="vous@example.com" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} required /><button type="submit">{language === 'fr' ? 'Recevoir un lien' : 'Send sign-in link'}</button></form>
-            {loginMessage && <p className="status" role="status">{loginMessage}</p>}
-            <button type="button" className="filter" onClick={() => void signIn()}>{language === 'fr' ? 'Continuer avec Keycloak' : 'Continue with Keycloak'}</button>
+          <section className="login-screen" style={loginThemeVars as CSSProperties}>
+            <div className="login-screen-panel login-screen-brand">
+              <div className="login-logo-orbit" aria-hidden="true">
+                <span className="login-logo-ring login-logo-ring-1" />
+                <span className="login-logo-ring login-logo-ring-2" />
+                <svg className="login-logo-mark" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="DevOS">
+                  <rect width="64" height="64" rx="14" fill="var(--accent)" />
+                  <path d="M16 15h16.5c9.4 0 15.5 6.7 15.5 17s-6.1 17-15.5 17H16Zm9 8v18h6.8c5.4 0 8.7-3.4 8.7-9s-3.3-9-8.7-9Z" fill="#fffdf4" />
+                  <circle className="login-logo-dot" cx="49.5" cy="17" r="5.5" fill="var(--accent-2)" stroke="#fffdf4" strokeWidth="2" />
+                </svg>
+              </div>
+              <span className="kicker">DEVOS ACCESS</span>
+              <h2>{language === 'fr' ? 'Votre homelab, un seul endroit' : 'Your homelab, one place'}</h2>
+              <p className="empty">
+                {language === 'fr'
+                  ? "Tâches, déploiements, infra Proxmox, réseau et notes : DevOS centralise le pilotage de votre environnement."
+                  : 'Tasks, deployments, Proxmox infra, network and notes: DevOS centralizes your environment in one control plane.'}
+              </p>
+              <ul className="login-highlight-list">
+                <li>{language === 'fr' ? 'Suivi des tâches et du développement' : 'Task and development tracking'}</li>
+                <li>{language === 'fr' ? 'Supervision Proxmox et réseau en direct' : 'Live Proxmox and network monitoring'}</li>
+                <li>{language === 'fr' ? 'Thèmes et widgets personnalisables' : 'Customizable themes and widgets'}</li>
+              </ul>
+            </div>
+            <div className="login-screen-panel login-screen-form widget-card">
+              <h2>{language === 'fr' ? 'Connexion' : 'Sign in'}</h2>
+              <p className="empty">{language === 'fr' ? 'Connectez-vous avec votre adresse e-mail. Keycloak reste optionnel.' : 'Sign in with your email address. Keycloak remains optional.'}</p>
+              <form className="new-item" onSubmit={requestEmailLogin}><input aria-label="Adresse e-mail" type="email" autoComplete="email" placeholder="vous@example.com" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} required /><button type="submit">{language === 'fr' ? 'Recevoir un lien' : 'Send sign-in link'}</button></form>
+              {loginMessage && <p className="status" role="status">{loginMessage}</p>}
+              <div className="login-divider"><span>{language === 'fr' ? 'ou' : 'or'}</span></div>
+              <button type="button" className="filter" onClick={() => void signIn()}>{language === 'fr' ? 'Continuer avec Keycloak' : 'Continue with Keycloak'}</button>
+            </div>
           </section>
         ) : panel === 'notes' ? (
           <NotesPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />

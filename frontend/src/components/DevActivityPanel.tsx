@@ -1,14 +1,49 @@
 import { useEffect, useState, type FormEvent } from 'react';
 
-interface TimelineEntry {
-  id: string;
-  type: 'item-created' | 'item-updated' | 'comment';
-  occurredAt: string;
-  itemTitle: string;
-  itemType: string;
-  devProjectId: string | null;
-  summary: string;
-}
+import { useStrings } from '../i18n/LanguageContext.js';
+
+const strings = {
+  fr: {
+    integrationsLoadError: 'Impossible de charger l’état des intégrations.',
+    searchLabel: 'Recherche globale développement',
+    searchPlaceholder: 'Rechercher un projet, une tâche, une doc...',
+    search: 'Rechercher',
+    noResult: 'Aucun résultat.',
+    configured: 'Configuré',
+    notConfigured: 'Non configuré',
+    loading: 'Chargement…',
+    memberLabel: 'Identifiant membre',
+    memberPlaceholder: "Membre (ex: owner d'un projet)",
+    loadMyDashboard: 'Charger mon dashboard',
+    openTasks: (count: number) => `Tâches ouvertes (${count})`,
+    failingPipelines: (count: number) => `Pipelines en échec (${count})`,
+    mergeRequestsToReview: (count: number) => `Merge requests à review (${count})`,
+    aiIntro: "Assistant/agent IA développement : aucune vraie API IA n'est branchée pour ce module. Les réponses ci-dessous sont un aperçu de démonstration, pas une réponse générée par un modèle réel.",
+    aiQuestionLabel: "Question à l'assistant IA",
+    aiQuestionPlaceholder: 'Question sur le projet...',
+    ask: 'Demander',
+  },
+  en: {
+    integrationsLoadError: 'Could not load integration status.',
+    searchLabel: 'Global development search',
+    searchPlaceholder: 'Search a project, a task, a doc...',
+    search: 'Search',
+    noResult: 'No result.',
+    configured: 'Configured',
+    notConfigured: 'Not configured',
+    loading: 'Loading…',
+    memberLabel: 'Member identifier',
+    memberPlaceholder: "Member (e.g. a project's owner)",
+    loadMyDashboard: 'Load my dashboard',
+    openTasks: (count: number) => `Open tasks (${count})`,
+    failingPipelines: (count: number) => `Failing pipelines (${count})`,
+    mergeRequestsToReview: (count: number) => `Merge requests to review (${count})`,
+    aiIntro: 'Development AI assistant/agent: no real AI API is connected for this module yet. The responses below are a demo preview, not output from an actual model.',
+    aiQuestionLabel: 'Question for the AI assistant',
+    aiQuestionPlaceholder: 'Question about the project...',
+    ask: 'Ask',
+  },
+} as const;
 
 interface SearchResult {
   kind: 'project' | 'item' | 'doc';
@@ -36,22 +71,19 @@ interface AiStub {
   message: string;
 }
 
-const TIMELINE_TYPE_LABEL: Record<TimelineEntry['type'], string> = {
-  'item-created': 'Création',
-  'item-updated': 'Mise à jour',
-  comment: 'Commentaire',
-};
+export type DevActivityTab = 'search' | 'integrations' | 'dashboard' | 'ai';
 
 /**
- * Historique/activité, intégrations dev, recherche globale et dashboard développeur personnel
- * (module Développement, section AM.8). Regroupe plusieurs sous-vues dans un seul panel plutôt
- * que d'en créer cinq séparés, en cohérence avec le service backend `dev-activity-service.ts`
- * qui expose ces facettes sous un préfixe commun `/api/dev-activity`.
+ * Intégrations dev, recherche globale et dashboard développeur personnel (module Développement,
+ * section AM.8). L'historique/timeline vit désormais dans un tiroir global consultable depuis
+ * n'importe quel panel (`ActivityTimelineDrawer`, bouton dans le header) plutôt que dupliqué ici.
+ * L'onglet actif est piloté par `DevelopmentPanel` (une seule barre de sous-onglets au niveau du
+ * module Développement, plutôt que deux niveaux de navigation imbriqués), en cohérence avec le
+ * service backend `dev-activity-service.ts` qui expose ces facettes sous un préfixe commun
+ * `/api/dev-activity`.
  */
-export function DevActivityPanel({ apiBase }: { apiBase: string }) {
-  const [tab, setTab] = useState<'timeline' | 'search' | 'integrations' | 'dashboard' | 'ai'>('timeline');
-  const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
-  const [typeFilter, setTypeFilter] = useState<'all' | TimelineEntry['type']>('all');
+export function DevActivityPanel({ apiBase, tab }: { apiBase: string; tab: DevActivityTab }) {
+  const s = useStrings(strings);
   const [error, setError] = useState('');
 
   const [query, setQuery] = useState('');
@@ -66,22 +98,10 @@ export function DevActivityPanel({ apiBase }: { apiBase: string }) {
   const [aiResponse, setAiResponse] = useState<AiStub | null>(null);
 
   useEffect(() => {
-    const url = new URL(`${apiBase}/api/dev-activity/timeline`);
-    if (typeFilter !== 'all') url.searchParams.set('type', typeFilter);
-    void fetch(url.toString())
-      .then(async (response) => {
-        if (!response.ok) throw new Error();
-        setTimeline((await response.json()) as TimelineEntry[]);
-        setError('');
-      })
-      .catch(() => setError('Impossible de charger la timeline. Démarrez le backend pour connecter vos données.'));
-  }, [apiBase, typeFilter]);
-
-  useEffect(() => {
     if (tab !== 'integrations') return;
     void fetch(`${apiBase}/api/dev-activity/integrations`)
       .then(async (response) => (response.ok ? setIntegrations((await response.json()) as IntegrationStatus[]) : undefined))
-      .catch(() => setError('Impossible de charger l’état des intégrations.'));
+      .catch(() => setError(s.integrationsLoadError));
   }, [apiBase, tab]);
 
   async function runSearch(event: FormEvent) {
@@ -111,40 +131,15 @@ export function DevActivityPanel({ apiBase }: { apiBase: string }) {
 
   return (
     <div className="items dev-activity-panel">
-      <div className="filters" aria-label="Sous-vues Développement — Activité">
-        <button className={tab === 'timeline' ? 'filter active' : 'filter'} type="button" onClick={() => setTab('timeline')}>Historique / timeline</button>
-        <button className={tab === 'search' ? 'filter active' : 'filter'} type="button" onClick={() => setTab('search')}>Recherche globale</button>
-        <button className={tab === 'integrations' ? 'filter active' : 'filter'} type="button" onClick={() => setTab('integrations')}>Intégrations dev</button>
-        <button className={tab === 'dashboard' ? 'filter active' : 'filter'} type="button" onClick={() => setTab('dashboard')}>Dashboard personnel</button>
-        <button className={tab === 'ai' ? 'filter active' : 'filter'} type="button" onClick={() => setTab('ai')}>Assistant IA (aperçu)</button>
-      </div>
       {error && <p className="error" role="alert">{error}</p>}
-
-      {tab === 'timeline' && (
-        <div>
-          <div className="filters" aria-label="Filtrer la timeline">
-            <button className={typeFilter === 'all' ? 'filter active' : 'filter'} type="button" onClick={() => setTypeFilter('all')}>Tout</button>
-            <button className={typeFilter === 'item-created' ? 'filter active' : 'filter'} type="button" onClick={() => setTypeFilter('item-created')}>Créations</button>
-            <button className={typeFilter === 'item-updated' ? 'filter active' : 'filter'} type="button" onClick={() => setTypeFilter('item-updated')}>Mises à jour</button>
-            <button className={typeFilter === 'comment' ? 'filter active' : 'filter'} type="button" onClick={() => setTypeFilter('comment')}>Commentaires</button>
-          </div>
-          {timeline.length === 0 && <p className="empty">Aucune activité pour ce filtre.</p>}
-          {timeline.map((entry) => (
-            <article className="item" key={entry.id}>
-              <span className="item-title"><strong>{TIMELINE_TYPE_LABEL[entry.type]}</strong> — {entry.summary}</span>
-              <span className="integrations">{new Date(entry.occurredAt).toLocaleString('fr-FR')} · {entry.itemType}{entry.devProjectId ? ` · projet ${entry.devProjectId}` : ''}</span>
-            </article>
-          ))}
-        </div>
-      )}
 
       {tab === 'search' && (
         <div>
           <form className="new-item" onSubmit={(event) => void runSearch(event)}>
-            <input aria-label="Recherche globale développement" placeholder="Rechercher un projet, une tâche, une doc..." value={query} onChange={(event) => setQuery(event.target.value)} />
-            <button type="submit">Rechercher</button>
+            <input aria-label={s.searchLabel} placeholder={s.searchPlaceholder} value={query} onChange={(event) => setQuery(event.target.value)} />
+            <button type="submit">{s.search}</button>
           </form>
-          {results.length === 0 && <p className="empty">Aucun résultat.</p>}
+          {results.length === 0 && <p className="empty">{s.noResult}</p>}
           {results.map((result) => (
             <article className="item" key={`${result.kind}-${result.id}`}>
               <span className="item-title"><strong>{result.title}</strong></span>
@@ -158,27 +153,27 @@ export function DevActivityPanel({ apiBase }: { apiBase: string }) {
         <div>
           {integrations.map((integration) => (
             <article className="item" key={integration.id}>
-              <span className="item-title"><strong>{integration.label}</strong> <span className={integration.configured ? 'onboarding-badge' : 'type type-note'}>{integration.configured ? 'Configuré' : 'Non configuré'}</span></span>
+              <span className="item-title"><strong>{integration.label}</strong> <span className={integration.configured ? 'onboarding-badge' : 'type type-note'}>{integration.configured ? s.configured : s.notConfigured}</span></span>
               <span className="integrations">{integration.detail}</span>
             </article>
           ))}
-          {integrations.length === 0 && <p className="empty">Chargement…</p>}
+          {integrations.length === 0 && <p className="empty">{s.loading}</p>}
         </div>
       )}
 
       {tab === 'dashboard' && (
         <div>
           <form className="new-item" onSubmit={(event) => void loadDashboard(event)}>
-            <input aria-label="Identifiant membre" placeholder="Membre (ex: owner d'un projet)" value={member} onChange={(event) => setMember(event.target.value)} />
-            <button type="submit">Charger mon dashboard</button>
+            <input aria-label={s.memberLabel} placeholder={s.memberPlaceholder} value={member} onChange={(event) => setMember(event.target.value)} />
+            <button type="submit">{s.loadMyDashboard}</button>
           </form>
           {dashboard && (
             <div>
-              <h3>Tâches ouvertes ({dashboard.assignedOpenTasks.length})</h3>
+              <h3>{s.openTasks(dashboard.assignedOpenTasks.length)}</h3>
               {dashboard.assignedOpenTasks.map((task) => <article className="item" key={task.id}><span className="item-title">{task.title}</span><span className="integrations">{task.status}</span></article>)}
-              <h3>Pipelines en échec ({dashboard.pipelinesFailing.length})</h3>
+              <h3>{s.failingPipelines(dashboard.pipelinesFailing.length)}</h3>
               {dashboard.pipelinesFailing.map((task) => <article className="item" key={task.id}><span className="item-title">{task.title}</span></article>)}
-              <h3>Merge requests à review ({dashboard.mergeRequestsToReview.length})</h3>
+              <h3>{s.mergeRequestsToReview(dashboard.mergeRequestsToReview.length)}</h3>
               {dashboard.mergeRequestsToReview.map((task) => <article className="item" key={task.id}><span className="item-title">{task.title}</span></article>)}
             </div>
           )}
@@ -187,10 +182,10 @@ export function DevActivityPanel({ apiBase }: { apiBase: string }) {
 
       {tab === 'ai' && (
         <div>
-          <p className="empty">Assistant/agent IA développement : aucune vraie API IA n'est branchée pour ce module. Les réponses ci-dessous sont un aperçu de démonstration, pas une réponse générée par un modèle réel.</p>
+          <p className="empty">{s.aiIntro}</p>
           <form className="new-item" onSubmit={(event) => void askAssistant(event)}>
-            <input aria-label="Question à l'assistant IA" placeholder="Question sur le projet..." value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} />
-            <button type="submit">Demander</button>
+            <input aria-label={s.aiQuestionLabel} placeholder={s.aiQuestionPlaceholder} value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} />
+            <button type="submit">{s.ask}</button>
           </form>
           {aiResponse && <p className="empty">{aiResponse.message}</p>}
         </div>

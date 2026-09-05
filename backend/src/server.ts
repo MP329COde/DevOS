@@ -12,8 +12,6 @@ import { handleItemRequest, type ItemHttpService } from './tasks/item-http.js';
 import { ItemService } from './tasks/item-service.js';
 import { handleCommentRequest, type CommentHttpService } from './tasks/comment-http.js';
 import { CommentService } from './tasks/comment-service.js';
-import { handleBugRequest, type BugHttpService } from './tasks/bug-http.js';
-import { BugService } from './tasks/bug-service.js';
 import { handleWorkflowRequest, type WorkflowHttpService } from './tasks/workflow-http.js';
 import { WorkflowService } from './tasks/workflow-service.js';
 import { handleCycleRequest, type CycleService } from './tasks/cycle-http.js';
@@ -31,7 +29,7 @@ import { handleProxmoxRequest, type ProxmoxHttpService } from './catalog/proxmox
 import { HAProxyClient } from './integrations/haproxy.js';
 import { addServerWithHistory, deleteServerWithHistory, rollbackChange } from './integrations/haproxy-history.js';
 import { PrismaHAProxyHistoryRepository } from './integrations/haproxy-history-repository.js';
-import { roles, type Role } from './auth/permissions.js';
+import { roles, assertCan, type Role } from './auth/permissions.js';
 import { handleCatalogRequest, type CatalogHttpService } from './catalog/catalog-http.js';
 import { CatalogService } from './catalog/catalog-service.js';
 import { scanCatalogFromGitLab } from './catalog/catalog-scan.js';
@@ -100,6 +98,9 @@ import { handleEnvironmentRequest, type EnvironmentHttpService } from './develop
 import { EnvironmentService } from './development/environment-service.js';
 import { handleProfileRequest, type ProfileHttpService } from './profiles/profile-http.js';
 import { ProfileService } from './profiles/profile-service.js';
+import { saveAvatarImage, readUploadedFile } from './profiles/avatar-storage.js';
+import { handleSearchRequest, type SearchHttpService } from './search/search-http.js';
+import { SearchService } from './search/search-service.js';
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -129,13 +130,13 @@ export function createServer(
   devProjects?: DevProjectHttpService,
   devTemplates?: DevTemplateHttpService,
   deployment?: DeploymentHttpService,
-  bugs?: BugHttpService,
   workflow?: WorkflowHttpService,
   cicd?: CiCdHttpService,
   devActivity?: DevActivityHttpService,
   releases?: ReleaseHttpService,
   environments?: EnvironmentHttpService,
   profiles?: ProfileHttpService,
+  search?: SearchHttpService,
 ) {
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
@@ -229,6 +230,37 @@ export function createServer(
       return;
     }
 
+    const avatarUpload = request.url?.match(/^\/api\/profiles\/([^/]+)\/avatar$/);
+    if (request.method === 'POST' && avatarUpload) {
+      if (!profiles) { writeJson(response, 503, { error: 'Profiles module is not configured' }); return; }
+      try {
+        const body = (await readJson(request)) as { imageBase64?: string; mimeType?: string };
+        if (!body.imageBase64) throw new Error('"imageBase64" is required');
+        const profileId = decodeURIComponent(avatarUpload[1]);
+        const avatarImageUrl = await saveAvatarImage(profileId, body.imageBase64, body.mimeType);
+        const updated = await profiles.updateProfile(profileId, { avatarImageUrl });
+        writeJson(response, 200, updated);
+      } catch (error) {
+        writeJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid avatar upload' });
+      }
+      return;
+    }
+
+    if (request.method === 'GET' && request.url?.startsWith('/uploads/')) {
+      const file = await readUploadedFile(request.url);
+      if (!file) { writeJson(response, 404, { error: 'Not found' }); return; }
+      response.writeHead(200, { 'Content-Type': file.contentType, 'Cache-Control': 'public, max-age=86400' });
+      response.end(file.data);
+      return;
+    }
+
+    if (request.url?.startsWith('/api/search')) {
+      if (!search) { writeJson(response, 503, { error: 'Search is not configured' }); return; }
+      const result = await handleSearchRequest(request.method ?? 'GET', request.url, search);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
     if (request.url?.startsWith('/api/profiles') || request.url?.startsWith('/api/roles')) {
       if (!profiles) { writeJson(response, 503, { error: 'Profiles module is not configured' }); return; }
       const result = await handleProfileRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), profiles);
@@ -264,18 +296,6 @@ export function createServer(
     if (request.url?.startsWith('/api/dev/templates')) {
       if (!devTemplates) { writeJson(response, 503, { error: 'Development templates are not configured' }); return; }
       const result = await handleDevTemplateRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), devTemplates);
-      if (result.status === 204) {
-        response.writeHead(204);
-        response.end();
-        return;
-      }
-      writeJson(response, result.status, result.body);
-      return;
-    }
-
-    if (request.url?.startsWith('/api/bugs')) {
-      if (!bugs) { writeJson(response, 503, { error: 'Bugs are not configured' }); return; }
-      const result = await handleBugRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), bugs);
       if (result.status === 204) {
         response.writeHead(204);
         response.end();
@@ -391,7 +411,20 @@ export function createServer(
 
     if (request.url?.startsWith('/api/settings')) {
       if (!settings) { writeJson(response, 503, { error: 'Settings are not configured' }); return; }
-      const result = await handleSettingsRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), settings);
+      const method = request.method ?? 'GET';
+      // Le thème/l'apparence de la plateforme (clé "platform.theme") est défini par l'administrateur
+      // lors de la configuration : seule l'écriture est restreinte, la lecture reste publique pour
+      // que tous les clients puissent appliquer le thème par défaut.
+      if ((method === 'PUT' || method === 'DELETE') && /^\/api\/settings\/platform\./.test(request.url)) {
+        const role = parseRole(headerValue(request.headers['x-devos-role']));
+        try {
+          assertCan(role ?? 'Lecteur', 'manage_integrations');
+        } catch (error) {
+          writeJson(response, 403, { error: error instanceof Error ? error.message : 'Forbidden' });
+          return;
+        }
+      }
+      const result = await handleSettingsRequest(method, request.url, await readJsonIfNeeded(request), settings);
       if (result.status === 204) {
         response.writeHead(204);
         response.end();
@@ -435,8 +468,13 @@ export function createServer(
       return;
     }
 
-    if (request.url === '/api/notifications/trigger' && notifications) {
-      const result = await handleNotificationsRequest(request.method ?? 'POST', request.url, await readJsonIfNeeded(request), notifications);
+    if (request.url?.startsWith('/api/notifications') && notifications) {
+      const result = await handleNotificationsRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), notifications);
+      if (result.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
       writeJson(response, result.status, result.body);
       return;
     }
@@ -486,7 +524,10 @@ if (require.main === module) {
     const integrationBuilder = buildIntegrationBuilderServiceFromEnv(settingsService);
     const secrets = await buildSecretsServiceFromEnv();
     const calendar = buildCalendarServiceFromEnv();
-    const notifications: NotificationsHttpService = buildNotificationsServiceFromEnv();
+    const notificationsService = buildNotificationsServiceFromEnv(database);
+    const notifications: NotificationsHttpService = notificationsService;
+    void notificationsService.purgeExpired();
+    setInterval(() => { void notificationsService.purgeExpired(); }, 24 * 60 * 60 * 1000).unref();
     const customWidgets = buildCustomWidgetsServiceFromEnv(settingsService);
     const comments = buildCommentsServiceFromEnv(database);
     const proxmoxHttp = buildProxmoxHttpServiceFromEnv();
@@ -495,7 +536,6 @@ if (require.main === module) {
     const devProjects: DevProjectHttpService = new DevProjectService(database);
     const devTemplates: DevTemplateHttpService = new DevTemplateService(database);
     const deployment = buildDeploymentServiceFromEnv();
-    const bugs: BugHttpService = new BugService(database);
     const workflowService = new WorkflowService(database);
     const workflow: WorkflowHttpService = {
       list: (scope) => workflowService.list(scope),
@@ -511,7 +551,8 @@ if (require.main === module) {
     const profileService = new ProfileService(database);
     await profileService.ensureSystemRoles();
     const profiles: ProfileHttpService = profileService;
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp, roadmap, devProjects, devTemplates, deployment, bugs, workflow, cicd, devActivity, releases, environments, profiles).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const search: SearchHttpService = new SearchService(database);
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp, roadmap, devProjects, devTemplates, deployment, workflow, cicd, devActivity, releases, environments, profiles, search).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -605,7 +646,7 @@ function buildCalendarServiceFromEnv(): CalendarHttpService | undefined {
  * service: with no channel configured, trigger() just dispatches to zero channels (200, empty
  * results), so the browser channel keeps working independently of server-side config.
  */
-function buildNotificationsServiceFromEnv(): NotificationsHttpService {
+function buildNotificationsServiceFromEnv(database: PrismaClient): NotificationsService {
   const smtpHost = process.env.SMTP_HOST;
   const smtpPort = process.env.SMTP_PORT;
   const emailFrom = process.env.NOTIFICATIONS_EMAIL_FROM;
@@ -617,8 +658,7 @@ function buildNotificationsServiceFromEnv(): NotificationsHttpService {
   const webhookUrl = process.env.NOTIFICATIONS_WEBHOOK_URL;
   const webhook = webhookUrl ? { url: webhookUrl } : undefined;
 
-  const service = new NotificationsService(email, webhook);
-  return { trigger: (payload) => service.trigger(payload) };
+  return new NotificationsService(database, email, webhook);
 }
 
 /** Loads integration settings persisted via the Settings screen into process.env, without overriding variables already set (env vars always win). */

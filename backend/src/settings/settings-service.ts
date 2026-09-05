@@ -74,6 +74,7 @@ const KNOWN_INTEGRATION_KEYS: readonly string[] = [
   'GITLAB_PLATFORM_USERNAME',
   'GITLAB_PLATFORM_EMAIL',
   'GITLAB_PLATFORM_TOKEN',
+  'ADMIN_LOGIN_THEME',
 ];
 
 export class SettingsService {

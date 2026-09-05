@@ -1,7 +1,72 @@
 import { useEffect, useState } from 'react';
 
+import { useLanguage, useStrings } from '../i18n/LanguageContext.js';
+
 // Sous-vue "Dépôts" du module Développement (AM.4) — montée comme onglet de DevelopmentPanel
 // (voir DEV_TABS), pas comme entrée de nav de premier niveau.
+
+const strings = {
+  fr: {
+    integrationUnavailable: "Aucun dépôt configuré ou intégration indisponible (GITLAB_BASE_URL/TOKEN/PROJECT_ID, GITHUB_TOKEN/GITHUB_REPOS).",
+    intro: 'Vue dépôt unifiée GitHub/GitLab : fournisseur, branche par défaut, dernière activité, pipeline, branches, MR/PR.',
+    noRepo: "Aucun dépôt disponible pour l'instant.",
+    defaultBranch: 'Branche par défaut :',
+    branchCount: (count: number) => `${count} branche(s)`,
+    openChangeCount: (count: number) => `${count} MR/PR ouverte(s)`,
+    lastActivity: 'Dernière activité :',
+    lastCommit: 'Dernier commit :',
+    latestRelease: 'Dernière release :',
+    openRepo: 'Ouvrir le dépôt',
+    closeDetail: 'Fermer le détail',
+    detail: 'Détail',
+    tabChanges: 'Merge/Pull requests',
+    tabCommits: 'Commits récents',
+    tabBranches: 'Branches',
+    noChange: 'Aucune MR/PR.',
+    noCommit: 'Aucun commit.',
+    filter: 'Filtrer :',
+    filterAll: 'Toutes',
+    filterProtected: 'Protégées',
+    filterStale: 'Obsolètes',
+    filterUnmerged: 'Non fusionnées',
+    noBranchForFilter: 'Aucune branche pour ce filtre.',
+    badgeDefault: 'défaut',
+    badgeProtected: 'protégée',
+    badgeStale: 'obsolète',
+    badgeUnmerged: 'non fusionnée',
+    lastCommitOn: 'dernier commit',
+  },
+  en: {
+    integrationUnavailable: 'No repository configured or integration unavailable (GITLAB_BASE_URL/TOKEN/PROJECT_ID, GITHUB_TOKEN/GITHUB_REPOS).',
+    intro: 'Unified GitHub/GitLab repository view: provider, default branch, latest activity, pipeline, branches, MR/PR.',
+    noRepo: 'No repository available yet.',
+    defaultBranch: 'Default branch:',
+    branchCount: (count: number) => `${count} branch(es)`,
+    openChangeCount: (count: number) => `${count} open MR/PR`,
+    lastActivity: 'Latest activity:',
+    lastCommit: 'Last commit:',
+    latestRelease: 'Latest release:',
+    openRepo: 'Open repository',
+    closeDetail: 'Close details',
+    detail: 'Details',
+    tabChanges: 'Merge/Pull requests',
+    tabCommits: 'Recent commits',
+    tabBranches: 'Branches',
+    noChange: 'No MR/PR.',
+    noCommit: 'No commits.',
+    filter: 'Filter:',
+    filterAll: 'All',
+    filterProtected: 'Protected',
+    filterStale: 'Stale',
+    filterUnmerged: 'Unmerged',
+    noBranchForFilter: 'No branch matches this filter.',
+    badgeDefault: 'default',
+    badgeProtected: 'protected',
+    badgeStale: 'stale',
+    badgeUnmerged: 'unmerged',
+    lastCommitOn: 'last commit',
+  },
+} as const;
 
 interface DevRepoSummary {
   key: string;
@@ -52,12 +117,15 @@ interface DevRepoBranch {
   stale: boolean;
 }
 
-function formatDate(iso: string | null): string {
+function formatDate(iso: string | null, locale: string): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('fr-FR');
+  return new Date(iso).toLocaleString(locale);
 }
 
 export function DevReposPanel({ apiBase }: { apiBase: string }) {
+  const s = useStrings(strings);
+  const { language } = useLanguage();
+  const locale = language === 'fr' ? 'fr-FR' : 'en-US';
   const [repos, setRepos] = useState<DevRepoSummary[]>([]);
   const [error, setError] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -73,7 +141,7 @@ export function DevReposPanel({ apiBase }: { apiBase: string }) {
         setRepos(await response.json());
         setError('');
       })
-      .catch(() => setError("Aucun dépôt configuré ou intégration indisponible (GITLAB_BASE_URL/TOKEN/PROJECT_ID, GITHUB_TOKEN/GITHUB_REPOS)."));
+      .catch(() => setError(s.integrationUnavailable));
   }, [apiBase]);
 
   useEffect(() => {
@@ -96,11 +164,11 @@ export function DevReposPanel({ apiBase }: { apiBase: string }) {
 
   return (
     <div className="items dev-repos-panel">
-      <p className="empty">Vue dépôt unifiée GitHub/GitLab : fournisseur, branche par défaut, dernière activité, pipeline, branches, MR/PR.</p>
+      <p className="empty">{s.intro}</p>
 
       {error && <p className="error" role="alert">{error}</p>}
 
-      {!error && repos.length === 0 && <p className="empty">Aucun dépôt disponible pour l'instant.</p>}
+      {!error && repos.length === 0 && <p className="empty">{s.noRepo}</p>}
 
       <div className="dev-repos-list">
         {repos.map((repo) => (
@@ -111,29 +179,29 @@ export function DevReposPanel({ apiBase }: { apiBase: string }) {
               {repo.pipeline && <span className={`status-badge status-badge-${repo.pipeline.status}`}>{repo.pipeline.status}</span>}
             </span>
             <p className="empty">
-              Branche par défaut : <strong>{repo.defaultBranch ?? '—'}</strong> · {repo.branchCount} branche(s) · {repo.openChangeCount} MR/PR ouverte(s)
+              {s.defaultBranch} <strong>{repo.defaultBranch ?? '—'}</strong> · {s.branchCount(repo.branchCount)} · {s.openChangeCount(repo.openChangeCount)}
             </p>
-            <p className="empty">Dernière activité : {formatDate(repo.lastActivityAt)}</p>
-            {repo.lastCommit && <p className="empty">Dernier commit : <code>{repo.lastCommit.sha}</code> — {repo.lastCommit.message} ({repo.lastCommit.author})</p>}
-            {repo.latestRelease && <p className="empty">Dernière release : {repo.latestRelease.tag}</p>}
+            <p className="empty">{s.lastActivity} {formatDate(repo.lastActivityAt, locale)}</p>
+            {repo.lastCommit && <p className="empty">{s.lastCommit} <code>{repo.lastCommit.sha}</code> — {repo.lastCommit.message} ({repo.lastCommit.author})</p>}
+            {repo.latestRelease && <p className="empty">{s.latestRelease} {repo.latestRelease.tag}</p>}
             <span className="item-actions">
-              <a href={repo.webUrl} target="_blank" rel="noreferrer"><button type="button">Ouvrir le dépôt</button></a>
+              <a href={repo.webUrl} target="_blank" rel="noreferrer"><button type="button">{s.openRepo}</button></a>
               <button type="button" onClick={() => { setSelectedKey(selectedKey === repo.key ? null : repo.key); setTab('changes'); }}>
-                {selectedKey === repo.key ? 'Fermer le détail' : 'Détail'}
+                {selectedKey === repo.key ? s.closeDetail : s.detail}
               </button>
             </span>
 
             {selectedKey === repo.key && (
               <div className="dev-repo-detail">
                 <div className="dev-repo-tabs">
-                  <button type="button" className={tab === 'changes' ? 'active' : ''} onClick={() => setTab('changes')}>Merge/Pull requests</button>
-                  <button type="button" className={tab === 'commits' ? 'active' : ''} onClick={() => setTab('commits')}>Commits récents</button>
-                  <button type="button" className={tab === 'branches' ? 'active' : ''} onClick={() => setTab('branches')}>Branches</button>
+                  <button type="button" className={tab === 'changes' ? 'active' : ''} onClick={() => setTab('changes')}>{s.tabChanges}</button>
+                  <button type="button" className={tab === 'commits' ? 'active' : ''} onClick={() => setTab('commits')}>{s.tabCommits}</button>
+                  <button type="button" className={tab === 'branches' ? 'active' : ''} onClick={() => setTab('branches')}>{s.tabBranches}</button>
                 </div>
 
                 {tab === 'changes' && (
                   <ul className="dev-repo-changes">
-                    {(detail?.changes ?? []).length === 0 && <li className="empty">Aucune MR/PR.</li>}
+                    {(detail?.changes ?? []).length === 0 && <li className="empty">{s.noChange}</li>}
                     {(detail?.changes ?? []).map((change) => (
                       <li key={change.id}>
                         <a href={change.webUrl} target="_blank" rel="noreferrer">#{change.id} {change.title}</a>{' '}
@@ -146,9 +214,9 @@ export function DevReposPanel({ apiBase }: { apiBase: string }) {
 
                 {tab === 'commits' && (
                   <ul className="dev-repo-commits">
-                    {(detail?.recentCommits ?? []).length === 0 && <li className="empty">Aucun commit.</li>}
+                    {(detail?.recentCommits ?? []).length === 0 && <li className="empty">{s.noCommit}</li>}
                     {(detail?.recentCommits ?? []).map((commit) => (
-                      <li key={commit.sha}><code>{commit.sha}</code> {commit.message} — {commit.author} ({formatDate(commit.date)})</li>
+                      <li key={commit.sha}><code>{commit.sha}</code> {commit.message} — {commit.author} ({formatDate(commit.date, locale)})</li>
                     ))}
                   </ul>
                 )}
@@ -156,25 +224,25 @@ export function DevReposPanel({ apiBase }: { apiBase: string }) {
                 {tab === 'branches' && (
                   <div className="dev-repo-branches">
                     <label className="filter">
-                      Filtrer :{' '}
+                      {s.filter}{' '}
                       <select value={branchFilter} onChange={(event) => setBranchFilter(event.target.value as typeof branchFilter)}>
-                        <option value="all">Toutes</option>
-                        <option value="protected">Protégées</option>
-                        <option value="stale">Obsolètes</option>
-                        <option value="unmerged">Non fusionnées</option>
+                        <option value="all">{s.filterAll}</option>
+                        <option value="protected">{s.filterProtected}</option>
+                        <option value="stale">{s.filterStale}</option>
+                        <option value="unmerged">{s.filterUnmerged}</option>
                       </select>
                     </label>
                     <ul>
-                      {visibleBranches.length === 0 && <li className="empty">Aucune branche pour ce filtre.</li>}
+                      {visibleBranches.length === 0 && <li className="empty">{s.noBranchForFilter}</li>}
                       {visibleBranches.map((branch) => (
                         <li key={branch.name}>
                           <strong>{branch.name}</strong>{' '}
-                          {branch.default && <span className="status-badge status-badge-default">défaut</span>}{' '}
-                          {branch.protected && <span className="status-badge">protégée</span>}{' '}
-                          {branch.stale && <span className="status-badge status-badge-inactive">obsolète</span>}{' '}
-                          {branch.merged === false && <span className="status-badge">non fusionnée</span>}{' '}
+                          {branch.default && <span className="status-badge status-badge-default">{s.badgeDefault}</span>}{' '}
+                          {branch.protected && <span className="status-badge">{s.badgeProtected}</span>}{' '}
+                          {branch.stale && <span className="status-badge status-badge-inactive">{s.badgeStale}</span>}{' '}
+                          {branch.merged === false && <span className="status-badge">{s.badgeUnmerged}</span>}{' '}
                           <span className="empty">
-                            {branch.aheadBy !== null ? `+${branch.aheadBy}` : '?'} / {branch.behindBy !== null ? `-${branch.behindBy}` : '?'} vs {detail?.defaultBranch ?? '—'} · dernier commit {formatDate(branch.lastCommitDate)}
+                            {branch.aheadBy !== null ? `+${branch.aheadBy}` : '?'} / {branch.behindBy !== null ? `-${branch.behindBy}` : '?'} vs {detail?.defaultBranch ?? '—'} · {s.lastCommitOn} {formatDate(branch.lastCommitDate, locale)}
                           </span>
                         </li>
                       ))}
