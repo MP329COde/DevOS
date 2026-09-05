@@ -6,12 +6,18 @@ const DEFAULT_ONBOARDING_PAGES: ReadonlyArray<{ slug: string; title: string; con
     title: 'Configurer un backend HAProxy pour un nouveau service',
     content: `# Configurer un backend HAProxy pour un nouveau service
 
-Guide pour exposer un nouveau service DevOS derrière le reverse proxy HAProxy externe
-(VM "ha-proxy1", 192.168.1.57) qui gère les domaines DuckDNS.
+Guide pour connecter HAProxy à la plateforme DevOS, puis exposer un nouveau service
+derrière le reverse proxy externe (VM "ha-proxy1", 192.168.1.57) qui gère les domaines DuckDNS.
 
-## Checklist
+## Étape 1 — Connecter HAProxy à DevOS
+- [ ] Aller dans **Paramètres → Intégrations → HAProxy**
+- [ ] Renseigner \`HAPROXY_DATA_PLANE_URL\` (URL de la Data Plane API HAProxy, ex. \`https://ha-proxy1.internal:5555\`), \`HAPROXY_USERNAME\` et \`HAPROXY_PASSWORD\`
+- [ ] Enregistrer, puis ouvrir le panel **Infra HAProxy** (menu "Infrastructure") : les frontends, backends et certificats doivent apparaître si la connexion est correcte
+- [ ] Si le panel reste vide, vérifier que la Data Plane API est bien activée sur la VM HAProxy et joignable depuis le backend DevOS (pas de blocage réseau/pare-feu)
+
+## Étape 2 — Exposer un nouveau service
 - [ ] Choisir/réserver un sous-domaine DuckDNS (\`dev-mpcode.duckdns.org\` pour les nouveaux outils du cluster, sauf service déjà rattaché à un domaine existant)
-- [ ] Créer le backend dans la config HAProxy (ou via la Data Plane API si disponible) : nom explicite \`<service>-backend\`, mode \`http\` ou \`tcp\` selon le protocole
+- [ ] Depuis le panel **Infra HAProxy** de DevOS, créer le backend : nom explicite \`<service>-backend\`, mode \`http\` ou \`tcp\` selon le protocole
 - [ ] Ajouter le(s) serveur(s) du backend : IP interne du pod/VM cible, port applicatif, \`check\` activé pour la supervision de santé HAProxy
 - [ ] Ajouter une règle \`frontend\` (ACL sur le nom d'hôte) qui route vers ce backend
 - [ ] Terminaison TLS : certificat valide pour le sous-domaine (Let's Encrypt via DuckDNS ou certificat déjà géré par HAProxy), ne jamais exposer en HTTP brut sur Internet
@@ -20,7 +26,37 @@ Guide pour exposer un nouveau service DevOS derrière le reverse proxy HAProxy e
 
 ## Points d'attention
 - Le nœud "devops" (192.168.1.97) est déjà proche de la saturation : préférer un service léger, ne pas y ajouter de brique lourde sans validation.
-- Toujours passer par le panel Infra HAProxy de DevOS quand une action est disponible plutôt que d'éditer la config à la main, pour garder l'état visible dans l'outil.
+- Toujours passer par le panel Infra HAProxy de DevOS une fois la connexion établie, plutôt que d'éditer la config à la main, pour garder l'état visible dans l'outil.
+`,
+  },
+  {
+    slug: 'vue-d-ensemble-des-pages-devos',
+    title: "Vue d'ensemble des pages DevOS",
+    content: `# Vue d'ensemble des pages DevOS
+
+Repère rapide de chaque page (panel) de la plateforme, son rôle, et si elle nécessite une
+intégration externe pour afficher des données.
+
+## Travail
+- **Accueil / Dashboard** — écran de départ : widgets (pipelines, alertes, sources personnalisées), vue "Aujourd'hui" (tâches et commentaires du jour).
+- **Notes** — prise de notes personnelle liée à la plateforme.
+
+## Infrastructure
+- **Infra HAProxy** — frontends/ACLs, backends/serveurs et certificats TLS du reverse proxy externe. Nécessite \`HAPROXY_DATA_PLANE_URL\`/\`HAPROXY_USERNAME\`/\`HAPROXY_PASSWORD\` (Paramètres → Intégrations → HAProxy) — voir le guide "Configurer un backend HAProxy pour un nouveau service".
+- **Proxmox** — état des VM/CT de l'hyperviseur. Nécessite \`PROXMOX_BASE_URL\`/\`PROXMOX_API_TOKEN\`.
+- **Réseau** — topologie réseau et supervision DNS/sécurité (PowerDNS, Suricata, WireGuard, NATS), alimentée par le catalogue et les intégrations réseau configurées.
+
+## Plateforme
+- **Catalogue** — inventaire des services (\`catalog-info.yaml\` de chaque dépôt), scanné via les intégrations GitLab/GitHub configurées.
+- **Docs** — ce module : uniquement les guides d'usage et de fonctionnement de DevOS (jamais de documentation de dépôt externe, qui reste dans son projet de développement).
+- **Développement** — vue globale des projets, dashboard par projet, assistant de création de nouveaux projets/services.
+- **Déploiement** — suivi des déploiements (Kubernetes/ArgoCD, CI/CD), nécessite les intégrations correspondantes (\`K8S_API_SERVER\`, \`ARGOCD_BASE_URL\`, \`WOODPECKER_BASE_URL\`...).
+- **Widgets** — activation/désactivation des widgets affichés sur le Dashboard.
+- **Paramètres** — apparence (thème, disposition), intégrations externes, notifications, comptes plateforme dédiés, générateur d'intégration custom.
+
+## Points d'attention
+- Un panel vide ou affichant une erreur 503 signifie généralement une intégration non configurée, pas un bug : vérifier Paramètres → Intégrations en premier réflexe.
+- La liste des groupes de navigation peut varier légèrement selon la configuration de la disposition (barre latérale ou barre du haut), mais les pages listées ici restent les mêmes.
 `,
   },
   {
@@ -90,18 +126,33 @@ Docs, Paramètres...).
     title: 'Configurer les intégrations DevOS',
     content: `# Configurer les intégrations DevOS
 
-Toutes les intégrations externes (GitLab, GitHub, Proxmox, HAProxy, Vault, Kubernetes/ArgoCD...)
-se paramètrent depuis Paramètres → Intégrations, jamais en dur dans le code.
+Toutes les intégrations externes se paramètrent depuis **Paramètres → Intégrations**, jamais en
+dur dans le code. Chaque section correspond à un outil et à ses identifiants propres.
 
-## Checklist
-- [ ] Ouvrir Paramètres → Intégrations et repérer la carte du service à connecter
+## Procédure générale
+- [ ] Ouvrir Paramètres → Intégrations et repérer la section du service à connecter
 - [ ] Renseigner l'URL et le token/identifiant requis (stocké via Vault quand c'est le cas, jamais en clair)
-- [ ] Utiliser le bouton de test de connexion avant de considérer l'intégration comme active
+- [ ] Enregistrer, puis ouvrir le panel correspondant (ex. Infra HAProxy, Proxmox, Développement) : les données doivent apparaître si la connexion est correcte
 - [ ] Vérifier qu'un service non configuré répond simplement par une absence de données (503 attendu), sans casser le reste de l'UI
 - [ ] Revenir sur cette page pour toute rotation de token ou changement d'URL de service
 
+## Sections disponibles (clés attendues)
+- **HAProxy** — \`HAPROXY_DATA_PLANE_URL\`, \`HAPROXY_USERNAME\`, \`HAPROXY_PASSWORD\` (voir le guide dédié "Configurer un backend HAProxy pour un nouveau service")
+- **GitLab** — \`GITLAB_BASE_URL\`, \`GITLAB_TOKEN\`, \`GITLAB_PROJECT_ID\`
+- **GitHub** — \`GITHUB_TOKEN\`, \`GITHUB_BASE_URL\`
+- **Proxmox** — \`PROXMOX_BASE_URL\`, \`PROXMOX_API_TOKEN\`
+- **Coder** — \`CODER_BASE_URL\`, \`CODER_TOKEN\`, \`CODER_ORGANIZATION_ID\`, \`CODER_OWNER\`, \`CODER_DEFAULT_TEMPLATE_ID\`
+- **Kubernetes / ArgoCD** — \`K8S_API_SERVER\`, \`K8S_TOKEN\`, \`ARGOCD_BASE_URL\`, \`ARGOCD_TOKEN\`, \`DEPLOYMENT_CENTRAL_REPO_URL\`
+- **Monitoring & alerting** — \`GRAFANA_BASE_URL\`, \`GRAFANA_API_KEY\`, \`ALERTMANAGER_BASE_URL\`, \`PROMETHEUS_EXPORTERS\`, \`WAZUH_BASE_URL\`, \`WAZUH_TOKEN\`
+- **Réseau (DNS/sécurité)** — \`POWERDNS_BASE_URL\`, \`POWERDNS_API_KEY\`, \`POWERDNS_SERVER_ID\`, \`SURICATA_BASE_URL\`, \`WIREGUARD_EXPORTER_BASE_URL\`, \`NATS_MONITOR_BASE_URL\`
+- **Stockage & registres** — \`MINIO_BASE_URL\`/\`MINIO_ACCESS_KEY\`/\`MINIO_SECRET_KEY\`, \`HARBOR_BASE_URL\`/\`HARBOR_USERNAME\`/\`HARBOR_PASSWORD\`, \`NEXUS_BASE_URL\`/\`NEXUS_USERNAME\`/\`NEXUS_PASSWORD\`, \`VERDACCIO_BASE_URL\`/\`VERDACCIO_TOKEN\`
+- **CI/CD** — \`WOODPECKER_BASE_URL\`, \`WOODPECKER_TOKEN\`
+- **Webhooks & Vault** — \`NOTIFICATIONS_WEBHOOK_URL\` ; Vault ne prend pas d'URL/token statique ici, voir le guide "Bonnes pratiques de sécurité"
+- **Comptes plateforme** — \`GITHUB_PLATFORM_USERNAME\`/\`GITHUB_PLATFORM_EMAIL\`/\`GITHUB_PLATFORM_TOKEN\`, \`GITLAB_PLATFORM_USERNAME\`/\`GITLAB_PLATFORM_EMAIL\`/\`GITLAB_PLATFORM_TOKEN\` — identité dédiée à DevOS, distincte des tokens GitLab/GitHub utilisés pour le catalogue
+
 ## Points d'attention
 - Le scan de dépôts applicatifs (catalogue de services) reste disponible depuis le panel Catalogue ; la page Docs, elle, ne contient que de la documentation DevOS.
+- Pour un outil non listé ci-dessus, utiliser le générateur d'intégration (custom) accessible depuis Paramètres.
 `,
   },
 ];
