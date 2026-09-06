@@ -1,3 +1,5 @@
+import { assertCan, type Role } from '../auth/permissions.js';
+import type { TimelineEventInput } from '../development/timeline-event-service.js';
 import type { DeploymentEnvironmentConfig, GenerateDeploymentManifestsResult } from './k8s-manifest-generator.js';
 
 export interface DeploymentHttpService {
@@ -24,11 +26,29 @@ export interface DeploymentHttpResponse {
   body: unknown;
 }
 
-export async function handleDeploymentRequest(method: string, path: string, body: unknown, service: DeploymentHttpService): Promise<DeploymentHttpResponse> {
+export async function handleDeploymentRequest(
+  method: string,
+  path: string,
+  body: unknown,
+  role: Role | undefined,
+  service: DeploymentHttpService,
+  recordEvent?: (input: TimelineEventInput) => Promise<unknown>,
+  actorEmail?: string,
+): Promise<DeploymentHttpResponse> {
   try {
     if (method === 'POST' && path === '/api/deployment/generate') {
+      if (!role) throw new Error('Authentication is required to generate deployment manifests');
+      assertCan(role, 'create');
       const input = parseGenerateInput(body);
       const result = await service.generate(input);
+      await recordEvent?.({
+        type: 'manifest_updated',
+        status: 'success',
+        summary: `Manifests générés pour ${input.appName}`,
+        actorEmail,
+        pipelineRef: input.appName,
+        metadata: { image: input.image, environments: input.environments.map((env) => env.name) },
+      });
       return { status: 201, body: result };
     }
     return { status: 404, body: { error: 'Not found' } };

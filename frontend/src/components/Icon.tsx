@@ -20,6 +20,8 @@ const iconPaths: Record<string, string> = {
   logout: 'M8.5 16H4.5V4h4M13.5 13.5 17 10l-3.5-3.5M17 10H7.5',
 };
 
+export const ICON_NAMES = Object.keys(iconPaths);
+
 export function Icon({ name, size = 16 }: { name: string; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

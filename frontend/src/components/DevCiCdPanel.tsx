@@ -240,7 +240,7 @@ export function DevCiCdPanel({ apiBase, subView }: { apiBase: string; subView: C
     setRetrying(true);
     setRetryError('');
     try {
-      const response = await fetch(`${apiBase}/api/dev-cicd/${encodeURIComponent(projectId.trim())}/pipelines/${pipelineId}/retry`, { method: 'POST' });
+      const response = await fetch(`${apiBase}/api/dev-cicd/${encodeURIComponent(projectId.trim())}/pipelines/${pipelineId}/retry`, { method: 'POST', credentials: 'include' });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error((body as { error?: string }).error ?? s.retryFailed);

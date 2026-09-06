@@ -18,15 +18,23 @@ test('POST /api/deployment/generate returns generated manifests', async () => {
     image: 'img:latest',
     port: 8080,
     environments: [{ name: 'dev' }],
-  }, service);
+  }, 'Admin', service);
 
   assert.equal(response.status, 201);
   assert.deepEqual(response.body, fakeResult);
 });
 
+test('rejects a request without a session', async () => {
+  const service: DeploymentHttpService = { generate: async () => fakeResult };
+  const response = await handleDeploymentRequest('POST', '/api/deployment/generate', {
+    appName: 'my-app', image: 'img:latest', port: 8080, environments: [{ name: 'dev' }],
+  }, undefined, service);
+  assert.equal(response.status, 400);
+});
+
 test('rejects a request missing required fields', async () => {
   const service: DeploymentHttpService = { generate: async () => fakeResult };
-  const response = await handleDeploymentRequest('POST', '/api/deployment/generate', { appName: 'my-app' }, service);
+  const response = await handleDeploymentRequest('POST', '/api/deployment/generate', { appName: 'my-app' }, 'Admin', service);
   assert.equal(response.status, 400);
 });
 
@@ -34,12 +42,12 @@ test('rejects a request with no environments', async () => {
   const service: DeploymentHttpService = { generate: async () => fakeResult };
   const response = await handleDeploymentRequest('POST', '/api/deployment/generate', {
     appName: 'my-app', image: 'img', port: 80, environments: [],
-  }, service);
+  }, 'Admin', service);
   assert.equal(response.status, 400);
 });
 
 test('returns 404 for unknown routes', async () => {
   const service: DeploymentHttpService = { generate: async () => fakeResult };
-  const response = await handleDeploymentRequest('GET', '/api/deployment/unknown', null, service);
+  const response = await handleDeploymentRequest('GET', '/api/deployment/unknown', null, 'Admin', service);
   assert.equal(response.status, 404);
 });

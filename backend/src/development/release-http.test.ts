@@ -19,32 +19,44 @@ function fakeService(overrides: Partial<ReleaseHttpService> = {}): ReleaseHttpSe
 test('lists releases, optionally filtered by devProjectId', async () => {
   let receivedFilter: string | undefined;
   const service = fakeService({ list: async (devProjectId) => { receivedFilter = devProjectId; return []; } });
-  await handleReleaseRequest('GET', '/api/releases?devProjectId=p1', null, service);
+  await handleReleaseRequest('GET', '/api/releases?devProjectId=p1', null, 'Admin', service);
   assert.equal(receivedFilter, 'p1');
 });
 
 test('creates a release with required fields', async () => {
   const service = fakeService();
-  const result = await handleReleaseRequest('POST', '/api/releases', { devProjectId: 'p1', version: '1.0.0' }, service);
+  const result = await handleReleaseRequest('POST', '/api/releases', { devProjectId: 'p1', version: '1.0.0' }, 'Contributeur', service);
   assert.equal(result.status, 201);
+});
+
+test('rejects creating a release without a session', async () => {
+  const service = fakeService();
+  const result = await handleReleaseRequest('POST', '/api/releases', { devProjectId: 'p1', version: '1.0.0' }, undefined, service);
+  assert.equal(result.status, 400);
 });
 
 test('rejects creation without version', async () => {
   const service = fakeService();
-  const result = await handleReleaseRequest('POST', '/api/releases', { devProjectId: 'p1' }, service);
+  const result = await handleReleaseRequest('POST', '/api/releases', { devProjectId: 'p1' }, 'Contributeur', service);
   assert.equal(result.status, 400);
 });
 
 test('publishes a release', async () => {
   let publishedId: string | undefined;
   const service = fakeService({ publish: async (id) => { publishedId = id; return {} as never; } });
-  const result = await handleReleaseRequest('POST', '/api/releases/r1/publish', null, service);
+  const result = await handleReleaseRequest('POST', '/api/releases/r1/publish', null, 'Admin', service);
   assert.equal(result.status, 200);
   assert.equal(publishedId, 'r1');
 });
 
+test('rejects publishing a release without execute_infrastructure', async () => {
+  const service = fakeService({ publish: async () => { throw new Error('should not be called'); } });
+  const result = await handleReleaseRequest('POST', '/api/releases/r1/publish', null, 'Contributeur', service);
+  assert.equal(result.status, 400);
+});
+
 test('returns 404 for unknown release on GET', async () => {
   const service = fakeService({ get: async () => null });
-  const result = await handleReleaseRequest('GET', '/api/releases/missing', null, service);
+  const result = await handleReleaseRequest('GET', '/api/releases/missing', null, 'Admin', service);
   assert.equal(result.status, 404);
 });

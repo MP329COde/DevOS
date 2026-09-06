@@ -16,6 +16,7 @@ function buildService(overrides: Partial<DevActivityHttpService> = {}): DevActiv
     agentAction: (action) => ({ configured: false, message: `stub:${action}` }),
     lifecycle: async () => null,
     personalDashboard: async (member) => ({ member, assignedOpenTasks: [], pipelinesFailing: [], mergeRequestsToReview: [] }),
+    recordEvent: async (input) => input,
     ...overrides,
   };
 }
@@ -25,7 +26,35 @@ test('GET /api/dev-activity/timeline forwards filters', async () => {
   const service = buildService({ timeline: async (filter) => { received = filter; return []; } });
   const result = await handleDevActivityRequest('GET', '/api/dev-activity/timeline?devProjectId=p1&type=comment', undefined, service);
   assert.equal(result.status, 200);
-  assert.deepEqual(received, { devProjectId: 'p1', type: 'comment', from: undefined, to: undefined });
+  assert.deepEqual(received, {
+    devProjectId: 'p1',
+    itemId: undefined,
+    releaseId: undefined,
+    environmentId: undefined,
+    type: 'comment',
+    from: undefined,
+    to: undefined,
+  });
+});
+
+test('POST /api/dev-activity/events records a timeline event when authorized', async () => {
+  let received: unknown;
+  const service = buildService({ recordEvent: async (input) => { received = input; return input; } });
+  const result = await handleDevActivityRequest(
+    'POST',
+    '/api/dev-activity/events',
+    { type: 'commit', summary: 'Commit abc123' },
+    service,
+    'Contributeur',
+  );
+  assert.equal(result.status, 201);
+  assert.equal((received as { type: string }).type, 'commit');
+});
+
+test('POST /api/dev-activity/events requires authentication', async () => {
+  const service = buildService();
+  const result = await handleDevActivityRequest('POST', '/api/dev-activity/events', { type: 'commit', summary: 'x' }, service);
+  assert.equal(result.status, 400);
 });
 
 test('POST /api/dev-activity/projects/:id/docs creates a scoped doc', async () => {

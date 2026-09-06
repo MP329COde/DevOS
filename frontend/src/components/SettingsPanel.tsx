@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 
 import { SecretsPanel } from './SecretsPanel.js';
 import { IntegrationsPanel } from './IntegrationsPanel.js';
+import { CustomWidgetsPanel } from './CustomWidgetsPanel.js';
 import { THEME_COLOR_SETTINGS, THEME_PRESETS, type ThemePreset } from '../theme.js';
 import { useStrings } from '../i18n/LanguageContext.js';
 
@@ -12,12 +13,16 @@ interface SettingsPanelProps {
   setAdminLoginThemeId: (id: string) => void;
   platformThemePresets: ThemePreset[];
   addPlatformThemePreset: (name: string, light: Record<string, string>, dark: Record<string, string>) => void;
+  enabledWidgets: Record<'pipelines' | 'alerts', boolean>;
+  setEnabledWidgets: (updater: (current: Record<'pipelines' | 'alerts', boolean>) => Record<'pipelines' | 'alerts', boolean>) => void;
+  widgetData: { pipelines: { running: number; items: Array<{ id: number; status: string; ref: string; web_url: string }> }; alerts: { active: number; critical: number; items: Array<{ fingerprint: string; labels: Record<string, string>; status: { state: string }; startsAt: string }> } } | null;
+  widgetsError: string;
+  onCustomWidgetsChange: () => void;
 }
 
 /** Regroupe les clés brutes de `/api/settings` par section thématique, pour affichage en blocs repliables. */
 const SETTINGS_SECTIONS: Array<{ id: string; keys: string[] }> = [
   { id: 'gitlab', keys: ['GITLAB_BASE_URL', 'GITLAB_TOKEN', 'GITLAB_PROJECT_ID'] },
-  { id: 'webhooks', keys: ['NOTIFICATIONS_WEBHOOK_URL'] },
   { id: 'vault', keys: [] },
   { id: 'haproxy', keys: ['HAPROXY_DATA_PLANE_URL', 'HAPROXY_USERNAME', 'HAPROXY_PASSWORD'] },
   { id: 'coder', keys: ['CODER_BASE_URL', 'CODER_TOKEN', 'CODER_ORGANIZATION_ID', 'CODER_OWNER', 'CODER_DEFAULT_TEMPLATE_ID'] },
@@ -32,19 +37,22 @@ const SETTINGS_SECTIONS: Array<{ id: string; keys: string[] }> = [
   { id: 'autres', keys: ['GITHUB_TOKEN', 'GITHUB_BASE_URL', 'RABBITMQ_BASE_URL', 'RABBITMQ_USERNAME', 'RABBITMQ_PASSWORD', 'OLLAMA_BASE_URL', 'TERRAFORM_STATE_PATH', 'SAMBA_EXPORTER_BASE_URL', 'N8N_BASE_URL', 'N8N_API_KEY', 'MEILISEARCH_BASE_URL', 'MEILISEARCH_API_KEY', 'REDPANDA_BASE_URL', 'REDPANDA_TOKEN', 'DOCS_PATH'] },
 ];
 
-const SMTP_FIELD_KEYS: Array<{ key: string; type: string }> = [
+const NOTIFICATIONS_FIELD_KEYS: Array<{ key: string; type: string }> = [
   { key: 'SMTP_HOST', type: 'text' },
   { key: 'SMTP_PORT', type: 'text' },
   { key: 'SMTP_USER', type: 'text' },
   { key: 'SMTP_PASSWORD', type: 'password' },
   { key: 'NOTIFICATIONS_EMAIL_FROM', type: 'text' },
   { key: 'NOTIFICATIONS_EMAIL_TO', type: 'text' },
+  { key: 'NOTIFICATIONS_WEBHOOK_URL', type: 'text' },
+  { key: 'NOTIFICATIONS_WAZUH_THRESHOLD', type: 'text' },
+  { key: 'NOTIFICATIONS_RETENTION_DAYS', type: 'text' },
 ];
 
 const strings = {
   fr: {
     sectionLabels: {
-      gitlab: 'GitLab', webhooks: 'Webhooks', vault: 'Vault', haproxy: 'HAProxy', coder: 'Coder',
+      gitlab: 'GitLab', vault: 'Vault', haproxy: 'HAProxy', coder: 'Coder',
       proxmox: 'Proxmox', k8s: 'Kubernetes / ArgoCD', monitoring: 'Monitoring & alerting',
       reseau: 'Réseau (DNS/sécurité)', stockage: 'Stockage & registres', ci: 'CI/CD',
       calendriers: 'Calendriers', 'comptes-plateforme': 'Comptes GitHub/GitLab dédiés à DevOS',
@@ -57,6 +65,9 @@ const strings = {
       SMTP_PASSWORD: { label: 'Mot de passe', placeholder: '••••••••' },
       NOTIFICATIONS_EMAIL_FROM: { label: 'Adresse expéditeur', placeholder: 'devos@example.com' },
       NOTIFICATIONS_EMAIL_TO: { label: 'Destinataire des alertes', placeholder: 'oncall@example.com' },
+      NOTIFICATIONS_WEBHOOK_URL: { label: 'Webhook sortant', placeholder: 'https://exemple.com/webhook' },
+      NOTIFICATIONS_WAZUH_THRESHOLD: { label: 'Seuil de criticité Wazuh', placeholder: '12' },
+      NOTIFICATIONS_RETENTION_DAYS: { label: 'Rétention des notifications (jours)', placeholder: '60' },
     } as Record<string, { label: string; placeholder: string }>,
     settingsNotConfigured: 'Les paramètres ne sont pas configurés sur ce backend.',
     settingsLoadFailed: 'Impossible de charger les paramètres.',
@@ -69,12 +80,18 @@ const strings = {
     platformThemeNameAria: 'Nom du nouveau thème de la plateforme',
     platformThemeNamePlaceholder: 'Nom du thème (ex. Thème société)',
     addPlatformThemeButton: 'Ajouter ce thème à la plateforme',
-    smtpHeading: 'Email / SMTP',
-    smtpHint: "Utilisé pour envoyer les notifications d'alerte par email (voir Paramètres → Notifications).",
+    smtpHeading: 'Notifications système',
+    smtpHint: "Configuration serveur des notifications : email (SMTP), webhook sortant, seuil d'alerte Wazuh et durée de rétention.",
     saved: 'Enregistré ✓',
-    saveSmtp: 'Enregistrer la configuration SMTP',
+    saveSmtp: 'Enregistrer la configuration des notifications',
     integrationBuilder: "Générateur d'intégration (custom)",
     integrationBuilderShort: "Générateur d'intégration",
+    widgetsHeading: 'Widgets',
+    widgetsShort: 'Widgets',
+    widgetsHint: 'Widgets système (pipelines, alertes) et widgets custom du Dashboard, basés sur les sources /api/extras/* déjà branchées.',
+    pipelinesLabel: 'Pipelines',
+    alertsLabel: 'Alertes',
+    widgetsLoadFailed: 'Impossible de charger les widgets.',
     loadingSettings: 'Chargement des paramètres…',
     integrationsHeading: 'Intégrations',
     integrationsAria: 'Sections des intégrations',
@@ -85,7 +102,7 @@ const strings = {
   },
   en: {
     sectionLabels: {
-      gitlab: 'GitLab', webhooks: 'Webhooks', vault: 'Vault', haproxy: 'HAProxy', coder: 'Coder',
+      gitlab: 'GitLab', vault: 'Vault', haproxy: 'HAProxy', coder: 'Coder',
       proxmox: 'Proxmox', k8s: 'Kubernetes / ArgoCD', monitoring: 'Monitoring & alerting',
       reseau: 'Network (DNS/security)', stockage: 'Storage & registries', ci: 'CI/CD',
       calendriers: 'Calendars', 'comptes-plateforme': 'GitHub/GitLab accounts dedicated to DevOS',
@@ -98,6 +115,9 @@ const strings = {
       SMTP_PASSWORD: { label: 'Password', placeholder: '••••••••' },
       NOTIFICATIONS_EMAIL_FROM: { label: 'Sender address', placeholder: 'devos@example.com' },
       NOTIFICATIONS_EMAIL_TO: { label: 'Alert recipient', placeholder: 'oncall@example.com' },
+      NOTIFICATIONS_WEBHOOK_URL: { label: 'Outbound webhook', placeholder: 'https://example.com/webhook' },
+      NOTIFICATIONS_WAZUH_THRESHOLD: { label: 'Wazuh critical threshold', placeholder: '12' },
+      NOTIFICATIONS_RETENTION_DAYS: { label: 'Notification retention (days)', placeholder: '60' },
     } as Record<string, { label: string; placeholder: string }>,
     settingsNotConfigured: 'Settings are not configured on this backend.',
     settingsLoadFailed: 'Unable to load settings.',
@@ -110,12 +130,18 @@ const strings = {
     platformThemeNameAria: 'New platform theme name',
     platformThemeNamePlaceholder: 'Theme name (e.g. Company theme)',
     addPlatformThemeButton: 'Add this theme to the platform',
-    smtpHeading: 'Email / SMTP',
-    smtpHint: 'Used to send alert notifications by email (see Settings → Notifications).',
+    smtpHeading: 'System notifications',
+    smtpHint: "Server-side notification configuration: email (SMTP), outbound webhook, Wazuh alert threshold and retention period.",
     saved: 'Saved ✓',
-    saveSmtp: 'Save SMTP configuration',
+    saveSmtp: 'Save notifications configuration',
     integrationBuilder: 'Integration builder (custom)',
     integrationBuilderShort: 'Integration builder',
+    widgetsHeading: 'Widgets',
+    widgetsShort: 'Widgets',
+    widgetsHint: 'System widgets (pipelines, alerts) and custom Dashboard widgets, based on the already connected /api/extras/* sources.',
+    pipelinesLabel: 'Pipelines',
+    alertsLabel: 'Alerts',
+    widgetsLoadFailed: 'Unable to load widgets.',
     loadingSettings: 'Loading settings…',
     integrationsHeading: 'Integrations',
     integrationsAria: 'Integration sections',
@@ -128,6 +154,7 @@ const strings = {
 
 export function SettingsPanel({
   adminLoginThemeId, setAdminLoginThemeId, platformThemePresets, addPlatformThemePreset,
+  enabledWidgets, setEnabledWidgets, widgetData, widgetsError, onCustomWidgetsChange,
 }: SettingsPanelProps) {
   const s = useStrings(strings);
   const [known, setKnown] = useState<string[]>([]);
@@ -180,13 +207,13 @@ export function SettingsPanel({
     event.preventDefault();
     // Ne réécrit que les champs modifiés (non vides), pour ne pas effacer un mot de passe déjà enregistré
     // simplement parce que le champ est resté vide à l'affichage (par sécurité, les valeurs existantes ne sont jamais pré-remplies en clair).
-    const toSave = SMTP_FIELD_KEYS.filter(({ key }) => (drafts[key] ?? '').trim() !== '');
+    const toSave = NOTIFICATIONS_FIELD_KEYS.filter(({ key }) => (drafts[key] ?? '').trim() !== '');
     const results = await Promise.all(toSave.map(({ key }) => saveSetting(key)));
     if (results.every(Boolean)) setSavedKey('smtp-form');
     setTimeout(() => setSavedKey((current) => (current === 'smtp-form' ? '' : current)), 1500);
   }
 
-  const genericKeys = known.filter((key) => !SMTP_FIELD_KEYS.some((field) => field.key === key));
+  const genericKeys = known.filter((key) => !NOTIFICATIONS_FIELD_KEYS.some((field) => field.key === key));
   const scrollToSection = (id: string) => {
     setOpenSection(id);
     requestAnimationFrame(() => document.getElementById(`settings-section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
@@ -259,7 +286,7 @@ export function SettingsPanel({
         <h3>{s.smtpHeading}</h3>
         <p className="empty">{s.smtpHint}</p>
         <form className="smtp-form" onSubmit={(event) => void saveSmtpForm(event)}>
-          {SMTP_FIELD_KEYS.map((field) => {
+          {NOTIFICATIONS_FIELD_KEYS.map((field) => {
             const fieldStrings = s.smtpFields[field.key];
             return (
               <label key={field.key} className="smtp-field">
@@ -290,6 +317,34 @@ export function SettingsPanel({
         <IntegrationsPanel />
       </details>
 
+      <details
+        id="settings-section-widgets"
+        className="widget-card settings-section"
+        open={openSection === 'widgets'}
+        onToggle={(event) => { if ((event.target as HTMLDetailsElement).open) setOpenSection('widgets'); }}
+      >
+        <summary>{s.widgetsHeading}</summary>
+        <p className="empty">{s.widgetsHint}</p>
+        <div className="filters" aria-label={s.widgetsHeading}>
+          <label><input type="checkbox" checked={enabledWidgets.pipelines} onChange={(event) => setEnabledWidgets((current) => ({ ...current, pipelines: event.target.checked }))} /> {s.pipelinesLabel}</label>
+          <label><input type="checkbox" checked={enabledWidgets.alerts} onChange={(event) => setEnabledWidgets((current) => ({ ...current, alerts: event.target.checked }))} /> {s.alertsLabel}</label>
+        </div>
+        {widgetsError && <p className="error" role="alert">{widgetsError}</p>}
+        {enabledWidgets.pipelines && widgetData && (
+          <section className="view-group">
+            <h4 className="settings-subheading">{s.pipelinesLabel} ({widgetData.pipelines.running})</h4>
+            {widgetData.pipelines.items.map((pipeline) => <p className="empty" key={pipeline.id}>#{pipeline.id} · {pipeline.ref} · {pipeline.status}</p>)}
+          </section>
+        )}
+        {enabledWidgets.alerts && widgetData && (
+          <section className="view-group">
+            <h4 className="settings-subheading">{s.alertsLabel} ({widgetData.alerts.active}, {widgetData.alerts.critical})</h4>
+            {widgetData.alerts.items.map((alert) => <p className="empty" key={alert.fingerprint}>{alert.labels.alertname ?? alert.fingerprint} · {alert.status.state}</p>)}
+          </section>
+        )}
+        <CustomWidgetsPanel onChange={onCustomWidgetsChange} />
+      </details>
+
       {error && <p className="error" role="alert">{error}</p>}
       {!error && known.length === 0 && <p className="empty">{s.loadingSettings}</p>}
 
@@ -298,6 +353,9 @@ export function SettingsPanel({
         <div className="filters">
           <button type="button" className={openSection === 'integration-builder' ? 'filter active' : 'filter'} onClick={() => scrollToSection('integration-builder')}>
             {s.integrationBuilderShort}
+          </button>
+          <button type="button" className={openSection === 'widgets' ? 'filter active' : 'filter'} onClick={() => scrollToSection('widgets')}>
+            {s.widgetsShort}
           </button>
           {SETTINGS_SECTIONS.map((section) => (
             <button key={section.id} type="button" className={openSection === section.id ? 'filter active' : 'filter'} onClick={() => scrollToSection(section.id)}>

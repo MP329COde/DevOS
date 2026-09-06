@@ -401,6 +401,7 @@ function ReleasesTab({ apiBase, devProjectId }: { apiBase: string; devProjectId:
       const response = await fetch(`${apiBase}/api/releases`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ devProjectId, version: version.trim(), name: name.trim() || undefined, description: description.trim() || undefined }),
       });
       if (!response.ok) throw new Error();
@@ -413,7 +414,7 @@ function ReleasesTab({ apiBase, devProjectId }: { apiBase: string; devProjectId:
 
   async function publish(id: string) {
     try {
-      const response = await fetch(`${apiBase}/api/releases/${id}/publish`, { method: 'POST' });
+      const response = await fetch(`${apiBase}/api/releases/${id}/publish`, { method: 'POST', credentials: 'include' });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
         throw new Error(body?.error ?? s.publishRefused);
@@ -519,7 +520,8 @@ function EnvironmentsTab({ apiBase, devProjectId }: { apiBase: string; devProjec
     try {
       const response = await fetch(`${apiBase}/api/environments/${env.id}/deploy`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-devos-role': 'Admin' },
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ version, ...(sensitive ? { confirm: true } : {}) }),
       });
       if (!response.ok) {

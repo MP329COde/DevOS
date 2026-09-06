@@ -47,6 +47,10 @@ export class KeycloakAuthService {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
+  public get sessionStore(): SessionStore {
+    return this.sessions;
+  }
+
   public async completeLogin(code: string, codeVerifier: string): Promise<string> {
     const credentials = await this.vault.readKv2(this.config.clientSecretVaultPath);
     const response = await this.fetchImpl(`${this.config.issuerUrl}/protocol/openid-connect/token`, {

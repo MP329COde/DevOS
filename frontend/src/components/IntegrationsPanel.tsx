@@ -121,6 +121,7 @@ export function IntegrationsPanel() {
       const response = await fetch(`${apiBase()}/api/integrations/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ baseUrl, authType, credentials: credentials() }),
       });
       if (response.status === 503) { setError(s.generatorNotConfigured); return; }
@@ -139,6 +140,7 @@ export function IntegrationsPanel() {
       const response = await fetch(`${apiBase()}/api/integrations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ name, config: { baseUrl, authType, credentials: credentials() } }),
       });
       if (!response.ok) { setError(s.saveFailed); return; }

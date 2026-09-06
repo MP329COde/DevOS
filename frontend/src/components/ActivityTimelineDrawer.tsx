@@ -3,15 +3,58 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon.js';
 import { useLanguage, useStrings } from '../i18n/LanguageContext.js';
 
+type TimelineEntryType =
+  | 'item-created'
+  | 'item-updated'
+  | 'comment'
+  | 'commit'
+  | 'pipeline_started'
+  | 'pipeline_finished'
+  | 'tests'
+  | 'image_published'
+  | 'security_scan'
+  | 'manifest_updated'
+  | 'argocd_sync'
+  | 'deployment_healthy'
+  | 'release_published'
+  | 'platform_update';
+
 interface TimelineEntry {
   id: string;
-  type: 'item-created' | 'item-updated' | 'comment';
+  type: TimelineEntryType;
   occurredAt: string;
-  itemTitle: string;
-  itemType: string;
+  itemId: string | null;
+  itemTitle: string | null;
+  itemType: string | null;
   devProjectId: string | null;
   summary: string;
+  status?: string;
+  actorEmail?: string;
+  actorName?: string;
+  releaseId?: string;
+  environmentId?: string;
+  commitRef?: string;
+  pipelineRef?: string;
+  version?: string;
 }
+
+/** Groupes de filtres affichés dans le tiroir — un type technique par bouton pour rester lisible. */
+const FILTERABLE_TYPES: TimelineEntryType[] = [
+  'item-created',
+  'item-updated',
+  'comment',
+  'commit',
+  'pipeline_started',
+  'pipeline_finished',
+  'tests',
+  'image_published',
+  'security_scan',
+  'manifest_updated',
+  'argocd_sync',
+  'deployment_healthy',
+  'release_published',
+  'platform_update',
+];
 
 const strings = {
   fr: {
@@ -21,15 +64,23 @@ const strings = {
     close: "Fermer l'historique",
     filterAria: 'Filtrer la timeline',
     all: 'Tout',
-    created: 'Créations',
-    updated: 'Mises à jour',
-    comments: 'Commentaires',
     empty: 'Aucune activité pour ce filtre.',
     typeLabel: {
       'item-created': 'Création',
       'item-updated': 'Mise à jour',
       comment: 'Commentaire',
-    } as Record<TimelineEntry['type'], string>,
+      commit: 'Commit',
+      pipeline_started: 'Pipeline lancée',
+      pipeline_finished: 'Pipeline terminée',
+      tests: 'Tests',
+      image_published: 'Image publiée',
+      security_scan: 'Scan sécurité',
+      manifest_updated: 'Manifest modifié',
+      argocd_sync: 'ArgoCD Sync',
+      deployment_healthy: 'Déploiement',
+      release_published: 'Version publiée',
+      platform_update: 'Mise à jour plateforme',
+    } as Record<TimelineEntryType, string>,
     project: (id: string) => `projet ${id}`,
   },
   en: {
@@ -39,15 +90,23 @@ const strings = {
     close: 'Close history',
     filterAria: 'Filter the timeline',
     all: 'All',
-    created: 'Created',
-    updated: 'Updated',
-    comments: 'Comments',
     empty: 'No activity for this filter.',
     typeLabel: {
       'item-created': 'Created',
       'item-updated': 'Updated',
       comment: 'Comment',
-    } as Record<TimelineEntry['type'], string>,
+      commit: 'Commit',
+      pipeline_started: 'Pipeline started',
+      pipeline_finished: 'Pipeline finished',
+      tests: 'Tests',
+      image_published: 'Image published',
+      security_scan: 'Security scan',
+      manifest_updated: 'Manifest updated',
+      argocd_sync: 'ArgoCD sync',
+      deployment_healthy: 'Deployment',
+      release_published: 'Release published',
+      platform_update: 'Platform update',
+    } as Record<TimelineEntryType, string>,
     project: (id: string) => `project ${id}`,
   },
 } as const;
@@ -61,7 +120,7 @@ export function ActivityTimelineDrawer({ apiBase, open, onClose }: { apiBase: st
   const { language } = useLanguage();
   const s = useStrings(strings);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
-  const [typeFilter, setTypeFilter] = useState<'all' | TimelineEntry['type']>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | TimelineEntryType>('all');
   const [error, setError] = useState('');
   const drawerRef = useRef<HTMLElement | null>(null);
   const [rendered, setRendered] = useState(open);
@@ -117,18 +176,32 @@ export function ActivityTimelineDrawer({ apiBase, open, onClose }: { apiBase: st
       </div>
       <div className="filters" aria-label={s.filterAria}>
         <button className={typeFilter === 'all' ? 'filter active' : 'filter'} type="button" onClick={() => setTypeFilter('all')}>{s.all}</button>
-        <button className={typeFilter === 'item-created' ? 'filter active' : 'filter'} type="button" onClick={() => setTypeFilter('item-created')}>{s.created}</button>
-        <button className={typeFilter === 'item-updated' ? 'filter active' : 'filter'} type="button" onClick={() => setTypeFilter('item-updated')}>{s.updated}</button>
-        <button className={typeFilter === 'comment' ? 'filter active' : 'filter'} type="button" onClick={() => setTypeFilter('comment')}>{s.comments}</button>
+        {FILTERABLE_TYPES.map((type) => (
+          <button key={type} className={typeFilter === type ? 'filter active' : 'filter'} type="button" onClick={() => setTypeFilter(type)}>{s.typeLabel[type]}</button>
+        ))}
       </div>
       {error && <p className="error" role="alert">{error}</p>}
       {!error && timeline.length === 0 && <p className="empty">{s.empty}</p>}
-      {timeline.map((entry) => (
-        <article className="item" key={entry.id}>
-          <span className="item-title"><strong>{s.typeLabel[entry.type]}</strong> — {entry.summary}</span>
-          <span className="integrations">{new Date(entry.occurredAt).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US')} · {entry.itemType}{entry.devProjectId ? ` · ${s.project(entry.devProjectId)}` : ''}</span>
-        </article>
-      ))}
+      {timeline.map((entry) => {
+        const meta = [
+          entry.itemType,
+          entry.devProjectId ? s.project(entry.devProjectId) : null,
+          entry.status,
+          entry.commitRef ? `commit ${entry.commitRef}` : null,
+          entry.pipelineRef ? `pipeline ${entry.pipelineRef}` : null,
+          entry.version ? `v${entry.version}` : null,
+          entry.actorName ?? entry.actorEmail ?? null,
+        ].filter(Boolean);
+        return (
+          <article className="item" key={entry.id}>
+            <span className="item-title"><strong>{s.typeLabel[entry.type]}</strong> — {entry.summary}</span>
+            <span className="integrations">
+              {new Date(entry.occurredAt).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US')}
+              {meta.length > 0 ? ` · ${meta.join(' · ')}` : ''}
+            </span>
+          </article>
+        );
+      })}
     </aside>
   );
 }

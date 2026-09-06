@@ -165,3 +165,53 @@ export async function retryPipeline(gitlab: GitLabPipelinesClientOptions, projec
   if (!response.ok) throw new Error(`GitLab API request failed (${response.status})`);
   return getPipeline(gitlab, projectId, pipelineId);
 }
+
+/** Télécharge le zip d'artefacts d'un job (GitLab n'expose les artefacts qu'au niveau job, pas pipeline). */
+export async function getJobArtifactsZip(gitlab: GitLabPipelinesClientOptions, projectId: string, jobId: number): Promise<Buffer> {
+  const fetchImpl = gitlab.fetchImpl ?? fetch;
+  const token = await gitlab.tokenProvider.getToken();
+  const response = await fetchImpl(`${gitlab.baseUrl}/projects/${encodeURIComponent(projectId)}/jobs/${jobId}/artifacts`, {
+    headers: { 'private-token': token },
+  });
+  if (!response.ok) throw new Error(`GitLab API request failed (${response.status})`);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+export interface GitLabTestReport {
+  total_time: number;
+  total_count: number;
+  success_count: number;
+  failed_count: number;
+  skipped_count: number;
+  error_count: number;
+  test_suites: Array<{ name: string }>;
+}
+
+/** Rapport de tests agrégé (JUnit) d'une pipeline — disponible en Community Edition si publié via artifacts:reports:junit. */
+export async function getTestReport(gitlab: GitLabPipelinesClientOptions, projectId: string, pipelineId: number): Promise<GitLabTestReport> {
+  return gitlabGet<GitLabTestReport>(gitlab, `/projects/${encodeURIComponent(projectId)}/pipelines/${pipelineId}/test_report`);
+}
+
+/** Cherche un job par nom dans une pipeline (ex. "code_quality", "dependency_scanning"). */
+export async function findJobByName(gitlab: GitLabPipelinesClientOptions, projectId: string, pipelineId: number, name: string): Promise<GitLabPipelineJob | null> {
+  const jobs = await listPipelineJobs(gitlab, projectId, pipelineId);
+  return jobs.find((job) => job.name === name) ?? null;
+}
+
+/** Lit un fichier texte précis dans les artefacts d'un job (ex. gl-code-quality-report.json). */
+export async function getJobArtifactFile<T>(gitlab: GitLabPipelinesClientOptions, projectId: string, jobId: number, path: string): Promise<T> {
+  return gitlabGet<T>(gitlab, `/projects/${encodeURIComponent(projectId)}/jobs/${jobId}/artifacts/${path}`);
+}
+
+export interface GitLabPackage {
+  id: number;
+  name: string;
+  version: string;
+  package_type: string;
+  _links: { web_path: string };
+}
+
+/** Liste les packages publiés dans le Package Registry du projet (disponible en Community Edition). */
+export async function listPackages(gitlab: GitLabPipelinesClientOptions, projectId: string): Promise<GitLabPackage[]> {
+  return gitlabGet<GitLabPackage[]>(gitlab, `/projects/${encodeURIComponent(projectId)}/packages`);
+}

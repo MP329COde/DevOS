@@ -1,6 +1,7 @@
 import type { DevProject, Item, ItemComment, PrismaClient } from '@prisma/client';
 
 import { DocsService } from '../docs/docs-service.js';
+import { TimelineEventService, type TimelineEventInput } from './timeline-event-service.js';
 
 /**
  * Module Développement — section AM.8 (dernière sous-vague) : historique/timeline, doc par
@@ -10,19 +11,53 @@ import { DocsService } from '../docs/docs-service.js';
  * Développement n'a pas un panel racine dédié côté frontend (voir TODO au sommet de App.tsx).
  */
 
+/**
+ * Type d'une entrée de la timeline unifiée. `item-created`/`item-updated`/`comment` restent
+ * dérivés à la volée des tables `Item`/`ItemComment` (pas de table dédiée pour ces faits-là,
+ * voir `timeline()`) ; tous les autres types sont des `TimelineEvent` persistés explicitement
+ * par les modules CI/CD, releases et mises à jour plateforme.
+ */
+export type TimelineEntryType =
+  | 'item-created'
+  | 'item-updated'
+  | 'comment'
+  | 'commit'
+  | 'pipeline_started'
+  | 'pipeline_finished'
+  | 'tests'
+  | 'image_published'
+  | 'security_scan'
+  | 'manifest_updated'
+  | 'argocd_sync'
+  | 'deployment_healthy'
+  | 'release_published'
+  | 'platform_update';
+
 export interface TimelineEntry {
   id: string;
-  type: 'item-created' | 'item-updated' | 'comment';
+  type: TimelineEntryType;
   occurredAt: string;
-  itemId: string;
-  itemTitle: string;
-  itemType: string;
+  itemId: string | null;
+  itemTitle: string | null;
+  itemType: string | null;
   devProjectId: string | null;
   summary: string;
+  /** Champs de corrélation, renseignés uniquement pour les évènements issus de `TimelineEvent`. */
+  status?: string;
+  actorEmail?: string;
+  actorName?: string;
+  releaseId?: string;
+  environmentId?: string;
+  commitRef?: string;
+  pipelineRef?: string;
+  version?: string;
 }
 
 export interface TimelineFilter {
   devProjectId?: string;
+  itemId?: string;
+  releaseId?: string;
+  environmentId?: string;
   type?: TimelineEntry['type'];
   from?: string;
   to?: string;
@@ -94,22 +129,33 @@ export interface AiStubResponse {
 
 export class DevActivityService {
   private readonly docs: DocsService;
+  private readonly timelineEvents: TimelineEventService;
 
-  public constructor(private readonly database: PrismaClient) {
+  public constructor(private readonly database: PrismaClient, timelineEvents?: TimelineEventService) {
     this.docs = new DocsService(database);
+    this.timelineEvents = timelineEvents ?? new TimelineEventService(database);
+  }
+
+  /** Enregistre un évènement dans la timeline unifiée (voir `TimelineEventService`). */
+  public recordEvent(input: TimelineEventInput): Promise<unknown> {
+    return this.timelineEvents.record(input);
   }
 
   /**
-   * Timeline chronologique filtrable. Il n'existe pas de table d'évènements dédiée pour le
-   * module Développement (le modèle `AuditLog` existant ne couvre que les décisions de synchro
-   * GitLab, voir `integrations/audit-log-service.ts`) : on construit donc une timeline agrégée
-   * à partir des faits déjà stockés (création/mise à jour de tâche, commentaires), triée par
-   * date. Suffisant pour un historique consultable ; une vraie table d'évènements pourra
-   * remplacer cette agrégation plus tard sans changer le contrat HTTP.
+   * Timeline chronologique unifiée et filtrable : fusionne les faits dérivés à la volée
+   * (création/mise à jour de tâche, commentaires — pas de table dédiée pour ceux-là) avec les
+   * `TimelineEvent` persistés explicitement par les modules CI/CD, releases et mises à jour
+   * plateforme (commit, pipeline, tests, image publiée, scan sécurité, manifest modifié, sync
+   * ArgoCD, déploiement en bonne santé...), triés par date décroissante.
    */
   public async timeline(filter: TimelineFilter = {}): Promise<TimelineEntry[]> {
-    const itemWhere = filter.devProjectId ? { devProjectId: filter.devProjectId } : {};
-    const items = await this.database.item.findMany({ where: itemWhere, include: { comments: true } });
+    const itemWhere: Record<string, unknown> = {};
+    if (filter.devProjectId) itemWhere.devProjectId = filter.devProjectId;
+    if (filter.itemId) itemWhere.id = filter.itemId;
+    const items =
+      filter.releaseId || filter.environmentId
+        ? []
+        : await this.database.item.findMany({ where: itemWhere, include: { comments: true } });
 
     const entries: TimelineEntry[] = [];
     for (const item of items as Array<Item & { comments: ItemComment[] }>) {
@@ -147,6 +193,36 @@ export class DevActivityService {
           summary: `Commentaire de ${comment.author ?? 'inconnu'} sur "${item.title}"`,
         });
       }
+    }
+
+    const persistedEvents = await this.timelineEvents.query({
+      devProjectId: filter.devProjectId,
+      itemId: filter.itemId,
+      releaseId: filter.releaseId,
+      environmentId: filter.environmentId,
+      type: filter.type,
+      from: filter.from,
+      to: filter.to,
+    });
+    for (const event of persistedEvents) {
+      entries.push({
+        id: `event:${event.id}`,
+        type: event.type as TimelineEntry['type'],
+        occurredAt: event.createdAt.toISOString(),
+        itemId: event.itemId,
+        itemTitle: null,
+        itemType: null,
+        devProjectId: event.devProjectId,
+        summary: event.summary,
+        status: event.status ?? undefined,
+        actorEmail: event.actorEmail ?? undefined,
+        actorName: event.actorName ?? undefined,
+        releaseId: event.releaseId ?? undefined,
+        environmentId: event.environmentId ?? undefined,
+        commitRef: event.commitRef ?? undefined,
+        pipelineRef: event.pipelineRef ?? undefined,
+        version: event.version ?? undefined,
+      });
     }
 
     const from = filter.from ? new Date(filter.from).getTime() : undefined;

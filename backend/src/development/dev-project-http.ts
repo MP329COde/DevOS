@@ -1,3 +1,4 @@
+import { assertCan, type Role } from '../auth/permissions.js';
 import type { DevProjectDashboard, DevProjectInput } from './dev-project-service.js';
 
 export interface DevProjectHttpService {
@@ -16,12 +17,15 @@ export interface DevProjectHttpResponse {
 }
 
 /** Routes REST du module Développement — fondation AM.1. Préfixe `/api/dev-projects`. */
-export async function handleDevProjectRequest(method: string, url: string, body: unknown, service: DevProjectHttpService): Promise<DevProjectHttpResponse> {
+export async function handleDevProjectRequest(method: string, url: string, body: unknown, role: Role | undefined, service: DevProjectHttpService): Promise<DevProjectHttpResponse> {
   try {
     const [path, query] = url.split('?');
 
     if (method === 'GET' && path === '/api/dev-projects') return { status: 200, body: await service.list() };
-    if (method === 'POST' && path === '/api/dev-projects') return { status: 201, body: await service.create(parseInput(body)) };
+    if (method === 'POST' && path === '/api/dev-projects') {
+      requireRole(role, 'create');
+      return { status: 201, body: await service.create(parseInput(body)) };
+    }
 
     if (method === 'GET' && path === '/api/dev-projects/overview') {
       const search = new URLSearchParams(query ?? '').get('search') ?? undefined;
@@ -39,8 +43,12 @@ export async function handleDevProjectRequest(method: string, url: string, body:
       const found = await service.get(decodeURIComponent(one[1]));
       return found ? { status: 200, body: found } : { status: 404, body: { error: 'Not found' } };
     }
-    if (method === 'PATCH' && one) return { status: 200, body: await service.update(decodeURIComponent(one[1]), parseInput(body, true)) };
+    if (method === 'PATCH' && one) {
+      requireRole(role, 'update');
+      return { status: 200, body: await service.update(decodeURIComponent(one[1]), parseInput(body, true)) };
+    }
     if (method === 'DELETE' && one) {
+      requireRole(role, 'delete');
       await service.delete(decodeURIComponent(one[1]));
       return { status: 204, body: null };
     }
@@ -49,6 +57,11 @@ export async function handleDevProjectRequest(method: string, url: string, body:
   } catch (error) {
     return { status: 400, body: { error: error instanceof Error ? error.message : 'Invalid dev project request' } };
   }
+}
+
+function requireRole(role: Role | undefined, action: Parameters<typeof assertCan>[1]): void {
+  if (!role) throw new Error('Authentication is required to manage development projects');
+  assertCan(role, action);
 }
 
 function parseInput(body: unknown, partial = false): DevProjectInput {

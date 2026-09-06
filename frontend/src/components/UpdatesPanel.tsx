@@ -87,7 +87,7 @@ export function UpdatesPanel({ isAdmin }: { isAdmin: boolean }) {
     setBusy('apply');
     setMessage('');
     try {
-      const response = await fetch(`${apiBase()}/api/updates/apply`, { method: 'POST', headers: { 'x-devos-role': 'Admin' } });
+      const response = await fetch(`${apiBase()}/api/updates/apply`, { method: 'POST', credentials: 'include' });
       if (!response.ok) throw new Error(s.actionFailed);
       setMessage(s.applySuccess);
       setCanRollback(true);
@@ -103,7 +103,7 @@ export function UpdatesPanel({ isAdmin }: { isAdmin: boolean }) {
     setBusy('rollback');
     setMessage('');
     try {
-      const response = await fetch(`${apiBase()}/api/updates/rollback`, { method: 'POST', headers: { 'x-devos-role': 'Admin' } });
+      const response = await fetch(`${apiBase()}/api/updates/rollback`, { method: 'POST', credentials: 'include' });
       if (!response.ok) throw new Error(s.actionFailed);
       setMessage(s.rollbackSuccess);
       setCanRollback(false);

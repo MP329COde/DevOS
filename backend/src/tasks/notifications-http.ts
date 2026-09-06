@@ -1,9 +1,10 @@
 import type { NotificationDispatchResult, StoredNotification } from './notifications-service.js';
 
 export interface NotificationsHttpService {
-  trigger(payload: { title: string; message: string; category?: string }): Promise<NotificationDispatchResult[]>;
+  trigger(payload: { title: string; message: string; category?: string; resourceKind?: string; resourceId?: string; priority?: string }): Promise<NotificationDispatchResult[]>;
   list(): Promise<StoredNotification[]>;
   markAsRead(id: string): Promise<void>;
+  markAllAsRead(): Promise<void>;
   delete(id: string): Promise<void>;
 }
 
@@ -28,6 +29,10 @@ export async function handleNotificationsRequest(method: string, path: string, b
     if (method === 'GET' && path === '/api/notifications') {
       return { status: 200, body: { notifications: await service.list() } };
     }
+    if (method === 'PATCH' && path === '/api/notifications/read-all') {
+      await service.markAllAsRead();
+      return { status: 204, body: undefined };
+    }
     const readMatch = method === 'PATCH' && path.match(/^\/api\/notifications\/([^/]+)\/read$/);
     if (readMatch) {
       await service.markAsRead(readMatch[1]);
@@ -44,11 +49,21 @@ export async function handleNotificationsRequest(method: string, path: string, b
   }
 }
 
-function parsePayload(body: unknown): { title: string; message: string; category?: string } {
+function parsePayload(body: unknown): { title: string; message: string; category?: string; resourceKind?: string; resourceId?: string; priority?: string } {
   if (!body || typeof body !== 'object') throw new Error('Missing notification payload');
   const b = body as Record<string, unknown>;
   if (typeof b.title !== 'string' || !b.title.trim()) throw new Error('"title" is required');
   if (typeof b.message !== 'string' || !b.message.trim()) throw new Error('"message" is required');
   if (b.category !== undefined && typeof b.category !== 'string') throw new Error('"category" must be a string');
-  return { title: b.title, message: b.message, category: b.category };
+  if (b.resourceKind !== undefined && typeof b.resourceKind !== 'string') throw new Error('"resourceKind" must be a string');
+  if (b.resourceId !== undefined && typeof b.resourceId !== 'string') throw new Error('"resourceId" must be a string');
+  if (b.priority !== undefined && typeof b.priority !== 'string') throw new Error('"priority" must be a string');
+  return {
+    title: b.title,
+    message: b.message,
+    category: b.category as string | undefined,
+    resourceKind: b.resourceKind as string | undefined,
+    resourceId: b.resourceId as string | undefined,
+    priority: b.priority as string | undefined,
+  };
 }

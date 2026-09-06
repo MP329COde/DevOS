@@ -7,9 +7,20 @@ import type {
   SearchResult,
   TimelineEntry,
 } from './dev-activity-service.js';
+import { assertCan, type Role } from '../auth/permissions.js';
+import type { TimelineEventInput } from './timeline-event-service.js';
 
 export interface DevActivityHttpService {
-  timeline(filter: { devProjectId?: string; type?: TimelineEntry['type']; from?: string; to?: string }): Promise<TimelineEntry[]>;
+  timeline(filter: {
+    devProjectId?: string;
+    itemId?: string;
+    releaseId?: string;
+    environmentId?: string;
+    type?: TimelineEntry['type'];
+    from?: string;
+    to?: string;
+  }): Promise<TimelineEntry[]>;
+  recordEvent(input: TimelineEventInput): Promise<unknown>;
   projectDocs(devProjectId: string): Promise<unknown>;
   createProjectDoc(devProjectId: string, title: string, content: string): Promise<unknown>;
   architecture(devProjectId: string): Promise<ArchitectureGraph>;
@@ -28,7 +39,7 @@ export interface DevActivityHttpResponse {
 }
 
 /** Routes REST du module Développement — section AM.8. Préfixe `/api/dev-activity`. */
-export async function handleDevActivityRequest(method: string, url: string, body: unknown, service: DevActivityHttpService): Promise<DevActivityHttpResponse> {
+export async function handleDevActivityRequest(method: string, url: string, body: unknown, service: DevActivityHttpService, role?: Role): Promise<DevActivityHttpResponse> {
   try {
     const [path, query] = url.split('?');
     const params = new URLSearchParams(query ?? '');
@@ -39,11 +50,20 @@ export async function handleDevActivityRequest(method: string, url: string, body
         status: 200,
         body: await service.timeline({
           devProjectId: params.get('devProjectId') ?? undefined,
+          itemId: params.get('itemId') ?? undefined,
+          releaseId: params.get('releaseId') ?? undefined,
+          environmentId: params.get('environmentId') ?? undefined,
           type: type ?? undefined,
           from: params.get('from') ?? undefined,
           to: params.get('to') ?? undefined,
         }),
       };
+    }
+
+    if (method === 'POST' && path === '/api/dev-activity/events') {
+      if (!role) throw new Error('Authentication is required to record a timeline event');
+      assertCan(role, 'create');
+      return { status: 201, body: await service.recordEvent(parseTimelineEvent(body)) };
     }
 
     const docs = path.match(/^\/api\/dev-activity\/projects\/([^/]+)\/docs$/);
@@ -105,6 +125,29 @@ function parsePrompt(body: unknown): { prompt: string; devProjectId?: string } {
   if (!body || typeof body !== 'object' || typeof (body as Record<string, unknown>).prompt !== 'string') throw new Error('"prompt" is required');
   const b = body as Record<string, unknown>;
   return { prompt: b.prompt as string, devProjectId: typeof b.devProjectId === 'string' ? b.devProjectId : undefined };
+}
+
+function parseTimelineEvent(body: unknown): TimelineEventInput {
+  if (!body || typeof body !== 'object') throw new Error('Missing timeline event payload');
+  const b = body as Record<string, unknown>;
+  if (typeof b.type !== 'string' || !b.type.trim()) throw new Error('"type" is required');
+  if (typeof b.summary !== 'string' || !b.summary.trim()) throw new Error('"summary" is required');
+  const optionalString = (key: string): string | undefined => (typeof b[key] === 'string' ? (b[key] as string) : undefined);
+  return {
+    type: b.type,
+    summary: b.summary,
+    status: optionalString('status'),
+    actorEmail: optionalString('actorEmail'),
+    actorName: optionalString('actorName'),
+    devProjectId: optionalString('devProjectId'),
+    itemId: optionalString('itemId'),
+    releaseId: optionalString('releaseId'),
+    environmentId: optionalString('environmentId'),
+    commitRef: optionalString('commitRef'),
+    pipelineRef: optionalString('pipelineRef'),
+    version: optionalString('version'),
+    metadata: b.metadata && typeof b.metadata === 'object' ? (b.metadata as Record<string, unknown>) : undefined,
+  };
 }
 
 function parseAgentAction(body: unknown): { action: string; devProjectId?: string } {

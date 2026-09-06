@@ -1,3 +1,5 @@
+import { assertCan, type Role } from '../auth/permissions.js';
+import type { TimelineEventInput } from '../development/timeline-event-service.js';
 import type { GitLabPipelineDetail, GitLabPipelineJob } from '../integrations/gitlab-pipelines.js';
 import type { ArgoCDSyncHistoryEntry } from './argocd.js';
 import type { TrivyVulnerabilitySummary } from './harbor-trivy.js';
@@ -24,7 +26,14 @@ export interface CiCdHttpResponse {
   body: unknown;
 }
 
-export async function handleCiCdRequest(method: string, url: string, service: CiCdHttpService): Promise<CiCdHttpResponse> {
+export async function handleCiCdRequest(
+  method: string,
+  url: string,
+  role: Role | undefined,
+  service: CiCdHttpService,
+  recordEvent?: (input: TimelineEventInput) => Promise<unknown>,
+  actorEmail?: string,
+): Promise<CiCdHttpResponse> {
   const [path] = url.split('?');
 
   try {
@@ -52,7 +61,21 @@ export async function handleCiCdRequest(method: string, url: string, service: Ci
 
     const retry = path.match(/^\/api\/dev-cicd\/([^/]+)\/pipelines\/(\d+)\/retry$/);
     if (retry && method === 'POST') {
-      return call(service.retryPipeline, 'GitLab (pipelines)', () => service.retryPipeline!(decodeURIComponent(retry[1]), Number(retry[2])));
+      if (!role) throw new Error('Authentication is required to retry a pipeline');
+      assertCan(role, 'execute_infrastructure');
+      const projectId = decodeURIComponent(retry[1]);
+      const pipelineId = Number(retry[2]);
+      const result = await call(service.retryPipeline, 'GitLab (pipelines)', () => service.retryPipeline!(projectId, pipelineId));
+      if (result.status === 200) {
+        await recordEvent?.({
+          type: 'pipeline_started',
+          status: 'pending',
+          summary: `Pipeline #${pipelineId} relancé (${projectId})`,
+          actorEmail,
+          pipelineRef: `${projectId}#${pipelineId}`,
+        });
+      }
+      return result;
     }
 
     const deployments = path.match(/^\/api\/dev-cicd\/deployments\/([^/]+)$/);

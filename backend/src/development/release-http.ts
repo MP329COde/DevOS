@@ -1,5 +1,6 @@
 import type { Release } from '@prisma/client';
 
+import { assertCan, type Role } from '../auth/permissions.js';
 import type { ReleaseInput, ReleaseUpdateInput } from './release-service.js';
 
 export interface ReleaseHttpService {
@@ -8,7 +9,7 @@ export interface ReleaseHttpService {
   create(input: ReleaseInput): Promise<Release>;
   update(id: string, input: ReleaseUpdateInput): Promise<Release>;
   delete(id: string): Promise<void>;
-  publish(id: string): Promise<Release>;
+  publish(id: string, actorEmail?: string): Promise<Release>;
   associatedItems(id: string): Promise<unknown>;
 }
 
@@ -18,7 +19,7 @@ export interface ReleaseHttpResponse {
 }
 
 /** Routes REST des versions/releases (section AM.6). Préfixe `/api/releases`. */
-export async function handleReleaseRequest(method: string, url: string, body: unknown, service: ReleaseHttpService): Promise<ReleaseHttpResponse> {
+export async function handleReleaseRequest(method: string, url: string, body: unknown, role: Role | undefined, service: ReleaseHttpService, actorEmail?: string): Promise<ReleaseHttpResponse> {
   try {
     const [path, query] = url.split('?');
 
@@ -26,10 +27,16 @@ export async function handleReleaseRequest(method: string, url: string, body: un
       const devProjectId = new URLSearchParams(query ?? '').get('devProjectId') ?? undefined;
       return { status: 200, body: await service.list(devProjectId) };
     }
-    if (method === 'POST' && path === '/api/releases') return { status: 201, body: await service.create(parseCreate(body)) };
+    if (method === 'POST' && path === '/api/releases') {
+      requireRole(role, 'create');
+      return { status: 201, body: await service.create(parseCreate(body)) };
+    }
 
     const publish = path.match(/^\/api\/releases\/([^/]+)\/publish$/);
-    if (method === 'POST' && publish) return { status: 200, body: await service.publish(decodeURIComponent(publish[1])) };
+    if (method === 'POST' && publish) {
+      requireRole(role, 'execute_infrastructure');
+      return { status: 200, body: await service.publish(decodeURIComponent(publish[1]), actorEmail) };
+    }
 
     const items = path.match(/^\/api\/releases\/([^/]+)\/items$/);
     if (method === 'GET' && items) return { status: 200, body: await service.associatedItems(decodeURIComponent(items[1])) };
@@ -39,8 +46,12 @@ export async function handleReleaseRequest(method: string, url: string, body: un
       const found = await service.get(decodeURIComponent(one[1]));
       return found ? { status: 200, body: found } : { status: 404, body: { error: 'Not found' } };
     }
-    if (method === 'PATCH' && one) return { status: 200, body: await service.update(decodeURIComponent(one[1]), parseUpdate(body)) };
+    if (method === 'PATCH' && one) {
+      requireRole(role, 'update');
+      return { status: 200, body: await service.update(decodeURIComponent(one[1]), parseUpdate(body)) };
+    }
     if (method === 'DELETE' && one) {
+      requireRole(role, 'delete');
       await service.delete(decodeURIComponent(one[1]));
       return { status: 204, body: null };
     }
@@ -49,6 +60,11 @@ export async function handleReleaseRequest(method: string, url: string, body: un
   } catch (error) {
     return { status: 400, body: { error: error instanceof Error ? error.message : 'Invalid release request' } };
   }
+}
+
+function requireRole(role: Role | undefined, action: Parameters<typeof assertCan>[1]): void {
+  if (!role) throw new Error('Authentication is required to manage releases');
+  assertCan(role, action);
 }
 
 function parseCreate(body: unknown): ReleaseInput {

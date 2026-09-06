@@ -27,6 +27,13 @@ test('lists Proxmox VMs for a given node', async () => {
   assert.equal(result.status, 200);
 });
 
+test('returns the Proxmox cluster URL for redirection', async () => {
+  const service = { async getProxmoxClusterUrl() { return { url: 'https://pve.example.com:8006' }; } };
+  const result = await handleExtrasRequest('GET', '/api/extras/proxmox/cluster-url', service as never);
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, { url: 'https://pve.example.com:8006' });
+});
+
 test('passes the limit query param to Wazuh alerts', async () => {
   let receivedLimit: number | undefined;
   const service = { async listWazuhAlerts(limit?: number) { receivedLimit = limit; return []; } };

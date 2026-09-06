@@ -47,26 +47,3 @@ test('rejects failed Proxmox API responses', async () => {
   await assert.rejects(() => client(async () => new Response('{}', { status: 401 })).listNodes(), /failed \(401\)/);
 });
 
-test('sends a start action as a POST to the VM status endpoint', async () => {
-  let requestedUrl = '';
-  let requestedMethod = '';
-  await client(async (input, init) => {
-    requestedUrl = String(input);
-    requestedMethod = init?.method ?? '';
-    return new Response(JSON.stringify({ data: 'UPID:pve1:...' }), { status: 200 });
-  }).controlVirtualMachine('pve1', 100, 'start');
-  assert.equal(requestedUrl, 'https://pve.test:8006/api2/json/nodes/pve1/qemu/100/status/start');
-  assert.equal(requestedMethod, 'POST');
-});
-
-test('sends a shutdown action to the VM status endpoint', async () => {
-  let requestedUrl = '';
-  await client(async (input) => { requestedUrl = String(input); return new Response(JSON.stringify({ data: 'UPID' }), { status: 200 }); }).controlVirtualMachine('pve1', 100, 'shutdown');
-  assert.equal(requestedUrl, 'https://pve.test:8006/api2/json/nodes/pve1/qemu/100/status/shutdown');
-});
-
-test('sends a reboot action to the VM status endpoint', async () => {
-  let requestedUrl = '';
-  await client(async (input) => { requestedUrl = String(input); return new Response(JSON.stringify({ data: 'UPID' }), { status: 200 }); }).controlVirtualMachine('pve1', 100, 'reboot');
-  assert.equal(requestedUrl, 'https://pve.test:8006/api2/json/nodes/pve1/qemu/100/status/reboot');
-});

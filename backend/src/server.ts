@@ -25,11 +25,11 @@ import { DashboardService } from './tasks/dashboard-service.js';
 import { verifyAndParseWebhook, type WebhookSecretProvider } from './integrations/gitlab-webhook.js';
 import { processGitLabIssueWebhook, processGitLabMergeRequestWebhook, processGitLabPipelineWebhook, type GitLabStatusSync, type GitLabWebhookSync } from './integrations/gitlab-sync.js';
 import { handleHAProxyRequest, type HAProxyHttpService } from './tasks/haproxy-http.js';
-import { handleProxmoxRequest, type ProxmoxHttpService } from './catalog/proxmox-http.js';
 import { HAProxyClient } from './integrations/haproxy.js';
 import { addServerWithHistory, deleteServerWithHistory, rollbackChange } from './integrations/haproxy-history.js';
 import { PrismaHAProxyHistoryRepository } from './integrations/haproxy-history-repository.js';
-import { roles, assertCan, type Role } from './auth/permissions.js';
+import { assertCan, type Role } from './auth/permissions.js';
+import { buildKeycloakSessionRoleResolver, type SessionRoleResolver } from './auth/session-role.js';
 import { handleCatalogRequest, type CatalogHttpService } from './catalog/catalog-http.js';
 import { CatalogService } from './catalog/catalog-service.js';
 import { scanCatalogFromGitLab } from './catalog/catalog-scan.js';
@@ -84,6 +84,8 @@ import { testIntegration } from './integrations/integration-builder.js';
 import { handleSecretsRequest, type SecretsHttpService } from './tasks/secrets-http.js';
 import { SecretsService } from './tasks/secrets-service.js';
 import { VaultClient } from './infrastructure/vault.js';
+import { handleDomainRequest, type DomainHttpService } from './domains/domain-http.js';
+import { DomainService, DomainSecretsService } from './domains/domain-service.js';
 import { handleCalendarRequest, type CalendarHttpService, type CalendarSourceEvent } from './tasks/calendar-http.js';
 import { fetchIcsEvents } from './integrations/ics-calendar.js';
 import { handleNotificationsRequest, type NotificationsHttpService } from './tasks/notifications-http.js';
@@ -92,6 +94,7 @@ import { handleDevProjectRequest, type DevProjectHttpService } from './developme
 import { DevProjectService } from './development/dev-project-service.js';
 import { handleDevActivityRequest, type DevActivityHttpService } from './development/dev-activity-http.js';
 import { DevActivityService } from './development/dev-activity-service.js';
+import { TimelineEventService } from './development/timeline-event-service.js';
 import { handleDevTemplateRequest, type DevTemplateHttpService } from './development/dev-template-http.js';
 import { DevTemplateService } from './development/dev-template-service.js';
 import { handleRoadmapRequest, type RoadmapHttpService } from './tasks/roadmap-http.js';
@@ -102,11 +105,17 @@ import { handleReleaseRequest, type ReleaseHttpService } from './development/rel
 import { ReleaseService } from './development/release-service.js';
 import { handleEnvironmentRequest, type EnvironmentHttpService } from './development/environment-http.js';
 import { EnvironmentService } from './development/environment-service.js';
-import { handleProfileRequest, type ProfileHttpService } from './profiles/profile-http.js';
+import { handleProfileRequest, type ProfileActor, type ProfileHttpService } from './profiles/profile-http.js';
 import { ProfileService } from './profiles/profile-service.js';
-import { saveAvatarImage, readUploadedFile } from './profiles/avatar-storage.js';
+import { saveAvatarImage, deleteAvatarImage, readUploadedFile } from './profiles/avatar-storage.js';
 import { handleSearchRequest, type SearchHttpService } from './search/search-http.js';
 import { SearchService } from './search/search-service.js';
+import { handleOnboardingRequest, type OnboardingHttpService } from './onboarding/onboarding-http.js';
+import { OnboardingService } from './onboarding/onboarding-service.js';
+import { KeycloakAdminClient, type KeycloakAdminSecretReader } from './infrastructure/keycloak-admin.js';
+
+/** Routes joignables avant la fin de l'onboarding (voir le garde dans `handleRequest`). */
+const ONBOARDING_BYPASS_PATHS = ['/api/onboarding', '/api/me', '/auth/callback', '/uploads/'];
 
 export function createServer(
   auth?: Pick<KeycloakAuthService, 'completeLogin'>,
@@ -131,7 +140,6 @@ export function createServer(
   notifications?: NotificationsHttpService,
   customWidgets?: CustomWidgetsHttpService,
   comments?: CommentHttpService,
-  proxmox?: ProxmoxHttpService,
   roadmap?: RoadmapHttpService,
   devProjects?: DevProjectHttpService,
   devTemplates?: DevTemplateHttpService,
@@ -144,7 +152,22 @@ export function createServer(
   profiles?: ProfileHttpService,
   search?: SearchHttpService,
   updates?: UpdatesHttpService,
+  sessionAuth?: SessionRoleResolver,
+  onboarding?: OnboardingHttpService,
+  domains?: DomainHttpService,
 ) {
+  async function resolveRole(request: IncomingMessage): Promise<Role | undefined> {
+    if (!sessionAuth) return undefined;
+    const resolved = await sessionAuth.resolve(request);
+    return resolved.role;
+  }
+
+  async function resolveActor(request: IncomingMessage): Promise<ProfileActor | undefined> {
+    if (!sessionAuth) return undefined;
+    const resolved = await sessionAuth.resolve(request);
+    return { role: resolved.role, userId: resolved.userId, email: resolved.email };
+  }
+
   return createHttpServer(async (request, response) => {
     applyCors(request, response);
     if (request.method === 'OPTIONS') {
@@ -162,6 +185,29 @@ export function createServer(
   async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (request.method === 'GET' && request.url === '/health') {
       writeJson(response, 200, { status: 'ok' });
+      return;
+    }
+
+    if (request.method === 'GET' && request.url === '/api/me') {
+      const resolved = sessionAuth ? await sessionAuth.resolve(request) : undefined;
+      writeJson(response, 200, { email: resolved?.email ?? null, role: resolved?.role ?? null });
+      return;
+    }
+
+    if (request.url?.startsWith('/api/onboarding')) {
+      if (!onboarding) { writeJson(response, 503, { error: 'Onboarding is not configured' }); return; }
+      const role = await resolveRole(request);
+      const result = await handleOnboardingRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, onboarding);
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    // Garde serveur du premier lancement : tant que l'onboarding n'a pas validé l'identité de la
+    // plateforme, le premier administrateur et les intégrations cœur, toutes les routes
+    // d'administration/API restent bloquées — avant ce garde, `platform.initialized` ne verrouillait
+    // que l'UI React et laissait l'API entièrement accessible sans installation terminée.
+    if (onboarding && !ONBOARDING_BYPASS_PATHS.some((prefix) => request.url?.startsWith(prefix)) && !(await onboarding.isInstallationComplete())) {
+      writeJson(response, 503, { error: 'setup_required', message: "L'installation de la plateforme n'est pas terminée." });
       return;
     }
 
@@ -219,7 +265,8 @@ export function createServer(
     // par projet vivent sous /api/dev-projects/:id/permissions mais sont gérées par le module Profils.
     if (request.url?.match(/^\/api\/dev-projects\/[^/]+\/permissions(\/[^/]+)?(\?|$)/)) {
       if (!profiles) { writeJson(response, 503, { error: 'Profiles/permissions module is not configured' }); return; }
-      const result = await handleProfileRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), profiles);
+      const actor = await resolveActor(request);
+      const result = await handleProfileRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), actor, profiles);
       if (result.status === 204) { response.writeHead(204); response.end(); return; }
       writeJson(response, result.status, result.body);
       return;
@@ -227,7 +274,8 @@ export function createServer(
 
     if (request.url?.startsWith('/api/dev-projects')) {
       if (!devProjects) { writeJson(response, 503, { error: 'Development projects are not configured' }); return; }
-      const result = await handleDevProjectRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), devProjects);
+      const role = await resolveRole(request);
+      const result = await handleDevProjectRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, devProjects);
       if (result.status === 204) {
         response.writeHead(204);
         response.end();
@@ -253,6 +301,19 @@ export function createServer(
       return;
     }
 
+    if (request.method === 'DELETE' && avatarUpload) {
+      if (!profiles) { writeJson(response, 503, { error: 'Profiles module is not configured' }); return; }
+      try {
+        const profileId = decodeURIComponent(avatarUpload[1]);
+        await deleteAvatarImage(profileId);
+        const updated = await profiles.updateProfile(profileId, { avatarImageUrl: null });
+        writeJson(response, 200, updated);
+      } catch (error) {
+        writeJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid avatar removal' });
+      }
+      return;
+    }
+
     if (request.method === 'GET' && request.url?.startsWith('/uploads/')) {
       const file = await readUploadedFile(request.url);
       if (!file) { writeJson(response, 404, { error: 'Not found' }); return; }
@@ -270,7 +331,8 @@ export function createServer(
 
     if (request.url?.startsWith('/api/profiles') || request.url?.startsWith('/api/roles')) {
       if (!profiles) { writeJson(response, 503, { error: 'Profiles module is not configured' }); return; }
-      const result = await handleProfileRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), profiles);
+      const actor = await resolveActor(request);
+      const result = await handleProfileRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), actor, profiles);
       if (result.status === 204) { response.writeHead(204); response.end(); return; }
       writeJson(response, result.status, result.body);
       return;
@@ -278,14 +340,17 @@ export function createServer(
 
     if (request.url?.startsWith('/api/dev-activity')) {
       if (!devActivity) { writeJson(response, 503, { error: 'Development activity module is not configured' }); return; }
-      const result = await handleDevActivityRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), devActivity);
+      const role = await resolveRole(request);
+      const result = await handleDevActivityRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), devActivity, role);
       writeJson(response, result.status, result.body);
       return;
     }
 
     if (request.url?.startsWith('/api/releases')) {
       if (!releases) { writeJson(response, 503, { error: 'Releases are not configured' }); return; }
-      const result = await handleReleaseRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), releases);
+      const role = await resolveRole(request);
+      const actor = await resolveActor(request);
+      const result = await handleReleaseRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, releases, actor?.email);
       if (result.status === 204) { response.writeHead(204); response.end(); return; }
       writeJson(response, result.status, result.body);
       return;
@@ -293,7 +358,7 @@ export function createServer(
 
     if (request.url?.startsWith('/api/environments')) {
       if (!environments) { writeJson(response, 503, { error: 'Environments are not configured' }); return; }
-      const role = parseRole(headerValue(request.headers['x-devos-role']));
+      const role = await resolveRole(request);
       const result = await handleEnvironmentRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, environments);
       if (result.status === 204) { response.writeHead(204); response.end(); return; }
       writeJson(response, result.status, result.body);
@@ -355,9 +420,7 @@ export function createServer(
 
     if (request.url?.startsWith('/api/haproxy')) {
       if (!haproxy) { writeJson(response, 503, { error: 'HAProxy management is not configured' }); return; }
-      // TODO: derive the role from the authenticated session once Keycloak sessions carry a
-      // resolved DevOS role; until then this header is a development-only placeholder.
-      const role = parseRole(headerValue(request.headers['x-devos-role']));
+      const role = await resolveRole(request);
       const result = await handleHAProxyRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, haproxy);
       if (result.status === 204) {
         response.writeHead(204);
@@ -368,17 +431,32 @@ export function createServer(
       return;
     }
 
-    if (request.url?.startsWith('/api/proxmox')) {
-      if (!proxmox) { writeJson(response, 503, { error: 'Proxmox VM control is not configured' }); return; }
-      const role = parseRole(headerValue(request.headers['x-devos-role']));
-      const result = await handleProxmoxRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, proxmox);
+    if (request.url?.startsWith('/api/domains')) {
+      if (!domains) { writeJson(response, 503, { error: 'Domain management is not configured' }); return; }
+      const role = await resolveRole(request);
+      const result = await handleDomainRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, domains);
+      if (result.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
       writeJson(response, result.status, result.body);
       return;
     }
 
     if (request.url?.startsWith('/api/deployment')) {
       if (!deployment) { writeJson(response, 503, { error: 'Deployment generator is not configured' }); return; }
-      const result = await handleDeploymentRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), deployment);
+      const role = await resolveRole(request);
+      const actor = await resolveActor(request);
+      const result = await handleDeploymentRequest(
+        request.method ?? 'GET',
+        request.url,
+        await readJsonIfNeeded(request),
+        role,
+        deployment,
+        devActivity ? (input) => devActivity.recordEvent(input) : undefined,
+        actor?.email,
+      );
       writeJson(response, result.status, result.body);
       return;
     }
@@ -418,7 +496,7 @@ export function createServer(
 
     if (request.url?.startsWith('/api/updates')) {
       if (!updates) { writeJson(response, 503, { error: 'Updates are not configured' }); return; }
-      const role = parseRole(headerValue(request.headers['x-devos-role']));
+      const role = await resolveRole(request);
       const result = await handleUpdatesRequest(request.method ?? 'GET', request.url, role, updates);
       writeJson(response, result.status, result.body);
       return;
@@ -431,7 +509,7 @@ export function createServer(
       // lors de la configuration : seule l'écriture est restreinte, la lecture reste publique pour
       // que tous les clients puissent appliquer le thème par défaut.
       if ((method === 'PUT' || method === 'DELETE') && /^\/api\/settings\/platform\./.test(request.url)) {
-        const role = parseRole(headerValue(request.headers['x-devos-role']));
+        const role = await resolveRole(request);
         try {
           assertCan(role ?? 'Lecteur', 'manage_integrations');
         } catch (error) {
@@ -451,14 +529,16 @@ export function createServer(
 
     if (request.url === '/api/integrations' || request.url === '/api/integrations/test') {
       if (!integrationBuilder) { writeJson(response, 503, { error: 'Integration builder is not configured' }); return; }
-      const result = await handleIntegrationBuilderRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), integrationBuilder);
+      const role = await resolveRole(request);
+      const result = await handleIntegrationBuilderRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, integrationBuilder);
       writeJson(response, result.status, result.body);
       return;
     }
 
     if (request.url?.startsWith('/api/custom-widgets')) {
       if (!customWidgets) { writeJson(response, 503, { error: 'Custom widgets are not configured' }); return; }
-      const result = await handleCustomWidgetsRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), customWidgets);
+      const role = await resolveRole(request);
+      const result = await handleCustomWidgetsRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, customWidgets);
       if (result.status === 204) { response.writeHead(204); response.end(); return; }
       writeJson(response, result.status, result.body);
       return;
@@ -466,7 +546,8 @@ export function createServer(
 
     if (request.url?.startsWith('/api/secrets')) {
       if (!secrets) { writeJson(response, 503, { error: 'Secrets management is not configured' }); return; }
-      const result = await handleSecretsRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), secrets);
+      const role = await resolveRole(request);
+      const result = await handleSecretsRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, secrets);
       if (result.status === 204) {
         response.writeHead(204);
         response.end();
@@ -496,7 +577,16 @@ export function createServer(
 
     if (request.url?.startsWith('/api/dev-cicd')) {
       if (!cicd) { writeJson(response, 503, { error: 'CI/CD (AM.7) is not configured' }); return; }
-      const result = await handleCiCdRequest(request.method ?? 'GET', request.url, cicd);
+      const role = await resolveRole(request);
+      const actor = await resolveActor(request);
+      const result = await handleCiCdRequest(
+        request.method ?? 'GET',
+        request.url,
+        role,
+        cicd,
+        devActivity ? (input) => devActivity.recordEvent(input) : undefined,
+        actor?.email,
+      );
       writeJson(response, result.status, result.body);
       return;
     }
@@ -545,7 +635,6 @@ if (require.main === module) {
     setInterval(() => { void notificationsService.purgeExpired(); }, 24 * 60 * 60 * 1000).unref();
     const customWidgets = buildCustomWidgetsServiceFromEnv(settingsService);
     const comments = buildCommentsServiceFromEnv(database);
-    const proxmoxHttp = buildProxmoxHttpServiceFromEnv();
     const roadmapService = new RoadmapService(database);
     const roadmap: RoadmapHttpService = { get: () => roadmapService.get() };
     const devProjects: DevProjectHttpService = new DevProjectService(database);
@@ -559,16 +648,21 @@ if (require.main === module) {
       update: (id, input) => workflowService.update(id, input),
       delete: (id) => workflowService.delete(id),
     };
-    const devActivity: DevActivityHttpService = new DevActivityService(database);
+    const timelineEvents = new TimelineEventService(database);
+    const devActivity: DevActivityHttpService = new DevActivityService(database, timelineEvents);
     const cicd = buildCiCdServiceFromEnv();
-    const releases: ReleaseHttpService = new ReleaseService(database);
+    const releases: ReleaseHttpService = new ReleaseService(database, timelineEvents);
     const environments: EnvironmentHttpService = new EnvironmentService(database);
     const profileService = new ProfileService(database);
     await profileService.ensureSystemRoles();
     const profiles: ProfileHttpService = profileService;
     const search: SearchHttpService = new SearchService(database);
-    const updates = buildUpdatesServiceFromEnv(database, settingsService);
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, proxmoxHttp, roadmap, devProjects, devTemplates, deployment, workflow, cicd, devActivity, releases, environments, profiles, search, updates).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    const updates = buildUpdatesServiceFromEnv(database, settingsService, timelineEvents);
+    const sessionAuth = auth ? buildKeycloakSessionRoleResolver(auth.sessionStore, database) : undefined;
+    const keycloakAdmin = await buildKeycloakAdminClientFromEnv();
+    const onboarding: OnboardingHttpService = new OnboardingService({ database, settings: settingsService, profiles: profileService, keycloakAdmin });
+    const domains = await buildDomainServiceFromEnv(database);
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, roadmap, devProjects, devTemplates, deployment, workflow, cicd, devActivity, releases, environments, profiles, search, updates, sessionAuth, onboarding, domains).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -635,6 +729,83 @@ async function buildSecretsServiceFromEnv(): Promise<SecretsHttpService | undefi
   return new SecretsService(vault);
 }
 
+/**
+ * Builds the Domains module service (DNS providers, ACME, HAProxy link resolution). Requires the
+ * same Vault + Kubernetes ServiceAccount as `buildSecretsServiceFromEnv` — secrets for DNS
+ * provider tokens and ACME account keys live there, never in Postgres. HAProxy is optional: when
+ * not configured, `getHaproxyLink` simply returns an empty link instead of failing.
+ */
+async function buildDomainServiceFromEnv(database: PrismaClient): Promise<DomainHttpService | undefined> {
+  const address = process.env.VAULT_ADDR;
+  const kubernetesAuthPath = process.env.VAULT_KUBERNETES_AUTH_PATH;
+  const kubernetesRole = process.env.VAULT_KUBERNETES_ROLE;
+  const kubernetesJwtFile = process.env.VAULT_KUBERNETES_JWT_FILE;
+  if (!address || !kubernetesAuthPath || !kubernetesRole || !kubernetesJwtFile) return undefined;
+
+  const vault = new VaultClient({ address, kubernetesAuthPath, kubernetesRole, kubernetesJwtFile });
+  try {
+    await vault.authenticateKubernetes();
+  } catch {
+    return undefined;
+  }
+
+  const haproxyBaseUrl = process.env.HAPROXY_DATA_PLANE_URL;
+  const haproxyUsername = process.env.HAPROXY_USERNAME;
+  const haproxyPassword = process.env.HAPROXY_PASSWORD;
+  const haproxyClient = haproxyBaseUrl && haproxyUsername && haproxyPassword
+    ? new HAProxyClient({ baseUrl: haproxyBaseUrl, credentials: { username: haproxyUsername, password: haproxyPassword } })
+    : undefined;
+
+  const service = new DomainService(database, new DomainSecretsService(vault), haproxyClient);
+  return {
+    listDomains: () => service.listDomains(),
+    getDomain: (id) => service.getDomain(id),
+    createDomain: (input) => service.createDomain(input),
+    updateDomain: (id, input) => service.updateDomain(id, input),
+    deleteDomain: (id) => service.deleteDomain(id),
+    checkDomain: (id) => service.checkDomain(id),
+    getHaproxyLink: (id) => service.getHaproxyLink(id),
+    listDnsProviderAccounts: () => service.listDnsProviderAccounts(),
+    createDnsProviderAccount: (input) => service.createDnsProviderAccount(input),
+    deleteDnsProviderAccount: (id) => service.deleteDnsProviderAccount(id),
+    listAcmeAccounts: () => service.listAcmeAccounts(),
+    createAcmeAccount: (input) => service.createAcmeAccount(input),
+    deleteAcmeAccount: (id) => service.deleteAcmeAccount(id),
+    listCertificates: (domainId) => service.listCertificates(domainId),
+    issueCertificate: (domainId, acmeAccountId) => service.issueCertificateFor(domainId, acmeAccountId),
+  };
+}
+
+/**
+ * Client Admin Keycloak pour l'onboarding (création réelle du premier administrateur) : le secret
+ * du compte de service `client_credentials` est lu dans Vault, avec la même authentification
+ * Kubernetes que `buildSecretsServiceFromEnv`. Sans Vault (ou sans KEYCLOAK_ADMIN_*) configuré,
+ * l'étape "admin" du wizard reste explicitement en erreur plutôt que de simuler une création.
+ */
+async function buildKeycloakAdminClientFromEnv(): Promise<KeycloakAdminClient | undefined> {
+  const baseUrl = process.env.KEYCLOAK_ADMIN_BASE_URL ?? process.env.KEYCLOAK_BASE_URL;
+  const realm = process.env.KEYCLOAK_REALM;
+  const clientId = process.env.KEYCLOAK_ADMIN_CLIENT_ID;
+  const clientSecretVaultPath = process.env.KEYCLOAK_ADMIN_SECRET_VAULT_PATH;
+  if (!baseUrl || !realm || !clientId || !clientSecretVaultPath) return undefined;
+
+  const address = process.env.VAULT_ADDR;
+  const kubernetesAuthPath = process.env.VAULT_KUBERNETES_AUTH_PATH;
+  const kubernetesRole = process.env.VAULT_KUBERNETES_ROLE;
+  const kubernetesJwtFile = process.env.VAULT_KUBERNETES_JWT_FILE;
+  if (!address || !kubernetesAuthPath || !kubernetesRole || !kubernetesJwtFile) return undefined;
+
+  const vault = new VaultClient({ address, kubernetesAuthPath, kubernetesRole, kubernetesJwtFile });
+  try {
+    await vault.authenticateKubernetes();
+  } catch {
+    return undefined;
+  }
+
+  const secretReader: KeycloakAdminSecretReader = { readKv2: (path) => vault.readKv2<{ client_secret: string }>(path) };
+  return new KeycloakAdminClient({ baseUrl: baseUrl.replace(/\/$/, ''), realm, clientId, clientSecretVaultPath }, secretReader);
+}
+
 /** Combines the personal + professional ICS calendars (read-only) when at least one URL is configured. */
 function buildCalendarServiceFromEnv(): CalendarHttpService | undefined {
   const personalUrl = process.env.CALENDAR_PERSONAL_ICS_URL;
@@ -674,7 +845,10 @@ function buildNotificationsServiceFromEnv(database: PrismaClient): Notifications
   const webhookUrl = process.env.NOTIFICATIONS_WEBHOOK_URL;
   const webhook = webhookUrl ? { url: webhookUrl } : undefined;
 
-  return new NotificationsService(database, email, webhook);
+  const retentionDaysSetting = Number(process.env.NOTIFICATIONS_RETENTION_DAYS);
+  const retentionDays = Number.isFinite(retentionDaysSetting) && retentionDaysSetting > 0 ? retentionDaysSetting : undefined;
+
+  return new NotificationsService(database, email, webhook, undefined, retentionDays);
 }
 
 /** Loads integration settings persisted via the Settings screen into process.env, without overriding variables already set (env vars always win). */
@@ -691,7 +865,7 @@ async function applyStoredSettingsToEnv(settings: SettingsService): Promise<void
  * production path (a Vault-backed KeycloakSecretReader) is intentionally not implemented here
  * since it needs a real Vault + Kubernetes ServiceAccount, out of scope for local dev.
  */
-async function buildAuthServiceFromEnv(): Promise<Pick<KeycloakAuthService, 'completeLogin'> | undefined> {
+async function buildAuthServiceFromEnv(): Promise<KeycloakAuthService | undefined> {
   const directSecret = process.env.KEYCLOAK_CLIENT_SECRET;
   const redisUrl = process.env.REDIS_URL;
   if (!directSecret || !redisUrl) return undefined;
@@ -721,7 +895,7 @@ const execAsync = promisify(execCallback);
  * arbitrary command. Every trigger is health-gated (checkPlatformHealth) and journaled via
  * AuditLogService (entityType "platform_update", reusing its generic audit_logs table).
  */
-function buildUpdatesServiceFromEnv(database: PrismaClient, settings: SettingsService): UpdatesHttpService | undefined {
+function buildUpdatesServiceFromEnv(database: PrismaClient, settings: SettingsService, timelineEvents: TimelineEventService): UpdatesHttpService | undefined {
   const gitlabBaseUrl = process.env.GITLAB_BASE_URL;
   const gitlabToken = process.env.GITLAB_TOKEN;
   const gitlabProjectId = process.env.GITLAB_PROJECT_ID;
@@ -811,7 +985,10 @@ function buildUpdatesServiceFromEnv(database: PrismaClient, settings: SettingsSe
         fallback,
         getLastKnownRevision: () => settings.get(lastRevisionKey),
         setLastKnownRevision: (revision) => (revision ? settings.set(lastRevisionKey, revision) : settings.delete(lastRevisionKey)),
-        recordAudit: (action, mechanism) => auditLog.recordEvent('platform_update', mechanism, action),
+        recordAudit: async (action, mechanism) => {
+          await auditLog.recordEvent('platform_update', mechanism, action);
+          await timelineEvents.record({ type: 'platform_update', status: action, summary: `Mise à jour plateforme (${mechanism}) : ${action}` });
+        },
       });
     },
     async rollback(role) {
@@ -822,7 +999,10 @@ function buildUpdatesServiceFromEnv(database: PrismaClient, settings: SettingsSe
         fallback,
         getLastKnownRevision: () => settings.get(lastRevisionKey),
         setLastKnownRevision: (revision) => (revision ? settings.set(lastRevisionKey, revision) : settings.delete(lastRevisionKey)),
-        recordAudit: (action, mechanism) => auditLog.recordEvent('platform_update', mechanism, action),
+        recordAudit: async (action, mechanism) => {
+          await auditLog.recordEvent('platform_update', mechanism, action);
+          await timelineEvents.record({ type: 'platform_update', status: action, summary: `Mise à jour plateforme (${mechanism}) : ${action}` });
+        },
       });
     },
   };
@@ -891,6 +1071,8 @@ function buildExtrasServiceFromEnv(items: ItemService): ExtrasHttpService {
     extras.listProxmoxNodes = () => proxmox.listNodes();
     extras.listProxmoxVMs = (node) => proxmox.listVirtualMachines(node);
     extras.listProxmoxContainers = (node) => proxmox.listContainers(node);
+    const proxmoxClusterUrl = process.env.PROXMOX_WEB_URL ?? proxmoxBaseUrl;
+    extras.getProxmoxClusterUrl = () => Promise.resolve({ url: proxmoxClusterUrl });
   }
 
   const wazuhBaseUrl = process.env.WAZUH_BASE_URL;
@@ -1275,16 +1457,6 @@ function buildDeploymentServiceFromEnv(): DeploymentHttpService {
   };
 }
 
-function buildProxmoxHttpServiceFromEnv(): ProxmoxHttpService | undefined {
-  const baseUrl = process.env.PROXMOX_BASE_URL;
-  const apiToken = process.env.PROXMOX_API_TOKEN;
-  if (!baseUrl || !apiToken) return undefined;
-  const client = new ProxmoxClient({ baseUrl, apiToken });
-  return {
-    controlVirtualMachine: (node, vmid, action) => client.controlVirtualMachine(node, vmid, action),
-  };
-}
-
 function buildHAProxyServiceFromEnv(database: PrismaClient): HAProxyHttpService | undefined {
   const baseUrl = process.env.HAPROXY_DATA_PLANE_URL;
   const username = process.env.HAPROXY_USERNAME;
@@ -1331,10 +1503,6 @@ function writeJson(response: ServerResponse, status: number, body: unknown): voi
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function parseRole(value: string | undefined): Role | undefined {
-  return roles.find((role) => role === value);
 }
 
 function applyCors(request: IncomingMessage, response: ServerResponse): void {

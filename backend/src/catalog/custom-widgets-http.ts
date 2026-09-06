@@ -1,3 +1,5 @@
+import { assertCan, type Role } from '../auth/permissions.js';
+
 /**
  * Widgets custom du Dashboard — section R de TODO-refonte-ux.md.
  *
@@ -25,12 +27,23 @@ export const ALLOWED_CUSTOM_WIDGET_SOURCES: ReadonlyArray<{ path: string; label:
   { path: '/api/extras/redpanda/topics', label: 'Topics Redpanda' },
 ];
 
+export type CustomWidgetSize = 'small' | 'medium' | 'large';
+export type CustomWidgetMetric = 'list' | 'count' | 'sum' | 'first';
+
+export const CUSTOM_WIDGET_SIZES: CustomWidgetSize[] = ['small', 'medium', 'large'];
+export const CUSTOM_WIDGET_METRICS: CustomWidgetMetric[] = ['list', 'count', 'sum', 'first'];
+
 export interface CustomWidget {
   id: string;
   title: string;
   sourcePath: string;
   dataKey: string;
   label: string;
+  icon: string;
+  refreshSeconds: number;
+  size: CustomWidgetSize;
+  metric: CustomWidgetMetric;
+  visible: boolean;
 }
 
 export interface CustomWidgetsHttpService {
@@ -48,6 +61,7 @@ export async function handleCustomWidgetsRequest(
   method: string,
   path: string,
   body: unknown,
+  role: Role | undefined,
   service: CustomWidgetsHttpService,
 ): Promise<CustomWidgetsHttpResponse> {
   try {
@@ -56,12 +70,28 @@ export async function handleCustomWidgetsRequest(
     }
 
     if (method === 'POST' && path === '/api/custom-widgets') {
+      if (!role) throw new Error('Authentication is required to save a custom widget');
+      assertCan(role, 'create');
       const widget = parseCustomWidget(body);
       await service.save(widget);
       return { status: 201, body: widget };
     }
 
+    if (method === 'PUT' && path.startsWith('/api/custom-widgets/')) {
+      if (!role) throw new Error('Authentication is required to update a custom widget');
+      assertCan(role, 'update');
+      const id = decodeURIComponent(path.slice('/api/custom-widgets/'.length));
+      if (!id) throw new Error('Missing widget id');
+      const existing = (await service.list()).find((widget) => widget.id === id);
+      if (!existing) throw new Error('Widget not found');
+      const widget = parseCustomWidget({ ...existing, ...(body as Record<string, unknown>), id });
+      await service.save(widget);
+      return { status: 200, body: widget };
+    }
+
     if (method === 'DELETE' && path.startsWith('/api/custom-widgets/')) {
+      if (!role) throw new Error('Authentication is required to delete a custom widget');
+      assertCan(role, 'delete');
       const id = decodeURIComponent(path.slice('/api/custom-widgets/'.length));
       if (!id) throw new Error('Missing widget id');
       await service.remove(id);
@@ -84,5 +114,12 @@ function parseCustomWidget(body: unknown): CustomWidget {
   if (typeof b.dataKey !== 'string' || !b.dataKey.trim()) throw new Error('"dataKey" is required');
   if (typeof b.label !== 'string' || !b.label.trim()) throw new Error('"label" is required');
   const id = typeof b.id === 'string' && b.id.trim() ? b.id : `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  return { id, title: b.title, sourcePath: b.sourcePath, dataKey: b.dataKey, label: b.label };
+  const icon = typeof b.icon === 'string' && b.icon.trim() ? b.icon : 'gear';
+  const refreshSeconds = typeof b.refreshSeconds === 'number' && Number.isFinite(b.refreshSeconds) && b.refreshSeconds >= 5
+    ? Math.round(b.refreshSeconds)
+    : 60;
+  const size: CustomWidgetSize = typeof b.size === 'string' && CUSTOM_WIDGET_SIZES.includes(b.size as CustomWidgetSize) ? (b.size as CustomWidgetSize) : 'medium';
+  const metric: CustomWidgetMetric = typeof b.metric === 'string' && CUSTOM_WIDGET_METRICS.includes(b.metric as CustomWidgetMetric) ? (b.metric as CustomWidgetMetric) : 'list';
+  const visible = typeof b.visible === 'boolean' ? b.visible : true;
+  return { id, title: b.title, sourcePath: b.sourcePath, dataKey: b.dataKey, label: b.label, icon, refreshSeconds, size, metric, visible };
 }

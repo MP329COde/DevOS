@@ -15,24 +15,29 @@ function service(overrides: Partial<{ saved: SavedIntegration[] }> = {}) {
 }
 
 test('tests a config and returns the connectivity result', async () => {
-  const result = await handleIntegrationBuilderRequest('POST', '/api/integrations/test', { baseUrl: 'https://api.test', authType: 'none' }, service());
+  const result = await handleIntegrationBuilderRequest('POST', '/api/integrations/test', { baseUrl: 'https://api.test', authType: 'none' }, 'Admin', service());
   assert.equal(result.status, 200);
   assert.equal((result.body as { reachable: boolean }).reachable, true);
 });
 
+test('rejects testing a config without manage_integrations', async () => {
+  const result = await handleIntegrationBuilderRequest('POST', '/api/integrations/test', { baseUrl: 'https://api.test', authType: 'none' }, 'Contributeur', service());
+  assert.equal(result.status, 400);
+});
+
 test('rejects a test payload missing baseUrl', async () => {
-  const result = await handleIntegrationBuilderRequest('POST', '/api/integrations/test', { authType: 'none' }, service());
+  const result = await handleIntegrationBuilderRequest('POST', '/api/integrations/test', { authType: 'none' }, 'Admin', service());
   assert.equal(result.status, 400);
 });
 
 test('rejects an unknown authType', async () => {
-  const result = await handleIntegrationBuilderRequest('POST', '/api/integrations/test', { baseUrl: 'https://api.test', authType: 'oauth2' }, service());
+  const result = await handleIntegrationBuilderRequest('POST', '/api/integrations/test', { baseUrl: 'https://api.test', authType: 'oauth2' }, 'Admin', service());
   assert.equal(result.status, 400);
 });
 
 test('lists saved integrations', async () => {
   const saved: SavedIntegration[] = [{ name: 'grafana-custom', config: { baseUrl: 'https://g.test', authType: 'none' } }];
-  const result = await handleIntegrationBuilderRequest('GET', '/api/integrations', undefined, service({ saved }));
+  const result = await handleIntegrationBuilderRequest('GET', '/api/integrations', undefined, undefined, service({ saved }));
   assert.deepEqual(result, { status: 200, body: saved });
 });
 
@@ -42,18 +47,30 @@ test('saves a named integration', async () => {
     'POST',
     '/api/integrations',
     { name: 'grafana-custom', config: { baseUrl: 'https://g.test', authType: 'bearer', credentials: { token: 'tok' } } },
+    'Admin',
     svc,
   );
   assert.equal(result.status, 201);
   assert.deepEqual(await svc.list(), [{ name: 'grafana-custom', config: { baseUrl: 'https://g.test', authType: 'bearer', credentials: { token: 'tok' }, healthPath: undefined } }]);
 });
 
+test('rejects saving an integration without manage_integrations', async () => {
+  const result = await handleIntegrationBuilderRequest(
+    'POST',
+    '/api/integrations',
+    { name: 'grafana-custom', config: { baseUrl: 'https://g.test', authType: 'none' } },
+    'Contributeur',
+    service(),
+  );
+  assert.equal(result.status, 400);
+});
+
 test('rejects a saved integration without a name', async () => {
-  const result = await handleIntegrationBuilderRequest('POST', '/api/integrations', { config: { baseUrl: 'https://g.test', authType: 'none' } }, service());
+  const result = await handleIntegrationBuilderRequest('POST', '/api/integrations', { config: { baseUrl: 'https://g.test', authType: 'none' } }, 'Admin', service());
   assert.equal(result.status, 400);
 });
 
 test('rejects unknown routes', async () => {
-  const result = await handleIntegrationBuilderRequest('GET', '/api/integrations/unknown', undefined, service());
+  const result = await handleIntegrationBuilderRequest('GET', '/api/integrations/unknown', undefined, undefined, service());
   assert.equal(result.status, 404);
 });

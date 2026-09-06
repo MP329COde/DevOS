@@ -8,6 +8,7 @@ function service(overrides: Partial<NotificationsHttpService> = {}): Notificatio
     trigger: overrides.trigger ?? (async () => []),
     list: overrides.list ?? (async () => []),
     markAsRead: overrides.markAsRead ?? (async () => {}),
+    markAllAsRead: overrides.markAllAsRead ?? (async () => {}),
     delete: overrides.delete ?? (async () => {}),
   };
 }
@@ -38,7 +39,7 @@ test('rejects unknown routes', async () => {
 });
 
 test('lists stored notifications', async () => {
-  const stored = [{ id: '1', title: 't', message: 'm', category: null, readAt: null, createdAt: new Date() }];
+  const stored = [{ id: '1', title: 't', message: 'm', category: null, resourceKind: null, resourceId: null, priority: 'normal', readAt: null, createdAt: new Date() }];
   const result = await handleNotificationsRequest('GET', '/api/notifications', undefined, service({ list: async () => stored }));
   assert.deepEqual(result, { status: 200, body: { notifications: stored } });
 });
@@ -53,6 +54,18 @@ test('marks a notification as read', async () => {
   );
   assert.equal(result.status, 204);
   assert.equal(markedId, 'abc');
+});
+
+test('marks all notifications as read', async () => {
+  let called = false;
+  const result = await handleNotificationsRequest(
+    'PATCH',
+    '/api/notifications/read-all',
+    undefined,
+    service({ markAllAsRead: async () => { called = true; } }),
+  );
+  assert.equal(result.status, 204);
+  assert.equal(called, true);
 });
 
 test('deletes a notification from the center', async () => {

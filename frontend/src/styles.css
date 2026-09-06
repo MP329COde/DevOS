@@ -134,13 +134,16 @@ body { margin: 0; min-width: 320px; }
 .header-icon-button { width: 2.15rem; display: grid; place-items: center; position: relative; }
 .header-icon-button:hover, .header-language:hover, .header-profile:hover { transform: translateY(-1px); border-color: var(--accent); }
 .header-language { padding: 0 .65rem; font-size: .72rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-.header-profile { width: 2.15rem; font-size: .68rem; font-weight: 800; display: grid; place-items: center; padding: 0; overflow: hidden; }
+.header-profile { width: 2.15rem; font-size: .68rem; font-weight: 800; display: grid; place-items: center; padding: 0; overflow: hidden; position: relative; }
 .header-profile img { width: 100%; height: 100%; object-fit: cover; border-radius: 999px; }
+.header-profile-status-dot { position: absolute; bottom: 0; right: 0; width: .55rem; height: .55rem; border-radius: 999px; border: 2px solid var(--surface); }
 .header-profile-menu { position: absolute; right: 1rem; top: 4.25rem; z-index: 20; width: min(16rem, calc(100vw - 2rem)); padding: .4rem; border: 1px solid var(--border); border-radius: 1rem; background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: 0 1rem 3rem #0004; backdrop-filter: blur(18px); animation: devos-panel-in .2s ease-out; display: flex; flex-direction: column; gap: .2rem; }
 .header-profile-menu-header { display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem .7rem; border-bottom: 1px solid var(--border-soft); margin-bottom: .2rem; }
-.header-profile-menu-avatar { width: 2.4rem; height: 2.4rem; border-radius: 999px; overflow: hidden; display: grid; place-items: center; background: var(--accent); color: var(--surface); font-size: .8rem; font-weight: 800; flex-shrink: 0; }
+.header-profile-menu-avatar { width: 2.4rem; height: 2.4rem; border-radius: 999px; overflow: hidden; display: grid; place-items: center; background: var(--accent); color: var(--surface); font-size: .8rem; font-weight: 800; flex-shrink: 0; position: relative; }
 .header-profile-menu-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.header-profile-menu-name { font-weight: 700; font-size: .85rem; }
+.header-profile-menu-avatar .header-profile-status-dot { width: .6rem; height: .6rem; }
+.header-profile-menu-name { font-weight: 700; font-size: .85rem; display: flex; flex-direction: column; gap: .1rem; }
+.header-profile-menu-status { font-weight: 500; font-size: .72rem; color: var(--muted); }
 .header-profile-menu button { display: flex; align-items: center; gap: .55rem; width: 100%; padding: .55rem .6rem; border: 0; border-radius: .55rem; background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: .85rem; }
 .header-profile-menu button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .header-profile-menu button.danger { color: var(--accent-2); }
@@ -163,6 +166,14 @@ body { margin: 0; min-width: 320px; }
 .notification-entry-row.unread .notification-entry::before { content: ''; display: inline-block; width: .4rem; height: .4rem; margin-right: .45rem; border-radius: 50%; background: var(--accent); }
 .notification-entry-delete { flex: none; width: 1.6rem; height: 1.6rem; border: 0; border-radius: .4rem; background: transparent; color: var(--text-muted, var(--text)); cursor: pointer; font-size: 1rem; line-height: 1; }
 .notification-entry-delete:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.notification-popover-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
+.notification-popover-header h3 { margin: 0; }
+.notification-mark-all { border: 0; background: transparent; color: var(--accent); font-size: .72rem; font-weight: 700; cursor: pointer; padding: .2rem .3rem; white-space: nowrap; }
+.notification-mark-all:hover { text-decoration: underline; }
+.notification-filter-tabs { display: flex; gap: .3rem; margin-bottom: .6rem; }
+.notification-filter-tabs button { border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 999px; padding: .25rem .65rem; font-size: .7rem; cursor: pointer; }
+.notification-filter-tabs button.active { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.highlighted { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: .4rem; animation: devos-panel-in .3s ease-out; }
 /* Écran de connexion (section refonte) : thème imposé par l'administrateur (Paramètres →
    Administration) via les variables --accent/--accent-2/--bg-1/--bg-2/--gold/--border posées en
    inline style sur .login-screen, indépendamment des couleurs personnelles de l'utilisateur. */
@@ -207,39 +218,44 @@ body { margin: 0; min-width: 320px; }
 
 .devos-logo { display: block; overflow: visible; filter: drop-shadow(0 0 0 transparent); transition: filter .35s ease; }
 .devos-logo-bg { transition: transform .4s cubic-bezier(.34,1.56,.64,1); transform-origin: 32px 32px; }
-.devos-logo-shield { transition: transform .4s cubic-bezier(.34,1.56,.64,1); transform-origin: 32px 32px; }
-.devos-logo-bracket { transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
-.devos-logo-bracket-left { transform-origin: 22px 32px; }
-.devos-logo-bracket-right { transform-origin: 42px 32px; }
-.devos-logo-slash { transition: opacity .3s ease, transform .3s ease; transform-origin: 32px 32px; }
+.devos-logo-hex { transform-origin: 32px 32px; animation: devos-logo-hex-spin 22s linear infinite; }
+.devos-logo-net { transform-origin: 32px 32px; }
+.devos-logo-link {
+  stroke-dasharray: 2.4 4.4;
+  animation: devos-logo-link-flow 2.6s linear infinite;
+}
+.devos-logo-net .devos-logo-link:nth-of-type(2) { animation-delay: -.85s; }
+.devos-logo-net .devos-logo-link:nth-of-type(3) { animation-delay: -1.7s; }
+.devos-logo-node { animation: devos-logo-node-pulse 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.devos-logo-node:nth-of-type(2) { animation-delay: -.85s; }
+.devos-logo-node:nth-of-type(3) { animation-delay: -1.7s; }
+.devos-logo-infinity { stroke-dasharray: 18 92; animation: devos-logo-infinity-flow 4.4s linear infinite; }
 .devos-logo-pulse { transform-origin: 32px 32px; animation: devos-logo-pulse-idle 3.2s ease-in-out infinite; }
-.devos-logo-scan { transition: stroke-opacity .2s ease; }
 
+@keyframes devos-logo-hex-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes devos-logo-link-flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -13.8; } }
+@keyframes devos-logo-node-pulse { 0%, 100% { opacity: .75; transform: scale(1); } 50% { opacity: 1; transform: scale(1.4); } }
+@keyframes devos-logo-infinity-flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -110; } }
 @keyframes devos-logo-pulse-idle { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.85); } }
-@keyframes devos-logo-scan-sweep { 0% { transform: translateY(-14px); stroke-opacity: 0; } 15% { stroke-opacity: .8; } 85% { stroke-opacity: .8; } 100% { transform: translateY(14px); stroke-opacity: 0; } }
 @keyframes devos-logo-pulse-active { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(1.35); } }
 
 .brand:hover .devos-logo,
 .brand:focus-visible .devos-logo { filter: drop-shadow(0 2px 10px color-mix(in srgb, var(--accent-2) 55%, transparent)); }
 .brand:hover .devos-logo-bg,
 .brand:focus-visible .devos-logo-bg { transform: rotate(-8deg) scale(1.06); }
-.brand:hover .devos-logo-shield,
-.brand:focus-visible .devos-logo-shield { transform: scale(1.05) rotate(2deg); }
-.brand:hover .devos-logo-bracket-left,
-.brand:focus-visible .devos-logo-bracket-left { transform: translateX(-2.5px) scaleX(1.12); }
-.brand:hover .devos-logo-bracket-right,
-.brand:focus-visible .devos-logo-bracket-right { transform: translateX(2.5px) scaleX(1.12); }
-.brand:hover .devos-logo-slash,
-.brand:focus-visible .devos-logo-slash { transform: rotate(8deg) scaleY(1.08); }
-.brand:hover .devos-logo-scan,
-.brand:focus-visible .devos-logo-scan { animation: devos-logo-scan-sweep 1.1s ease-in-out infinite; }
+.brand:hover .devos-logo-hex,
+.brand:focus-visible .devos-logo-hex { animation-duration: 3s; }
+.brand:hover .devos-logo-link,
+.brand:focus-visible .devos-logo-link { animation-duration: .6s; }
+.brand:hover .devos-logo-node,
+.brand:focus-visible .devos-logo-node { animation-duration: .8s; }
+.brand:hover .devos-logo-infinity,
+.brand:focus-visible .devos-logo-infinity { animation-duration: 1.1s; }
 .brand:hover .devos-logo-pulse,
 .brand:focus-visible .devos-logo-pulse { animation: devos-logo-pulse-active 1s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .devos-logo-pulse { animation: none; }
-  .brand:hover .devos-logo-scan, .brand:hover .devos-logo-pulse,
-  .brand:focus-visible .devos-logo-scan, .brand:focus-visible .devos-logo-pulse { animation: none; }
+  .devos-logo-hex, .devos-logo-link, .devos-logo-node, .devos-logo-infinity, .devos-logo-pulse { animation: none; }
 }
 .topbar h1 { margin: 4px 0 0; font-size: clamp(28px, 4vw, 36px); }
 .login { background: var(--text); border-radius: 8px; }
@@ -347,19 +363,15 @@ input:not([type="checkbox"]) { flex: 1; min-width: 0; }
 .haproxy-acls { display: grid; gap: 6px; margin-bottom: 8px; }
 .haproxy-acl { grid-template-columns: 1fr 1fr auto; }
 
-/* Panel Proxmox — même identité "infra critique" que le module Réseau (voir Design.md) :
-   confirmation explicite systématique avant toute action de contrôle sur une VM réelle. */
+/* Panel Proxmox — aperçu en lecture seule (voir Design.md) : toute gestion réelle d'une VM
+   se fait dans l'interface Proxmox elle-même, via redirection, jamais depuis l'app. */
+.proxmox-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.proxmox-header .hint { font-size: 12.5px; color: rgba(var(--rgb-text), .65); margin: 0; }
+.proxmox-open-cluster { padding: 9px 14px; color: var(--surface); background: var(--accent-2); font-weight: 700; border-radius: 8px; text-decoration: none; white-space: nowrap; }
+.proxmox-open-cluster:hover { background: var(--accent-2-hover); }
+.proxmox-open-cluster.disabled { pointer-events: none; opacity: .5; }
 .proxmox-node h3 { display: flex; align-items: center; gap: 8px; }
-.proxmox-vm { grid-template-columns: 1fr auto auto; }
-.proxmox-action { padding: 6px 10px; color: var(--accent-2); background: rgba(var(--rgb-accent2), .1); border: 1px solid rgba(var(--rgb-accent2), .3); }
-.proxmox-action:hover { background: rgba(var(--rgb-accent2), .2); }
-.proxmox-confirm-overlay { background: rgba(var(--rgb-text), .5); }
-.proxmox-confirm-panel { background: var(--surface); color: var(--text); border: 1px solid var(--accent-2); }
-.proxmox-confirm-panel h2 { color: var(--text); font-size: 18px; margin: 0 0 10px; }
-.proxmox-confirm-panel p { color: var(--text); }
-.proxmox-confirm { padding: 9px 14px; color: var(--surface); background: var(--accent-2); font-weight: 700; }
-.proxmox-confirm:hover { background: var(--accent-2-hover); }
-.proxmox-confirm-panel .filter { color: var(--text); border-color: var(--border); }
+.proxmox-vm { grid-template-columns: 1fr auto; }
 .catalog-entity { grid-template-columns: 90px 1fr auto; }
 .doc-page { grid-template-columns: 1fr auto; }
 .doc-page-onboarding { border-left-color: var(--gold); }
@@ -388,6 +400,28 @@ input:not([type="checkbox"]) { flex: 1; min-width: 0; }
 .widget-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 4px; border-radius: 16px; transition: background .15s, border-color .15s; border: 1px dashed transparent; }
 .widget-grid.edit-mode { background: rgba(var(--rgb-accent), .06); border-color: rgba(var(--rgb-accent), .35); padding: 14px; }
 .widget-card { padding: 18px; border-radius: 12px; background: rgba(var(--rgb-surface), .78); border: 1px solid rgba(var(--rgb-text), .1); transition: transform .1s, box-shadow .1s, opacity .1s; }
+.widget-card.widget-size-small { grid-column: span 1; min-height: 96px; }
+.widget-card.widget-size-large { grid-column: span 2; }
+.custom-widget-disabled { opacity: .55; }
+.custom-widget-actions { display: flex; gap: 6px; }
+.custom-widget-actions button { padding: 2px 8px; }
+.custom-widget-visible-toggle { display: flex; align-items: center; gap: 6px; }
+.custom-widget-preview { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(var(--rgb-text), .05); }
+.tools-hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 8px; }
+.tools-hub-card {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid rgba(var(--rgb-text), .12); background: rgba(var(--rgb-surface), .6);
+  text-decoration: none; color: var(--text); transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.tools-hub-card:hover, .tools-hub-card:focus-visible {
+  transform: translateY(-2px); border-color: rgba(var(--rgb-accent), .5);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.tools-hub-card-icon { flex: none; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.tools-hub-card-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.tools-hub-card-body strong { font-size: .95rem; }
+.tools-hub-card-url { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tools-hub-card-action { flex: none; font-size: .8rem; font-weight: 600; color: var(--accent); }
 .widget-grid.edit-mode .widget-card { cursor: grab; }
 .widget-preview-label { margin: 0 0 6px; font: 600 11px sans-serif; text-transform: uppercase; letter-spacing: .02em; color: var(--accent-2); }
 .preview-example { opacity: .75; font-style: italic; }
@@ -503,6 +537,13 @@ button:hover { background: var(--accent-2-hover); }
 .settings-section .setting-row { margin-top: 10px; }
 
 .settings-subheading { margin: 18px 0 6px; font: 700 12px sans-serif; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+
+/* Section AC — identité et statut du profil (photo, nom court, disponibilité). */
+.profile-identity-photo { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.profile-identity-avatar { width: 4rem; height: 4rem; border-radius: 999px; overflow: hidden; display: grid; place-items: center; background: var(--accent); color: var(--surface); font-size: 1.1rem; font-weight: 800; flex-shrink: 0; }
+.profile-identity-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.profile-identity-field { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font: 600 12px sans-serif; color: var(--muted); }
+.profile-identity-field input[type="text"] { padding: 8px 10px; }
 .theme-color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 16px; margin-top: 6px; }
 .theme-color-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid var(--border-soft); border-radius: 8px; background: rgba(var(--rgb-surface), .5); font: 600 12px sans-serif; color: var(--text); }
 .theme-color-field input[type="color"] { min-height: 28px; height: 28px; width: 44px; padding: 2px; flex: none; background: transparent; cursor: pointer; }
@@ -527,7 +568,16 @@ button:hover { background: var(--accent-2-hover); }
 html.theme-fade, html.theme-fade body, html.theme-fade * { transition: background-color .35s ease, color .35s ease, border-color .35s ease !important; }
 
 /* Fonds d'écran animés (section AB) : dégradés/formes flottantes en CSS pur, légers, sans image/vidéo.
-   Appliqués via data-bg sur <html> ; un pseudo-élément fixe en arrière-plan évite tout impact sur le layout. */
+   Appliqués via data-bg sur <html> ; un pseudo-élément fixe en arrière-plan évite tout impact sur le layout.
+   --devos-mx/--devos-my (0-100%, défaut 50%) suivent la position de la souris (mise à jour JS dans App.tsx,
+   rAF-throttled) : les gradients centrés sur ces variables réagissent donc légèrement au curseur, en plus
+   de leur animation autonome. Neutre (donc sans effet) tant que la souris n'a pas bougé. */
+html { --devos-mx: 50%; --devos-my: 50%; }
+html[data-bg] body,
+html[data-bg] .shell {
+  background: transparent;
+}
+
 html[data-bg]::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { html[data-bg]::before { animation: none !important; } }
 
@@ -539,8 +589,8 @@ html[data-bg="aurora"]::before {
 @keyframes devos-bg-aurora { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 
 html[data-bg="drift"]::before {
-  background: radial-gradient(circle at 20% 30%, rgba(var(--rgb-accent), .14), transparent 55%),
-              radial-gradient(circle at 80% 70%, rgba(var(--rgb-accent2), .12), transparent 55%);
+  background: radial-gradient(circle at calc(20% + (var(--devos-mx) - 50%) * .3) calc(30% + (var(--devos-my) - 50%) * .3), rgba(var(--rgb-accent), .14), transparent 55%),
+              radial-gradient(circle at calc(80% + (var(--devos-mx) - 50%) * .3) calc(70% + (var(--devos-my) - 50%) * .3), rgba(var(--rgb-accent2), .12), transparent 55%);
   animation: devos-bg-drift 30s ease-in-out infinite;
 }
 @keyframes devos-bg-drift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(2%, -2%); } }
@@ -549,7 +599,7 @@ html[data-bg="bubbles"]::before {
   background-image: radial-gradient(circle, rgba(var(--rgb-accent), .14) 10px, transparent 11px),
                      radial-gradient(circle, rgba(var(--rgb-accent2), .12) 14px, transparent 15px);
   background-size: 140px 140px, 220px 220px;
-  background-position: 0 0, 60px 90px;
+  background-position: calc(0px + (var(--devos-mx) - 50%) * .4) calc(0px + (var(--devos-my) - 50%) * .4), 60px 90px;
   animation: devos-bg-bubbles 40s linear infinite;
 }
 @keyframes devos-bg-bubbles { from { background-position: 0 0, 60px 90px; } to { background-position: 0 -600px, 60px -510px; } }
@@ -563,20 +613,21 @@ html[data-bg="waves"]::before {
 html[data-bg="grid-pulse"]::before {
   background-image: linear-gradient(rgba(var(--rgb-accent), .10) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--rgb-accent), .10) 1px, transparent 1px);
   background-size: 42px 42px;
+  background-position: calc((var(--devos-mx) - 50%) * .2) calc((var(--devos-my) - 50%) * .2);
   animation: devos-bg-pulse 6s ease-in-out infinite;
 }
 @keyframes devos-bg-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
 
 html[data-bg="confetti-glow"]::before {
-  background: radial-gradient(circle at 30% 20%, rgba(var(--rgb-accent2), .14), transparent 40%),
-              radial-gradient(circle at 70% 60%, rgba(var(--rgb-accent), .14), transparent 45%),
+  background: radial-gradient(circle at calc(30% + (var(--devos-mx) - 50%) * .35) calc(20% + (var(--devos-my) - 50%) * .35), rgba(var(--rgb-accent2), .14), transparent 40%),
+              radial-gradient(circle at calc(70% + (var(--devos-mx) - 50%) * .35) calc(60% + (var(--devos-my) - 50%) * .35), rgba(var(--rgb-accent), .14), transparent 45%),
               radial-gradient(circle at 40% 85%, rgba(var(--rgb-accent2), .10), transparent 40%);
   animation: devos-bg-glow 18s ease-in-out infinite alternate;
 }
 @keyframes devos-bg-glow { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(20deg); } }
 
 html[data-bg="nebula"]::before {
-  background: conic-gradient(from 0deg at 50% 50%, rgba(var(--rgb-accent), .10), rgba(var(--rgb-accent2), .10), rgba(var(--rgb-accent), .10));
+  background: conic-gradient(from 0deg at var(--devos-mx) var(--devos-my), rgba(var(--rgb-accent), .10), rgba(var(--rgb-accent2), .10), rgba(var(--rgb-accent), .10));
   animation: devos-bg-nebula 60s linear infinite;
 }
 @keyframes devos-bg-nebula { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -722,7 +773,6 @@ button:hover svg, .nav-link:hover svg, a:hover svg { transform: scale(1.14); }
 .widget-card,
 .panel,
 .detail-panel,
-.proxmox-confirm-panel,
 [cmdk-root] {
   backdrop-filter: blur(14px) saturate(1.1);
   -webkit-backdrop-filter: blur(14px) saturate(1.1);

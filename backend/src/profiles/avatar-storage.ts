@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
@@ -17,9 +17,19 @@ const MIME_EXTENSIONS: Record<string, string> = {
 };
 
 const MAX_AVATAR_BYTES = 4 * 1024 * 1024;
+const KNOWN_EXTENSIONS = [...new Set(Object.values(MIME_EXTENSIONS))];
 
 export function uploadsRoot(): string {
   return path.resolve(process.cwd(), 'uploads');
+}
+
+/** Supprime tout fichier avatar existant pour ce profil, quelle que soit l'extension : évite les
+ * fichiers orphelins quand un nouvel avatar remplace un ancien dans un format différent. */
+export async function deleteAvatarImage(profileId: string): Promise<void> {
+  const dir = path.join(uploadsRoot(), 'avatars');
+  await Promise.all(
+    KNOWN_EXTENSIONS.map((extension) => unlink(path.join(dir, `${profileId}.${extension}`)).catch(() => undefined)),
+  );
 }
 
 export async function saveAvatarImage(profileId: string, dataUrlOrBase64: string, mimeTypeHint?: string): Promise<string> {
@@ -33,6 +43,7 @@ export async function saveAvatarImage(profileId: string, dataUrlOrBase64: string
   if (buffer.byteLength === 0) throw new Error('Image vide');
   if (buffer.byteLength > MAX_AVATAR_BYTES) throw new Error('Image trop volumineuse (4 Mo maximum)');
 
+  await deleteAvatarImage(profileId);
   const dir = path.join(uploadsRoot(), 'avatars');
   await mkdir(dir, { recursive: true });
   const filename = `${profileId}.${extension}`;

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useLanguage, useStrings } from '../i18n/LanguageContext.js';
+import { useStrings } from '../i18n/LanguageContext.js';
 
 interface ProxmoxNode {
   id: string;
   status: string;
+  cpu?: number;
+  mem?: number;
 }
 
 interface ProxmoxVM {
@@ -12,67 +14,44 @@ interface ProxmoxVM {
   status: string;
 }
 
-type VmAction = 'start' | 'shutdown' | 'reboot';
-
-const actionLabels: Record<'fr' | 'en', Record<VmAction, string>> = {
-  fr: {
-    start: 'Démarrer',
-    shutdown: 'Arrêter',
-    reboot: 'Redémarrer',
-  },
-  en: {
-    start: 'Start',
-    shutdown: 'Stop',
-    reboot: 'Restart',
-  },
-};
-
 const strings = {
   fr: {
     notConfigured: 'Proxmox n’est pas configuré sur ce backend.',
-    loadFailed: 'Impossible de charger les nœuds Proxmox.',
-    actionFailed: 'L’action a échoué.',
+    loadFailed: 'Impossible de charger les données Proxmox.',
     noNodes: 'Aucun nœud Proxmox à afficher.',
     noVms: 'Aucune VM sur ce nœud.',
-    confirmDialogLabel: "Confirmation d'action VM",
-    confirmTitle: (action: string, vmName: string) => `Confirmer : ${action} « ${vmName} » ?`,
-    confirmBody: (node: string) => `Cette action agit directement sur une machine réelle de l'infrastructure (nœud ${node}). Elle ne peut pas être annulée une fois lancée.`,
-    inProgress: 'En cours…',
-    confirmButton: (action: string) => `Confirmer : ${action}`,
-    cancel: 'Annuler',
+    openCluster: 'Ouvrir Proxmox',
+    noUrl: "L'URL du cluster Proxmox n'est pas configurée.",
+    intro: "Aperçu en lecture seule. Toute action de gestion (démarrage, arrêt, redémarrage…) se fait directement dans l'interface Proxmox.",
   },
   en: {
     notConfigured: 'Proxmox is not configured on this backend.',
-    loadFailed: 'Could not load Proxmox nodes.',
-    actionFailed: 'The action failed.',
+    loadFailed: 'Could not load Proxmox data.',
     noNodes: 'No Proxmox node to display.',
     noVms: 'No VM on this node.',
-    confirmDialogLabel: 'VM action confirmation',
-    confirmTitle: (action: string, vmName: string) => `Confirm: ${action} "${vmName}"?`,
-    confirmBody: (node: string) => `This action acts directly on a real infrastructure machine (node ${node}). It cannot be undone once started.`,
-    inProgress: 'In progress…',
-    confirmButton: (action: string) => `Confirm: ${action}`,
-    cancel: 'Cancel',
+    openCluster: 'Open Proxmox',
+    noUrl: 'The Proxmox cluster URL is not configured.',
+    intro: 'Read-only overview. Any management action (start, stop, reboot…) happens directly in the Proxmox interface.',
   },
 } as const;
 
 /**
- * Panel Réseau & Serveurs — contrôle des VMs Proxmox (section Q). Garde l'identité visuelle
- * "infra critique" de Design.md : toute action de contrôle (start/shutdown/reboot) passe par
- * une confirmation explicite affichée en overlay avant d'appeler l'API, jamais sur un simple clic.
+ * Panel Réseau & Serveurs — aperçu en lecture seule des nœuds/VMs Proxmox. Toute action de
+ * gestion redirige désormais vers l'interface Proxmox réelle plutôt que d'être exécutée depuis
+ * l'app : le contrôle effectif d'une infra critique ne doit pas dépendre d'un intermédiaire.
  */
 export function ProxmoxPanel({ apiBase }: { apiBase: string }) {
-  const { language } = useLanguage();
   const s = useStrings(strings);
-  const actionLabel = actionLabels[language];
   const [nodes, setNodes] = useState<ProxmoxNode[]>([]);
   const [vmsByNode, setVmsByNode] = useState<Record<string, ProxmoxVM[]>>({});
+  const [clusterUrl, setClusterUrl] = useState('');
   const [error, setError] = useState('');
-  const [pending, setPending] = useState<{ node: string; vm: ProxmoxVM; action: VmAction } | null>(null);
-  const [actionError, setActionError] = useState('');
-  const [actionInFlight, setActionInFlight] = useState(false);
 
   useEffect(() => {
+    void fetch(`${apiBase}/api/extras/proxmox/cluster-url`)
+      .then(async (response) => { if (!response.ok) return; const body = await response.json(); setClusterUrl((body as { url?: string }).url ?? ''); })
+      .catch(() => undefined);
+
     void fetch(`${apiBase}/api/extras/proxmox/nodes`)
       .then(async (response) => {
         if (!response.ok) throw new Error(response.status === 503 ? s.notConfigured : s.loadFailed);
@@ -88,33 +67,25 @@ export function ProxmoxPanel({ apiBase }: { apiBase: string }) {
       .catch((err: Error) => setError(err.message));
   }, [apiBase]);
 
-  async function confirmAction() {
-    if (!pending) return;
-    setActionInFlight(true);
-    setActionError('');
-    try {
-      const response = await fetch(`${apiBase}/api/proxmox/nodes/${encodeURIComponent(pending.node)}/vms/${pending.vm.vmid}/${pending.action}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-devos-role': 'Admin' },
-        body: JSON.stringify({ confirm: true }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error ?? s.actionFailed);
-      }
-      setPending(null);
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : s.actionFailed);
-    } finally {
-      setActionInFlight(false);
-    }
-  }
-
-  if (error) return <p className="error" role="alert">{error}</p>;
-  if (nodes.length === 0) return <p className="empty">{s.noNodes}</p>;
-
   return (
     <div className="proxmox-panel">
+      <div className="view-group proxmox-header">
+        <p className="hint">{s.intro}</p>
+        <a
+          className={`proxmox-open-cluster${clusterUrl ? '' : ' disabled'}`}
+          href={clusterUrl || undefined}
+          target="_blank"
+          rel="noreferrer noopener"
+          aria-disabled={!clusterUrl}
+          title={clusterUrl ? undefined : s.noUrl}
+        >
+          {s.openCluster}
+        </a>
+      </div>
+
+      {error && <p className="error" role="alert">{error}</p>}
+      {!error && nodes.length === 0 && <p className="empty">{s.noNodes}</p>}
+
       {nodes.map((node) => (
         <section className="view-group proxmox-node" key={node.id}>
           <h3>{node.id} <span className={`status-badge status-badge-${node.status === 'online' ? 'ok' : 'off'}`}>{node.status}</span></h3>
@@ -122,30 +93,11 @@ export function ProxmoxPanel({ apiBase }: { apiBase: string }) {
             <article className="item proxmox-vm" key={vm.vmid}>
               <strong>{vm.name}</strong>
               <span className={`status-badge status-badge-${vm.status === 'running' ? 'ok' : 'off'}`}>{vm.status}</span>
-              <span className="item-actions">
-                <button type="button" className="proxmox-action" onClick={() => setPending({ node: node.id, vm, action: 'start' })}>{actionLabel.start}</button>
-                <button type="button" className="proxmox-action" onClick={() => setPending({ node: node.id, vm, action: 'shutdown' })}>{actionLabel.shutdown}</button>
-                <button type="button" className="proxmox-action" onClick={() => setPending({ node: node.id, vm, action: 'reboot' })}>{actionLabel.reboot}</button>
-              </span>
             </article>
           ))}
           {(vmsByNode[node.id] ?? []).length === 0 && <p className="empty">{s.noVms}</p>}
         </section>
       ))}
-
-      {pending && (
-        <div className="detail-overlay proxmox-confirm-overlay" role="alertdialog" aria-modal="true" aria-label={s.confirmDialogLabel}>
-          <div className="detail-panel proxmox-confirm-panel">
-            <h2>{s.confirmTitle(actionLabel[pending.action], pending.vm.name)}</h2>
-            <p>{s.confirmBody(pending.node)}</p>
-            {actionError && <p className="error" role="alert">{actionError}</p>}
-            <div className="filters">
-              <button type="button" className="proxmox-confirm" disabled={actionInFlight} onClick={() => void confirmAction()}>{actionInFlight ? s.inProgress : s.confirmButton(actionLabel[pending.action])}</button>
-              <button type="button" className="filter" disabled={actionInFlight} onClick={() => { setPending(null); setActionError(''); }}>{s.cancel}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

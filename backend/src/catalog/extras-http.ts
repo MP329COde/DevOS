@@ -34,6 +34,7 @@ export interface ExtrasHttpService {
   listProxmoxNodes?(): Promise<ProxmoxNode[]>;
   listProxmoxVMs?(node: string): Promise<ProxmoxVM[]>;
   listProxmoxContainers?(node: string): Promise<ProxmoxContainer[]>;
+  getProxmoxClusterUrl?(): Promise<{ url: string }>;
   listWazuhAlerts?(limit?: number): Promise<WazuhAlert[]>;
   getMetrics?(exporter: string): Promise<Record<string, number>>;
   listMinioBuckets?(): Promise<MinioBucket[]>;
@@ -93,6 +94,7 @@ export async function handleExtrasRequest(method: string, url: string, service: 
     if (proxmoxVMs) return call(service.listProxmoxVMs, 'Proxmox', () => service.listProxmoxVMs!(decodeURIComponent(proxmoxVMs[1])));
     const proxmoxContainers = path.match(/^\/api\/extras\/proxmox\/([^/]+)\/containers$/);
     if (proxmoxContainers) return call(service.listProxmoxContainers, 'Proxmox', () => service.listProxmoxContainers!(decodeURIComponent(proxmoxContainers[1])));
+    if (path === '/api/extras/proxmox/cluster-url') return call(service.getProxmoxClusterUrl, 'Proxmox', () => service.getProxmoxClusterUrl!());
 
     if (path === '/api/extras/wazuh/alerts') {
       const limit = params.get('limit');

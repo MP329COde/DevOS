@@ -1,5 +1,7 @@
 import type { PrismaClient, Release, ReleaseState } from '@prisma/client';
 
+import type { TimelineEventService } from './timeline-event-service.js';
+
 export interface ReleaseInput {
   devProjectId: string;
   version: string;
@@ -18,7 +20,7 @@ export type ReleaseUpdateInput = Partial<Omit<ReleaseInput, 'devProjectId'>>;
  * publiée ou sans aucun élément associé (validation avant publication demandée par le TODO).
  */
 export class ReleaseService {
-  public constructor(private readonly database: PrismaClient) {}
+  public constructor(private readonly database: PrismaClient, private readonly timelineEvents?: TimelineEventService) {}
 
   public list(devProjectId?: string): Promise<Release[]> {
     return this.database.release.findMany({
@@ -69,7 +71,7 @@ export class ReleaseService {
     return this.database.item.findMany({ where: { releaseId }, orderBy: { updatedAt: 'desc' } });
   }
 
-  public async publish(id: string): Promise<Release> {
+  public async publish(id: string, actorEmail?: string): Promise<Release> {
     const release = await this.database.release.findUnique({ where: { id } });
     if (!release) throw new Error('Release introuvable');
     if (release.state === 'released') throw new Error('Cette release est déjà publiée');
@@ -77,9 +79,19 @@ export class ReleaseService {
     if (items.length === 0) throw new Error('Impossible de publier une release sans élément associé');
 
     const changelog = items.map((item) => `- ${item.title} (${item.type}${item.status ? `, ${item.status}` : ''})`).join('\n');
-    return this.database.release.update({
+    const published = await this.database.release.update({
       where: { id },
       data: { state: 'released', releasedAt: new Date(), changelog },
     });
+    await this.timelineEvents?.record({
+      type: 'release_published',
+      status: 'success',
+      summary: `Version ${published.version} publiée`,
+      actorEmail,
+      devProjectId: published.devProjectId,
+      releaseId: published.id,
+      version: published.version,
+    });
+    return published;
   }
 }

@@ -50,16 +50,6 @@ export class ProxmoxClient {
     return list.map((container) => ({ vmid: container.vmid, name: container.name, status: container.status }));
   }
 
-  /**
-   * Sends a power action to a QEMU VM (start/shutdown/reboot). This is a real, effectful
-   * infrastructure action — callers (see proxmox-http.ts) are responsible for requiring an
-   * explicit confirmation from the user before invoking it, never firing it directly on a click.
-   */
-  public async controlVirtualMachine(node: string, vmid: number, action: ProxmoxVMAction): Promise<void> {
-    const endpoint = proxmoxActionEndpoint[action];
-    await this.request(`/api2/json/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/${endpoint}`, { method: 'POST' });
-  }
-
   private async request<T>(path: string, init?: { method?: string }): Promise<T> {
     const response = await this.fetchImpl(`${this.options.baseUrl}${path}`, {
       method: init?.method,
@@ -70,11 +60,3 @@ export class ProxmoxClient {
     return body.data;
   }
 }
-
-export type ProxmoxVMAction = 'start' | 'shutdown' | 'reboot';
-
-const proxmoxActionEndpoint: Record<ProxmoxVMAction, string> = {
-  start: 'start',
-  shutdown: 'shutdown',
-  reboot: 'reboot',
-};

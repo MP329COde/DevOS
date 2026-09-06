@@ -18,11 +18,14 @@ export interface StoredNotification {
   title: string;
   message: string;
   category: string | null;
+  resourceKind: string | null;
+  resourceId: string | null;
+  priority: string;
   readAt: Date | null;
   createdAt: Date;
 }
 
-const RETENTION_DAYS = 60;
+const DEFAULT_RETENTION_DAYS = 60;
 
 /**
  * Fans a notification out to whichever server-side channels are configured (email, webhook) and
@@ -47,13 +50,23 @@ export class NotificationsService {
     private readonly email?: EmailChannelConfig,
     private readonly webhook?: WebhookChannelConfig,
     private readonly deps: NotificationsServiceDeps = defaultDeps,
+    private readonly retentionDays: number = DEFAULT_RETENTION_DAYS,
   ) {}
 
-  public async trigger(payload: NotificationPayload & { category?: string }): Promise<NotificationDispatchResult[]> {
+  public async trigger(
+    payload: NotificationPayload & { category?: string; resourceKind?: string; resourceId?: string; priority?: string },
+  ): Promise<NotificationDispatchResult[]> {
     const results: NotificationDispatchResult[] = [];
 
     await this.database.notification.create({
-      data: { title: payload.title, message: payload.message, category: payload.category ?? null },
+      data: {
+        title: payload.title,
+        message: payload.message,
+        category: payload.category ?? null,
+        resourceKind: payload.resourceKind ?? null,
+        resourceId: payload.resourceId ?? null,
+        priority: payload.priority ?? 'normal',
+      },
     });
 
     if (this.email) {
@@ -81,12 +94,16 @@ export class NotificationsService {
     return this.database.notification.findMany({
       where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, title: true, message: true, category: true, readAt: true, createdAt: true },
+      select: { id: true, title: true, message: true, category: true, resourceKind: true, resourceId: true, priority: true, readAt: true, createdAt: true },
     });
   }
 
   public async markAsRead(id: string): Promise<void> {
     await this.database.notification.updateMany({ where: { id, readAt: null }, data: { readAt: new Date() } });
+  }
+
+  public async markAllAsRead(): Promise<void> {
+    await this.database.notification.updateMany({ where: { readAt: null, deletedAt: null }, data: { readAt: new Date() } });
   }
 
   public async delete(id: string): Promise<void> {
@@ -95,7 +112,7 @@ export class NotificationsService {
 
   /** Hard-deletes notifications older than the 60-day retention window, read/deleted or not. */
   public async purgeExpired(): Promise<number> {
-    const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const cutoff = new Date(Date.now() - this.retentionDays * 24 * 60 * 60 * 1000);
     const result = await this.database.notification.deleteMany({ where: { createdAt: { lt: cutoff } } });
     return result.count;
   }

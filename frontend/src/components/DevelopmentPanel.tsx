@@ -518,6 +518,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
       const response = await fetch(`${apiBase}/api/dev-projects`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || undefined,

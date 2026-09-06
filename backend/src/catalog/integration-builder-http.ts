@@ -1,3 +1,4 @@
+import { assertCan, type Role } from '../auth/permissions.js';
 import type { IntegrationConfig, IntegrationTestResult } from '../integrations/integration-builder.js';
 
 export interface SavedIntegration {
@@ -20,10 +21,12 @@ export async function handleIntegrationBuilderRequest(
   method: string,
   path: string,
   body: unknown,
+  role: Role | undefined,
   service: IntegrationBuilderHttpService,
 ): Promise<IntegrationBuilderHttpResponse> {
   try {
     if (method === 'POST' && path === '/api/integrations/test') {
+      requireManageIntegrations(role);
       return { status: 200, body: await service.test(parseConfig(body)) };
     }
 
@@ -32,6 +35,7 @@ export async function handleIntegrationBuilderRequest(
     }
 
     if (method === 'POST' && path === '/api/integrations') {
+      requireManageIntegrations(role);
       const integration = parseSavedIntegration(body);
       await service.save(integration);
       return { status: 201, body: integration };
@@ -41,6 +45,11 @@ export async function handleIntegrationBuilderRequest(
   } catch (error) {
     return { status: 400, body: { error: error instanceof Error ? error.message : 'Invalid integration request' } };
   }
+}
+
+function requireManageIntegrations(role: Role | undefined): void {
+  if (!role) throw new Error('Authentication is required to manage integrations');
+  assertCan(role, 'manage_integrations');
 }
 
 function parseConfig(body: unknown): IntegrationConfig {

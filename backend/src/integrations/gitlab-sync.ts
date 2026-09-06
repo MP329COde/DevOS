@@ -68,6 +68,12 @@ export async function processGitLabIssueWebhook(payload: unknown, sync: GitLabWe
 export interface GitLabStatusSync {
   findItemIdByGitLabIssue(gitlabProjectId: string, issueIid: number): Promise<string | null>;
   applyStatus(itemId: string, status: GitLabStatusProjection): Promise<void>;
+  /**
+   * Optionnel : alimente la timeline unifiée (voir `development/timeline-event-service.ts`) à
+   * partir des webhooks GitLab reçus, pour relier pipeline/merge request à l'item concerné sans
+   * attendre un rechargement manuel côté frontend.
+   */
+  recordEvent?(input: { type: string; status?: string; summary: string; itemId: string; pipelineRef?: string }): Promise<unknown>;
 }
 
 function normalizeMergeRequestState(state: unknown): MergeRequestState | undefined {
@@ -114,8 +120,17 @@ export async function processGitLabPipelineWebhook(payload: unknown, sync: GitLa
   const title = typeof mergeRequest.title === 'string' ? mergeRequest.title : '';
   const gitlabProjectId = String(project.id);
   const projection = projectGitLabStatus(mergeRequestState, pipelineStatus);
+  const pipelineId = typeof attributes.id === 'number' ? attributes.id : undefined;
   for (const issueIid of extractIssueIids(title)) {
     const itemId = await sync.findItemIdByGitLabIssue(gitlabProjectId, issueIid);
-    if (itemId) await sync.applyStatus(itemId, projection);
+    if (!itemId) continue;
+    await sync.applyStatus(itemId, projection);
+    await sync.recordEvent?.({
+      type: pipelineStatus === 'success' || pipelineStatus === 'failed' || pipelineStatus === 'canceled' ? 'pipeline_finished' : 'pipeline_started',
+      status: pipelineStatus,
+      summary: `Pipeline ${pipelineId ?? ''} : ${pipelineStatus}`.trim(),
+      itemId,
+      pipelineRef: pipelineId ? `${gitlabProjectId}#${pipelineId}` : gitlabProjectId,
+    });
   }
 }

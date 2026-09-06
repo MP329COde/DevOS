@@ -1,4 +1,12 @@
+import { assertCan, type Role } from '../auth/permissions.js';
 import type { ProjectPermissionInput, RoleInput, UserProfileInput } from './profile-service.js';
+
+/** Identité résolue depuis la session Keycloak authentifiée (voir `auth/session-role.ts`). */
+export interface ProfileActor {
+  role?: Role;
+  userId?: string;
+  email?: string;
+}
 
 export interface ProfileHttpService {
   listRoles(): Promise<unknown>;
@@ -23,17 +31,25 @@ export interface ProfileHttpResponse {
 
 /** Routes REST de la section AC : profils utilisateur (`/api/profiles`), rôles configurables
  * (`/api/roles`) et permissions par projet (`/api/dev-projects/:id/permissions`). */
-export async function handleProfileRequest(method: string, url: string, body: unknown, service: ProfileHttpService): Promise<ProfileHttpResponse> {
+export async function handleProfileRequest(method: string, url: string, body: unknown, actor: ProfileActor | undefined, service: ProfileHttpService): Promise<ProfileHttpResponse> {
   try {
     const [path, query] = url.split('?');
     const params = new URLSearchParams(query ?? '');
 
-    // Rôles
+    // Rôles — gérer les rôles configurables (dont leurs permissions) est une action de
+    // gestion des utilisateurs : seul un rôle portant `manage_users` peut en créer/modifier/supprimer.
     if (method === 'GET' && path === '/api/roles') return { status: 200, body: await service.listRoles() };
-    if (method === 'POST' && path === '/api/roles') return { status: 201, body: await service.createRole(parseRoleInput(body)) };
+    if (method === 'POST' && path === '/api/roles') {
+      requireManageUsers(actor);
+      return { status: 201, body: await service.createRole(parseRoleInput(body)) };
+    }
     const roleOne = path.match(/^\/api\/roles\/([^/]+)$/);
-    if (method === 'PATCH' && roleOne) return { status: 200, body: await service.updateRole(decodeURIComponent(roleOne[1]), parseRoleInput(body, true)) };
+    if (method === 'PATCH' && roleOne) {
+      requireManageUsers(actor);
+      return { status: 200, body: await service.updateRole(decodeURIComponent(roleOne[1]), parseRoleInput(body, true)) };
+    }
     if (method === 'DELETE' && roleOne) {
+      requireManageUsers(actor);
       await service.deleteRole(decodeURIComponent(roleOne[1]));
       return { status: 204, body: null };
     }
@@ -47,14 +63,34 @@ export async function handleProfileRequest(method: string, url: string, body: un
       }
       return { status: 200, body: await service.listProfiles() };
     }
-    if (method === 'POST' && path === '/api/profiles') return { status: 201, body: await service.createProfile(parseProfileInput(body)) };
+    if (method === 'POST' && path === '/api/profiles') {
+      if (!actor?.role) throw new Error('Authentication is required to create a profile');
+      const input = parseProfileInput(body);
+      // L'email du profil est celui de la session authentifiée, jamais celui fourni par le
+      // client : sinon n'importe quel utilisateur connecté pourrait créer un profil au nom de
+      // quelqu'un d'autre (et potentiellement hériter de son rôle/appartenance projet).
+      if (actor.email) input.email = actor.email;
+      return { status: 201, body: await service.createProfile(input) };
+    }
     const profileOne = path.match(/^\/api\/profiles\/([^/]+)$/);
     if (method === 'GET' && profileOne) {
       const found = await service.getProfile(decodeURIComponent(profileOne[1]));
       return found ? { status: 200, body: found } : { status: 404, body: { error: 'Not found' } };
     }
-    if (method === 'PATCH' && profileOne) return { status: 200, body: await service.updateProfile(decodeURIComponent(profileOne[1]), parseProfileInput(body, true)) };
+    if (method === 'PATCH' && profileOne) {
+      const profileId = decodeURIComponent(profileOne[1]);
+      const input = parseProfileInput(body, true);
+      if ('roleId' in input) {
+        // Changer le rôle global d'un profil (y compris le sien) exige `manage_users`, sinon
+        // n'importe quel utilisateur authentifié pourrait s'auto-promouvoir Admin.
+        requireManageUsers(actor);
+      } else if (!actor?.role || !(actor.userId === profileId || can(actor.role, 'manage_users'))) {
+        throw new Error('You can only edit your own profile');
+      }
+      return { status: 200, body: await service.updateProfile(profileId, input) };
+    }
     if (method === 'DELETE' && profileOne) {
+      requireManageUsers(actor);
       await service.deleteProfile(decodeURIComponent(profileOne[1]));
       return { status: 204, body: null };
     }
@@ -63,6 +99,7 @@ export async function handleProfileRequest(method: string, url: string, body: un
     const projectPerms = path.match(/^\/api\/dev-projects\/([^/]+)\/permissions$/);
     if (method === 'GET' && projectPerms) return { status: 200, body: await service.listProjectPermissions(decodeURIComponent(projectPerms[1])) };
     if (method === 'PUT' && projectPerms) {
+      requireManageUsers(actor);
       const devProjectId = decodeURIComponent(projectPerms[1]);
       const b = (body ?? {}) as Record<string, unknown>;
       if (typeof b.userProfileId !== 'string' || !b.userProfileId) throw new Error('"userProfileId" is required');
@@ -71,6 +108,7 @@ export async function handleProfileRequest(method: string, url: string, body: un
     }
     const projectPermOne = path.match(/^\/api\/dev-projects\/([^/]+)\/permissions\/([^/]+)$/);
     if (method === 'DELETE' && projectPermOne) {
+      requireManageUsers(actor);
       await service.removeProjectPermission(decodeURIComponent(projectPermOne[1]), decodeURIComponent(projectPermOne[2]));
       return { status: 204, body: null };
     }
@@ -79,6 +117,20 @@ export async function handleProfileRequest(method: string, url: string, body: un
   } catch (error) {
     return { status: 400, body: { error: error instanceof Error ? error.message : 'Invalid profile request' } };
   }
+}
+
+function can(role: Role, action: 'manage_users'): boolean {
+  try {
+    assertCan(role, action);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function requireManageUsers(actor: ProfileActor | undefined): void {
+  if (!actor?.role) throw new Error('Authentication is required to manage users/roles');
+  assertCan(actor.role, 'manage_users');
 }
 
 function parseRoleInput(body: unknown, partial = false): RoleInput {
@@ -116,10 +168,15 @@ function parseProfileInput(body: unknown, partial = false): UserProfileInput {
   if ('statusEmoji' in b) input.statusEmoji = (b.statusEmoji as string | null) ?? null;
   if ('statusMessage' in b) input.statusMessage = (b.statusMessage as string | null) ?? null;
   if (typeof b.availability === 'string') input.availability = b.availability as UserProfileInput['availability'];
+  if ('availabilityFrom' in b) input.availabilityFrom = (b.availabilityFrom as string | null) ?? null;
   if ('availabilityUntil' in b) input.availabilityUntil = (b.availabilityUntil as string | null) ?? null;
+  if ('shortName' in b) input.shortName = (b.shortName as string | null) ?? null;
+  if ('availabilityScheduleStart' in b) input.availabilityScheduleStart = (b.availabilityScheduleStart as string | null) ?? null;
+  if ('availabilityScheduleEnd' in b) input.availabilityScheduleEnd = (b.availabilityScheduleEnd as string | null) ?? null;
   if ('themeMode' in b) input.themeMode = (b.themeMode as string | null) ?? null;
   if ('themeColors' in b) input.themeColors = (b.themeColors as Record<string, string> | null) ?? null;
   if ('profileBackground' in b) input.profileBackground = (b.profileBackground as string | null) ?? null;
+  if ('notificationPreferences' in b) input.notificationPreferences = (b.notificationPreferences as Record<string, unknown> | null) ?? null;
   if ('roleId' in b) input.roleId = (b.roleId as string | null) ?? null;
   return input;
 }

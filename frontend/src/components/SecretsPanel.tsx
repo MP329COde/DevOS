@@ -54,7 +54,7 @@ export function SecretsPanel() {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
 
   const load = () => {
-    void fetch(`${apiBase()}/api/secrets`)
+    void fetch(`${apiBase()}/api/secrets`, { credentials: 'include' })
       .then(async (response) => {
         if (response.status === 503) { setError(s.vaultNotConfigured); setNames([]); return; }
         if (!response.ok) { setError(s.loadError); return; }
@@ -74,6 +74,7 @@ export function SecretsPanel() {
       const response = await fetch(`${apiBase()}/api/secrets/${encodeURIComponent(newName)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ value: newValue }),
       });
       if (!response.ok) { setError(s.saveError); return; }
@@ -87,7 +88,7 @@ export function SecretsPanel() {
 
   const reveal = async (name: string) => {
     try {
-      const response = await fetch(`${apiBase()}/api/secrets/${encodeURIComponent(name)}/reveal`);
+      const response = await fetch(`${apiBase()}/api/secrets/${encodeURIComponent(name)}/reveal`, { credentials: 'include' });
       if (!response.ok) { setError(s.revealError); return; }
       const body = await response.json();
       setRevealed((current) => ({ ...current, [name]: body.value }));
@@ -98,7 +99,7 @@ export function SecretsPanel() {
 
   const remove = async (name: string) => {
     try {
-      const response = await fetch(`${apiBase()}/api/secrets/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      const response = await fetch(`${apiBase()}/api/secrets/${encodeURIComponent(name)}`, { method: 'DELETE', credentials: 'include' });
       if (!response.ok) { setError(s.deleteError); return; }
       setRevealed((current) => { const next = { ...current }; delete next[name]; return next; });
       load();

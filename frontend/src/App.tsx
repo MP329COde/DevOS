@@ -4,12 +4,14 @@ import { Command } from 'cmdk';
 import { createAuthorizationRequest } from './auth/oidc.js';
 import { NetworkGraph, type NetworkGraphEdge, type NetworkGraphNode } from './components/NetworkGraph.js';
 import { ProxmoxPanel } from './components/ProxmoxPanel.js';
+import { DomainsPanel } from './components/DomainsPanel.js';
 import { DeploymentPanel } from './components/DeploymentPanel.js';
-import { CustomWidgetsPanel, type CustomWidget } from './components/CustomWidgetsPanel.js';
+import { type CustomWidget } from './components/CustomWidgetsPanel.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
-import { ProfileSettingsPanel } from './components/ProfileSettingsPanel.js';
+import { ProfileSettingsPanel, DEFAULT_NOTIFICATION_PREFERENCES, type NotificationPreferences } from './components/ProfileSettingsPanel.js';
 import { SetupWizard } from './components/SetupWizard.js';
 import { UpdatesPanel } from './components/UpdatesPanel.js';
+import { ToolsHubPanel } from './components/ToolsHubPanel.js';
 import { NotesPanel } from './components/NotesPanel.js';
 import { DevelopmentPanel } from './components/DevelopmentPanel.js';
 import { DevTemplatesPanel } from './components/DevTemplatesPanel.js';
@@ -21,10 +23,26 @@ import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js
 import { THEME_COLOR_SETTINGS, THEME_PRESETS, type ThemeMode, type ThemePreset } from './theme.js';
 import { useLanguage } from './i18n/LanguageContext.js';
 
+// Couleur de la pastille de disponibilité affichée sur l'avatar du header (section AC), alignée sur
+// l'enum Prisma `AvailabilityStatus`.
+const AVAILABILITY_DOT_COLORS: Record<string, string> = {
+  available: '#2ecc71',
+  busy: '#e74c3c',
+  away: '#f1c40f',
+  do_not_disturb: '#8e44ad',
+  vacation: '#3498db',
+  offline: '#7f8c8d',
+};
+
 // TODO(AM.1/AM.2) : 'dev-templates' est un panel autonome temporaire (catalogue de templates,
 // section AM.3) en attendant le panel racine "Développement" avec sous-navigation. À rattacher
 // comme sous-vue de ce module une fois posé, plutôt que de rester une entrée de nav séparée.
-const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'catalog', 'docs', 'widgets', 'profile', 'settings-admin', 'network', 'dev-templates', 'development', 'deployment', 'login'] as const;
+const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'domains', 'catalog', 'docs', 'profile', 'settings-admin', 'network', 'dev-templates', 'development', 'deployment', 'tools', 'login'] as const;
+
+// Raccourcis clavier de navigation (Alt+1..9) : mêmes 9 premières entrées que la sidebar (`navItems`,
+// section rendu), dans le même ordre. Fixé ici (plutôt que dérivé de `navItems`) pour rester utilisable
+// dans l'effet keydown déclaré tôt dans le composant, avant que `navItems` n'existe.
+const NAV_SHORTCUT_PANELS: (typeof PANEL_IDS)[number][] = ['home', 'work', 'notes', 'dev-templates', 'development', 'catalog', 'network', 'haproxy', 'proxmox'];
 
 // Descriptions de fonctionnement des pages, centralisées ici (documentation) plutôt
 // qu'affichées en intro sur chaque page.
@@ -70,8 +88,6 @@ function StatusBadge({ state, label }: { state: 'ok' | 'warn' | 'off'; label: st
     </span>
   );
 }
-
-const CRITICAL_WAZUH_LEVEL = 12;
 
 // Cases de stats du dashboard : intégrées au même système homeWidgets que les autres widgets
 // (déplaçables/masquables/réordonnables) au lieu d'un bloc séparé fixe.
@@ -160,13 +176,13 @@ export function App() {
   const [panel, setPanel] = useState<(typeof PANEL_IDS)[number]>(() => readUrlPanel(PANEL_IDS, 'home'));
   // Assistant de configuration initiale (setup wizard) : `null` tant que /api/settings n'a pas
   // répondu (on ne bloque/débloque jamais l'app sur un état inconnu), puis true/false selon
-  // "platform.initialized". Même limitation dev-only que le reste de l'app pour le rôle
-  // (voir TODO x-devos-role) : la garde ci-dessous ne s'applique qu'à l'écran de login lui-même,
+  // "platform.initialized". La garde ci-dessous ne s'applique qu'à l'écran de login lui-même,
   // jamais au flux Keycloak/auth/callback.
   const [platformInitialized, setPlatformInitialized] = useState<boolean | null>(null);
   const [platformName, setPlatformName] = useState<string | undefined>(undefined);
   const [platformLogo, setPlatformLogo] = useState<string | undefined>(undefined);
   const [setupWizardEmbedded, setSetupWizardEmbedded] = useState(false);
+  const [wazuhThreshold, setWazuhThreshold] = useState(12);
   useEffect(() => {
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings`)
       .then(async (response) => {
@@ -176,9 +192,21 @@ export function App() {
         setPlatformInitialized(values['platform.initialized'] === 'true');
         setPlatformName(values['platform.name']);
         setPlatformLogo(values['platform.logo']);
+        const parsedThreshold = Number(values['NOTIFICATIONS_WAZUH_THRESHOLD']);
+        if (Number.isFinite(parsedThreshold) && parsedThreshold > 0) setWazuhThreshold(parsedThreshold);
       })
       .catch(() => setPlatformInitialized(true));
   }, []);
+  // Rôle de la session Keycloak authentifiée, résolu côté serveur (auth/session-role.ts) : seul
+  // moyen fiable de savoir si l'utilisateur est Admin, pour n'exposer le panel Administration
+  // qu'aux Admins (aucun rôle client ne doit jamais être déclaré localement).
+  const [currentRole, setCurrentRole] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/me`, { credentials: 'include' })
+      .then(async (response) => { if (response.ok) setCurrentRole((await response.json() as { role?: string | null }).role ?? undefined); })
+      .catch(() => undefined);
+  }, []);
+  const isAdmin = currentRole === 'Admin';
   const [workTab, setWorkTab] = useState<WorkTab>(() => readUrlWorkTab('tasks'));
   const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => (localStorage.getItem('devos.theme') as ThemeMode | null) ?? 'system');
@@ -245,6 +273,104 @@ export function App() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarFileInput = useRef<HTMLInputElement>(null);
+  // Préférences de notification personnelles (types souhaités, fréquence) : persistées en base sur
+  // le profil (UserProfile.notificationPreferences), contrairement au simple toggle navigateur
+  // (Notification.permission) qui reste purement local à l'appareil.
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
+  useEffect(() => {
+    const profileId = localStorage.getItem('devos.localProfileId');
+    if (!profileId) return;
+    const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+    void fetch(`${apiBase}/api/profiles/${profileId}`)
+      .then(async (response) => { if (response.ok) {
+        const profile = await response.json() as { notificationPreferences?: NotificationPreferences | null };
+        if (profile.notificationPreferences) setNotificationPreferences(profile.notificationPreferences);
+      } })
+      .catch(() => undefined);
+  }, []);
+  const updateNotificationPreferences = (updater: (current: NotificationPreferences) => NotificationPreferences) => {
+    setNotificationPreferences((current) => {
+      const next = updater(current);
+      void ensureLocalProfileId().then((profileId) => {
+        const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+        void fetch(`${apiBase}/api/profiles/${profileId}`, {
+          method: 'PATCH', headers: { 'content-type': 'application/json' }, credentials: 'include', body: JSON.stringify({ notificationPreferences: next }),
+        }).catch(() => undefined);
+      });
+      return next;
+    });
+  };
+
+  // Identité et statut du profil (section AC) : nom court, disponibilité, message, horaires et
+  // dates d'absence, persistés en base sur UserProfile (comme notificationPreferences ci-dessus),
+  // avec le même repli local temps de chargement.
+  type AvailabilityStatus = 'available' | 'busy' | 'away' | 'do_not_disturb' | 'vacation' | 'offline';
+  const [shortName, setShortNameState] = useState<string>(() => localStorage.getItem('devos.shortName') ?? '');
+  const [statusEmoji, setStatusEmojiState] = useState<string>(() => localStorage.getItem('devos.statusEmoji') ?? '');
+  const [statusMessage, setStatusMessageState] = useState<string>(() => localStorage.getItem('devos.statusMessage') ?? '');
+  const [availability, setAvailabilityState] = useState<AvailabilityStatus>(() => (localStorage.getItem('devos.availability') as AvailabilityStatus | null) ?? 'available');
+  const [availabilityFrom, setAvailabilityFromState] = useState<string>(() => localStorage.getItem('devos.availabilityFrom') ?? '');
+  const [availabilityUntil, setAvailabilityUntilState] = useState<string>(() => localStorage.getItem('devos.availabilityUntil') ?? '');
+  const [availabilityScheduleStart, setAvailabilityScheduleStartState] = useState<string>(() => localStorage.getItem('devos.availabilityScheduleStart') ?? '');
+  const [availabilityScheduleEnd, setAvailabilityScheduleEndState] = useState<string>(() => localStorage.getItem('devos.availabilityScheduleEnd') ?? '');
+
+  useEffect(() => {
+    const profileId = localStorage.getItem('devos.localProfileId');
+    if (!profileId) return;
+    const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+    void fetch(`${apiBase}/api/profiles/${profileId}`)
+      .then(async (response) => { if (response.ok) {
+        const profile = await response.json() as {
+          displayName?: string | null; avatarImageUrl?: string | null; shortName?: string | null;
+          statusEmoji?: string | null; statusMessage?: string | null; availability?: AvailabilityStatus | null;
+          availabilityFrom?: string | null; availabilityUntil?: string | null;
+          availabilityScheduleStart?: string | null; availabilityScheduleEnd?: string | null;
+        };
+        if (profile.displayName) setProfileName(profile.displayName);
+        if (profile.avatarImageUrl) setProfileAvatarUrl(`${apiBase}${profile.avatarImageUrl}`);
+        setShortNameState(profile.shortName ?? '');
+        setStatusEmojiState(profile.statusEmoji ?? '');
+        setStatusMessageState(profile.statusMessage ?? '');
+        if (profile.availability) setAvailabilityState(profile.availability);
+        setAvailabilityFromState(profile.availabilityFrom ? profile.availabilityFrom.slice(0, 10) : '');
+        setAvailabilityUntilState(profile.availabilityUntil ? profile.availabilityUntil.slice(0, 10) : '');
+        setAvailabilityScheduleStartState(profile.availabilityScheduleStart ?? '');
+        setAvailabilityScheduleEndState(profile.availabilityScheduleEnd ?? '');
+      } })
+      .catch(() => undefined);
+  }, []);
+
+  /** Persiste un ou plusieurs champs d'identité/statut en base (créant le profil local si besoin),
+   * en optimiste côté state — même pattern que `updateNotificationPreferences`. */
+  function patchProfileFields(fields: Record<string, unknown>) {
+    void ensureLocalProfileId().then((profileId) => {
+      const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+      void fetch(`${apiBase}/api/profiles/${profileId}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, credentials: 'include', body: JSON.stringify(fields),
+      }).catch(() => undefined);
+    });
+  }
+  function setShortName(value: string) { setShortNameState(value); localStorage.setItem('devos.shortName', value); patchProfileFields({ shortName: value || null }); }
+  function setStatusEmoji(value: string) { setStatusEmojiState(value); localStorage.setItem('devos.statusEmoji', value); patchProfileFields({ statusEmoji: value || null }); }
+  function setStatusMessage(value: string) { setStatusMessageState(value); localStorage.setItem('devos.statusMessage', value); patchProfileFields({ statusMessage: value || null }); }
+  function setAvailability(value: AvailabilityStatus) { setAvailabilityState(value); localStorage.setItem('devos.availability', value); patchProfileFields({ availability: value }); }
+  function setAvailabilityFrom(value: string) { setAvailabilityFromState(value); localStorage.setItem('devos.availabilityFrom', value); patchProfileFields({ availabilityFrom: value || null }); }
+  function setAvailabilityUntil(value: string) { setAvailabilityUntilState(value); localStorage.setItem('devos.availabilityUntil', value); patchProfileFields({ availabilityUntil: value || null }); }
+  function setAvailabilityScheduleStart(value: string) { setAvailabilityScheduleStartState(value); localStorage.setItem('devos.availabilityScheduleStart', value); patchProfileFields({ availabilityScheduleStart: value || null }); }
+  function setAvailabilityScheduleEnd(value: string) { setAvailabilityScheduleEndState(value); localStorage.setItem('devos.availabilityScheduleEnd', value); patchProfileFields({ availabilityScheduleEnd: value || null }); }
+  function setDisplayName(value: string) { setProfileName(value); patchProfileFields({ displayName: value || 'Utilisateur' }); }
+
+  async function removeAvatarFile() {
+    const profileId = await ensureLocalProfileId();
+    const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+    try {
+      await fetch(`${apiBase}/api/profiles/${profileId}/avatar`, { method: 'DELETE', credentials: 'include' });
+    } catch {
+      // best-effort : on efface quand même l'aperçu local même si l'appel réseau échoue
+    }
+    setProfileAvatarUrl('');
+    localStorage.removeItem('devos.profileAvatarUrl');
+  }
 
   async function ensureLocalProfileId(): Promise<string> {
     const existing = localStorage.getItem('devos.localProfileId');
@@ -253,6 +379,7 @@ export function App() {
     const response = await fetch(`${apiBase}/api/profiles`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email: `local-${crypto.randomUUID()}@devos.local`, displayName: profileName || 'Utilisateur' }),
     });
     if (!response.ok) throw new Error('Impossible de créer le profil');
@@ -332,20 +459,33 @@ export function App() {
   const [extraWidgetData, setExtraWidgetData] = useState<Record<string, string[] | 'error'>>({});
   const [customWidgets, setCustomWidgets] = useState<CustomWidget[]>([]);
   const customWidgetDefs = useMemo(() => {
-    const defs: Record<string, { title: string; icon: string; path: string; extract: (data: unknown) => string[] }> = {};
+    const defs: Record<string, { title: string; icon: string; path: string; size: 'small' | 'medium' | 'large'; refreshSeconds: number; extract: (data: unknown) => string[] }> = {};
     for (const widget of customWidgets) {
+      if (!widget.visible) continue;
       defs[`custom:${widget.id}`] = {
         title: widget.title,
-        icon: 'gear',
+        icon: widget.icon,
         path: widget.sourcePath,
-        extract: (data) => (Array.isArray(data) ? data.map((entry) => `${widget.label} : ${String((entry as Record<string, unknown>)[widget.dataKey] ?? '—')}`) : []),
+        size: widget.size,
+        refreshSeconds: widget.refreshSeconds,
+        extract: (data) => {
+          if (!Array.isArray(data)) return [];
+          const values = data.map((entry) => (entry as Record<string, unknown>)[widget.dataKey]);
+          if (widget.metric === 'count') return [`${values.length} élément(s)`];
+          if (widget.metric === 'first') return values.length > 0 ? [`${widget.label} : ${String(values[0] ?? '—')}`] : [];
+          if (widget.metric === 'sum') {
+            const total = values.reduce((acc: number, value) => acc + (Number(value) || 0), 0);
+            return [`${widget.label} (somme) : ${total}`];
+          }
+          return values.map((value) => `${widget.label} : ${String(value ?? '—')}`);
+        },
       };
     }
     return defs;
   }, [customWidgets]);
   const combinedWidgetDefs = useMemo(() => {
-    const defs: Record<string, { title: string; icon: string }> = { ...homeWidgetDefs };
-    for (const [id, def] of Object.entries(customWidgetDefs)) defs[id] = { title: def.title, icon: def.icon };
+    const defs: Record<string, { title: string; icon: string; size?: 'small' | 'medium' | 'large' }> = { ...homeWidgetDefs };
+    for (const [id, def] of Object.entries(customWidgetDefs)) defs[id] = { title: def.title, icon: def.icon, size: def.size };
     return defs;
   }, [customWidgetDefs]);
   const combinedExtraCatalog = useMemo(() => ({ ...extraWidgetCatalog, ...customWidgetDefs }), [customWidgetDefs]);
@@ -392,7 +532,10 @@ export function App() {
   const [calendarError, setCalendarError] = useState('');
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => (typeof Notification === 'undefined' ? 'denied' : Notification.permission));
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [storedNotifications, setStoredNotifications] = useState<Array<{ id: string; title: string; message: string; category: string | null; readAt: string | null; createdAt: string }>>([]);
+  const [storedNotifications, setStoredNotifications] = useState<Array<{ id: string; title: string; message: string; category: string | null; resourceKind: string | null; resourceId: string | null; priority: string; readAt: string | null; createdAt: string }>>([]);
+  const [notificationFilter, setNotificationFilter] = useState<'all' | 'unread' | 'critical'>('all');
+  const [highlightedCatalogKey, setHighlightedCatalogKey] = useState<string | null>(null);
+  const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const { language, setLanguage } = useLanguage();
   const [loginEmail, setLoginEmail] = useState('');
@@ -428,6 +571,58 @@ export function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  // Navigation clavier globale (section AC) : Alt+1..9 saute directement à l'une des 9 premières
+  // pages de la sidebar (voir NAV_SHORTCUT_PANELS), Alt+flèches passe au panel précédent/suivant dans
+  // cette même liste. Ignoré quand on tape dans un champ (input/textarea/contentEditable) pour ne pas
+  // interférer avec la saisie, et quand la palette (Cmd/Ctrl+K) est ouverte.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.altKey || event.metaKey || event.ctrlKey) return;
+      const target = event.target as HTMLElement | null;
+      const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (isTyping || paletteOpen) return;
+      if (event.key >= '1' && event.key <= '9') {
+        const index = Number(event.key) - 1;
+        const target = NAV_SHORTCUT_PANELS[index];
+        if (target) { event.preventDefault(); setPanel(target); }
+        return;
+      }
+      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+        event.preventDefault();
+        const currentIndex = NAV_SHORTCUT_PANELS.indexOf(panel as (typeof NAV_SHORTCUT_PANELS)[number]);
+        const base = currentIndex === -1 ? 0 : currentIndex;
+        const delta = event.key === 'ArrowRight' ? 1 : -1;
+        const nextIndex = (base + delta + NAV_SHORTCUT_PANELS.length) % NAV_SHORTCUT_PANELS.length;
+        setPanel(NAV_SHORTCUT_PANELS[nextIndex]);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [panel, paletteOpen]);
+
+  // Fond animé réactif à la souris (section AC) : met à jour --devos-mx/--devos-my (0-100%) sur <html>,
+  // lues par les gradients de fond dans styles.css (data-bg). rAF-throttled pour rester léger ; pas de
+  // listener s'il n'y a pas de fond animé actif (profileBackground === 'none').
+  useEffect(() => {
+    if (profileBackground === 'none') return;
+    let frame = 0;
+    const onPointerMove = (event: PointerEvent) => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const mx = (event.clientX / window.innerWidth) * 100;
+        const my = (event.clientY / window.innerHeight) * 100;
+        document.documentElement.style.setProperty('--devos-mx', `${mx.toFixed(2)}%`);
+        document.documentElement.style.setProperty('--devos-my', `${my.toFixed(2)}%`);
+      });
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [profileBackground]);
 
   useEffect(() => { localStorage.setItem('devos.sidebarCollapsed', sidebarCollapsed ? '1' : '0'); }, [sidebarCollapsed]);
 
@@ -548,7 +743,8 @@ export function App() {
     localStorage.setItem('devos.adminLoginTheme', id);
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings/platform.theme`, {
       method: 'PUT',
-      headers: { 'content-type': 'application/json', 'x-devos-role': 'Admin' },
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ value: JSON.stringify({ presetId: id }) }),
     }).catch(() => { /* backend indisponible : le choix reste appliqué localement */ });
   };
@@ -563,7 +759,8 @@ export function App() {
       localStorage.setItem('devos.platformThemePresets', serialized);
       void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/settings/platform.themePresets`, {
         method: 'PUT',
-        headers: { 'content-type': 'application/json', 'x-devos-role': 'Admin' },
+        headers: { 'content-type': 'application/json' },
+      credentials: 'include',
         body: JSON.stringify({ value: serialized }),
       }).catch(() => { /* backend indisponible : le preset reste disponible localement */ });
       return next;
@@ -586,19 +783,19 @@ export function App() {
     const notifiedSet = new Set<string>(JSON.parse(localStorage.getItem(notifiedKey) ?? '[]'));
     const now = Date.now();
     const overdue = items.filter((item) => item.dueAt && item.status !== 'done' && new Date(item.dueAt).getTime() < now && !notifiedSet.has(`item:${item.id}`));
-    const critical = (wazuhAlerts ?? []).filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL && !notifiedSet.has(`wazuh:${alert.id}`));
+    const critical = (wazuhAlerts ?? []).filter((alert) => alert.level >= wazuhThreshold && !notifiedSet.has(`wazuh:${alert.id}`));
     if (overdue.length === 0 && critical.length === 0) return;
 
-    const dispatch = (title: string, message: string) => {
+    const dispatch = (title: string, message: string, resourceKind: string, resourceId: string, priority: 'normal' | 'critical') => {
       new Notification(title, { body: message });
       void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/notifications/trigger`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title, message }),
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title, message, resourceKind, resourceId, priority }),
       }).catch(() => undefined);
     };
-    for (const item of overdue) { dispatch('Échéance dépassée', item.title); notifiedSet.add(`item:${item.id}`); }
-    for (const alert of critical) { dispatch('Alerte critique', alert.ruleDescription); notifiedSet.add(`wazuh:${alert.id}`); }
+    for (const item of overdue) { dispatch('Échéance dépassée', item.title, 'item', item.id, 'normal'); notifiedSet.add(`item:${item.id}`); }
+    for (const alert of critical) { dispatch('Alerte critique', alert.ruleDescription, 'wazuh', alert.id, 'critical'); notifiedSet.add(`wazuh:${alert.id}`); }
     localStorage.setItem(notifiedKey, JSON.stringify([...notifiedSet]));
-  }, [items, wazuhAlerts, notificationPermission]);
+  }, [items, wazuhAlerts, notificationPermission, wazuhThreshold]);
   useEffect(() => { localStorage.setItem('devos.homeWidgets', JSON.stringify(homeWidgets)); }, [homeWidgets]);
 
   const notificationsApiBase = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/notifications`;
@@ -622,6 +819,53 @@ export function App() {
     setStoredNotifications((current) => current.filter((n) => n.id !== id));
     void fetch(`${notificationsApiBase}/${id}`, { method: 'DELETE' }).catch(() => undefined);
   };
+  const markAllNotificationsAsRead = () => {
+    setStoredNotifications((current) => current.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
+    void fetch(`${notificationsApiBase}/read-all`, { method: 'PATCH' }).catch(() => undefined);
+  };
+  const navigateToNotificationResource = (resourceKind: string | null, resourceId: string | null) => {
+    if (resourceKind === 'item' && resourceId) { setPanel('work'); setDetailItemId(resourceId); }
+    else if (resourceKind === 'catalog' && resourceId) { setPanel('catalog'); setHighlightedCatalogKey(resourceId); }
+    else if (resourceKind === 'deployment') { setPanel('deployment'); }
+    else if (resourceKind === 'wazuh' && resourceId) { setPanel('home'); setHighlightedAlertId(resourceId); }
+    setNotificationsOpen(false);
+  };
+  useEffect(() => {
+    if (!highlightedCatalogKey) return;
+    const timeout = window.setTimeout(() => setHighlightedCatalogKey(null), 4000);
+    const [kind, name] = highlightedCatalogKey.split(':');
+    document.getElementById(`catalog-entity-${kind}-${name}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return () => window.clearTimeout(timeout);
+  }, [highlightedCatalogKey]);
+  useEffect(() => {
+    if (!highlightedAlertId) return;
+    const timeout = window.setTimeout(() => setHighlightedAlertId(null), 4000);
+    document.getElementById(`wazuh-alert-${highlightedAlertId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return () => window.clearTimeout(timeout);
+  }, [highlightedAlertId]);
+
+  const unifiedNotifications = useMemo(() => {
+    type UnifiedNotification = { id: string; title: string; message: string; priority: 'normal' | 'critical'; readAt: string | null; createdAt: string; resourceKind: string | null; resourceId: string | null; deletable: boolean };
+    const fromTriage: UnifiedNotification[] = triage.map((item) => ({
+      id: `triage:${item.id}`, title: language === 'fr' ? 'Triage' : 'Triage', message: item.title, priority: 'normal', readAt: null, createdAt: '', resourceKind: 'item', resourceId: item.id, deletable: false,
+    }));
+    const fromWazuh: UnifiedNotification[] = (wazuhAlerts ?? []).filter((alert) => alert.level >= wazuhThreshold).map((alert) => ({
+      id: `wazuh:${alert.id}`, title: language === 'fr' ? 'Sécurité' : 'Security', message: alert.ruleDescription, priority: 'critical', readAt: null, createdAt: alert.timestamp, resourceKind: 'wazuh', resourceId: alert.id, deletable: false,
+    }));
+    const fromStored: UnifiedNotification[] = storedNotifications.map((n) => ({
+      id: n.id, title: n.title, message: n.message, priority: n.priority === 'critical' ? 'critical' : 'normal', readAt: n.readAt, createdAt: n.createdAt, resourceKind: n.resourceKind, resourceId: n.resourceId, deletable: true,
+    }));
+    return [...fromWazuh, ...fromTriage, ...fromStored].sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority === 'critical' ? -1 : 1;
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+  }, [triage, wazuhAlerts, wazuhThreshold, storedNotifications, language]);
+  const unreadNotificationCount = unifiedNotifications.filter((n) => !n.readAt).length;
+  const filteredNotifications = unifiedNotifications.filter((n) => {
+    if (notificationFilter === 'unread') return !n.readAt;
+    if (notificationFilter === 'critical') return n.priority === 'critical';
+    return true;
+  });
 
   const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null);
   const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null);
@@ -715,6 +959,27 @@ export function App() {
     });
   }, [panel, homeWidgets, combinedExtraCatalog]);
 
+  // Rafraîchit périodiquement chaque widget custom visible selon sa fréquence propre (refreshSeconds).
+  useEffect(() => {
+    if (panel !== 'home') return;
+    const visibleIds = new Set(homeWidgets.filter((w) => w.visible).map((w) => w.id));
+    const timers = Object.entries(customWidgetDefs)
+      .filter(([id]) => visibleIds.has(id))
+      .map(([id, def]) => window.setInterval(() => {
+        void (async () => {
+          try {
+            const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}${def.path}`);
+            if (!response.ok) throw new Error('indisponible');
+            const json = await response.json();
+            setExtraWidgetData((current) => ({ ...current, [id]: def.extract(json) }));
+          } catch {
+            setExtraWidgetData((current) => ({ ...current, [id]: 'error' }));
+          }
+        })();
+      }, Math.max(5, def.refreshSeconds) * 1000));
+    return () => timers.forEach((timer) => window.clearInterval(timer));
+  }, [panel, homeWidgets, customWidgetDefs]);
+
   useEffect(() => {
     if (panel !== 'work' || workTab !== 'tasks' || view !== 'calendar') return;
     setCalendarError('');
@@ -774,7 +1039,8 @@ export function App() {
     if (!draft?.aclName || !draft.criterion || !draft.value) return;
     const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/frontends/${encodeURIComponent(frontendName)}/acls`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-devos-role': 'Admin' },
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(draft),
     });
     if (!response.ok) { setHaproxyError('L’ajout de la règle ACL a échoué.'); return; }
@@ -786,7 +1052,7 @@ export function App() {
   async function deleteHaproxyAcl(frontendName: string, index: number) {
     const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/frontends/${encodeURIComponent(frontendName)}/acls/${index}`, {
       method: 'DELETE',
-      headers: { 'x-devos-role': 'Admin' },
+      credentials: 'include',
     });
     if (!response.ok) { setHaproxyError('La suppression de la règle ACL a échoué.'); return; }
     setHaproxyAcls((current) => ({ ...current, [frontendName]: (current[frontendName] ?? []).filter((acl) => acl.index !== index) }));
@@ -827,7 +1093,7 @@ export function App() {
   }, [panel]);
 
   useEffect(() => {
-    if (panel !== 'widgets') return;
+    if (panel !== 'settings-admin') return;
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/extras/dashboard/widgets`)
       .then(async (response) => {
         if (!response.ok) throw new Error(response.status === 503 ? 'Les widgets ne sont pas configurés sur ce backend.' : 'Impossible de charger les widgets.');
@@ -1023,9 +1289,10 @@ export function App() {
     { id: 'network', label: language === 'fr' ? 'Topologie réseau' : 'Network topology', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'proxmox', label: language === 'fr' ? 'VMs Proxmox' : 'Proxmox VMs', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
-    { id: 'widgets', label: 'Widgets', icon: 'widget', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
+    { id: 'domains', label: language === 'fr' ? 'Domaines' : 'Domains', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'deployment', label: language === 'fr' ? 'Déploiement' : 'Deployment', icon: 'layers', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
-    { id: 'settings-admin', label: language === 'fr' ? 'Administration' : 'Administration', icon: 'gear', group: language === 'fr' ? 'Autres' : 'Other' },
+    { id: 'tools', label: language === 'fr' ? "Gestionnaire d'outils" : 'Tools hub', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
+    ...(isAdmin ? [{ id: 'settings-admin' as const, label: language === 'fr' ? 'Administration' : 'Administration', icon: 'gear', group: language === 'fr' ? 'Autres' : 'Other' }] : []),
     { id: 'docs', label: 'Docs', icon: 'doc', group: language === 'fr' ? 'Autres' : 'Other' },
   ];
   const navGroups = navItems.reduce<Array<{ group: string; items: typeof navItems }>>((groups, item) => {
@@ -1150,32 +1417,55 @@ export function App() {
           </button>
           <button type="button" className="header-icon-button" data-notifications-toggle aria-label={language === 'fr' ? 'Notifications' : 'Notifications'} aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen((open) => !open); refreshStoredNotifications(); }}>
             <Icon name="inbox" />
-            {(triage.length + (wazuhAlerts?.filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).length ?? 0) + storedNotifications.filter((n) => !n.readAt).length) > 0 && <span className="header-notification-badge">{triage.length + (wazuhAlerts?.filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).length ?? 0) + storedNotifications.filter((n) => !n.readAt).length}</span>}
+            {unreadNotificationCount > 0 && <span className="header-notification-badge">{unreadNotificationCount}</span>}
           </button>
           <button type="button" className="header-language" aria-label={language === 'fr' ? 'Changer de langue' : 'Change language'} onClick={() => setLanguage(language === 'fr' ? 'en' : 'fr')}>{language.toUpperCase()}</button>
           <button type="button" className="header-profile" data-profile-toggle aria-label={language === 'fr' ? 'Menu profil' : 'Profile menu'} aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen((open) => !open)}>
-            {profileAvatarUrl ? <img src={profileAvatarUrl} alt="" /> : (profileName ? profileName.slice(0, 2).toUpperCase() : '??')}
+            {profileAvatarUrl ? <img src={profileAvatarUrl} alt="" /> : ((shortName || profileName) ? (shortName || profileName).slice(0, 2).toUpperCase() : '??')}
+            <span className="header-profile-status-dot" style={{ background: AVAILABILITY_DOT_COLORS[availability] }} title={statusMessage || undefined} />
           </button>
         </div>
         {notificationsOpen && <aside className="notification-popover" aria-label="Centre de notifications">
-          <h3>{language === 'fr' ? 'Notifications' : 'Notifications'}</h3>
-          {triage.length === 0 && !(wazuhAlerts?.some((alert) => alert.level >= CRITICAL_WAZUH_LEVEL)) && storedNotifications.length === 0 && <p className="empty">{language === 'fr' ? 'Aucune notification urgente.' : 'No urgent notifications.'}</p>}
-          {triage.slice(0, 5).map((item) => <button type="button" className="notification-entry" key={item.id} onClick={() => { setPanel('work'); setWorkTab('triage'); setNotificationsOpen(false); }}>Triage : {item.title}</button>)}
-          {(wazuhAlerts ?? []).filter((alert) => alert.level >= CRITICAL_WAZUH_LEVEL).slice(0, 5).map((alert) => <button type="button" className="notification-entry critical" key={alert.id} onClick={() => { setPanel('home'); setNotificationsOpen(false); }}>Sécurité : {alert.ruleDescription}</button>)}
-          {storedNotifications.slice(0, 10).map((notification) => (
-            <div className={notification.readAt ? 'notification-entry-row' : 'notification-entry-row unread'} key={notification.id}>
-              <button type="button" className="notification-entry" onClick={() => markNotificationAsRead(notification.id)}>
-                {notification.title} — {notification.message}
+          <div className="notification-popover-header">
+            <h3>{language === 'fr' ? 'Notifications' : 'Notifications'}</h3>
+            {unreadNotificationCount > 0 && (
+              <button type="button" className="notification-mark-all" onClick={markAllNotificationsAsRead}>
+                {language === 'fr' ? 'Tout marquer comme lu' : 'Mark all as read'}
               </button>
-              <button type="button" className="notification-entry-delete" aria-label={language === 'fr' ? `Supprimer la notification ${notification.title}` : `Delete notification ${notification.title}`} onClick={() => deleteStoredNotification(notification.id)}>×</button>
+            )}
+          </div>
+          <div className="notification-filter-tabs">
+            <button type="button" className={notificationFilter === 'all' ? 'active' : ''} onClick={() => setNotificationFilter('all')}>{language === 'fr' ? 'Tout' : 'All'}</button>
+            <button type="button" className={notificationFilter === 'unread' ? 'active' : ''} onClick={() => setNotificationFilter('unread')}>{language === 'fr' ? 'Non lu' : 'Unread'}</button>
+            <button type="button" className={notificationFilter === 'critical' ? 'active' : ''} onClick={() => setNotificationFilter('critical')}>{language === 'fr' ? 'Critique' : 'Critical'}</button>
+          </div>
+          {filteredNotifications.length === 0 && <p className="empty">{language === 'fr' ? 'Aucune notification.' : 'No notifications.'}</p>}
+          {filteredNotifications.map((notification) => (
+            <div className={notification.readAt ? 'notification-entry-row' : 'notification-entry-row unread'} key={notification.id}>
+              <button
+                type="button"
+                className={notification.priority === 'critical' ? 'notification-entry critical' : 'notification-entry'}
+                onClick={() => { if (notification.deletable) markNotificationAsRead(notification.id); navigateToNotificationResource(notification.resourceKind, notification.resourceId); }}
+              >
+                <strong>{notification.title}</strong> — {notification.message}
+              </button>
+              {notification.deletable && (
+                <button type="button" className="notification-entry-delete" aria-label={language === 'fr' ? `Supprimer la notification ${notification.title}` : `Delete notification ${notification.title}`} onClick={() => deleteStoredNotification(notification.id)}>×</button>
+              )}
             </div>
           ))}
-          <button type="button" className="filter" onClick={() => { setPanel('settings-admin'); setNotificationsOpen(false); }}>{language === 'fr' ? 'Configurer dans Administration' : 'Configure in Administration'}</button>
+          {isAdmin && <button type="button" className="filter" onClick={() => { setPanel('settings-admin'); setNotificationsOpen(false); }}>{language === 'fr' ? 'Configurer dans Administration' : 'Configure in Administration'}</button>}
         </aside>}
         {profileMenuOpen && <aside className="header-profile-menu" aria-label={language === 'fr' ? 'Menu profil' : 'Profile menu'}>
           <div className="header-profile-menu-header">
-            <span className="header-profile-menu-avatar">{profileAvatarUrl ? <img src={profileAvatarUrl} alt="" /> : (profileName ? profileName.slice(0, 2).toUpperCase() : '??')}</span>
-            <span className="header-profile-menu-name">{profileName || (language === 'fr' ? 'Utilisateur' : 'User')}</span>
+            <span className="header-profile-menu-avatar">
+              {profileAvatarUrl ? <img src={profileAvatarUrl} alt="" /> : ((shortName || profileName) ? (shortName || profileName).slice(0, 2).toUpperCase() : '??')}
+              <span className="header-profile-status-dot" style={{ background: AVAILABILITY_DOT_COLORS[availability] }} />
+            </span>
+            <span className="header-profile-menu-name">
+              {statusEmoji ? `${statusEmoji} ` : ''}{profileName || (language === 'fr' ? 'Utilisateur' : 'User')}
+              {statusMessage && <span className="header-profile-menu-status">{statusMessage}</span>}
+            </span>
           </div>
           <button type="button" onClick={() => { setPanel('profile'); setProfileMenuOpen(false); }}>
             <Icon name="user" size={14} />{language === 'fr' ? 'Profil' : 'Profile'}
@@ -1244,7 +1534,7 @@ export function App() {
               <div className="widget-add-panel">
                 <h4>Ajouter un widget</h4>
                 <div className="widget-add-list">
-                  {homeWidgets.filter((w) => !w.visible).map((w) => (
+                  {homeWidgets.filter((w) => !w.visible && combinedWidgetDefs[w.id]).map((w) => (
                     <button type="button" className="widget-add-chip" key={w.id} onClick={() => toggleHomeWidget(w.id)}>
                       <Icon name={combinedWidgetDefs[w.id].icon} size={14} /> {combinedWidgetDefs[w.id].title}
                       <Icon name="plus" size={12} />
@@ -1254,7 +1544,7 @@ export function App() {
               </div>
             )}
             <div className={homeEditMode ? 'widget-grid edit-mode' : 'widget-grid'}>
-              {homeWidgets.filter((w) => w.visible).map((w) => {
+              {homeWidgets.filter((w) => w.visible && combinedWidgetDefs[w.id]).map((w) => {
                 const def = combinedWidgetDefs[w.id];
                 const statDef = statWidgetDefs[w.id];
                 const extraDataForWidget = extraWidgetData[w.id];
@@ -1281,13 +1571,13 @@ export function App() {
                   : w.id === 'alerts'
                   ? (widgetData ? (widgetData.alerts.items.length > 0 ? widgetData.alerts.items.map((a) => <p key={a.fingerprint} className="empty">{a.labels.alertname ?? a.fingerprint} · {a.status.state}</p>) : <p className="empty">Aucune alerte active.</p>) : <StatusBadge state="off" label="Non configuré" />)
                   : w.id === 'wazuh'
-                  ? (wazuhAlerts ? (wazuhAlerts.length > 0 ? wazuhAlerts.slice(0, 5).map((a) => <p key={a.id} className="empty">{a.ruleDescription} · niveau {a.level}</p>) : <p className="empty">Aucune alerte Wazuh.</p>) : <StatusBadge state="off" label="Non configuré" />)
+                  ? (wazuhAlerts ? (wazuhAlerts.length > 0 ? wazuhAlerts.slice(0, 5).map((a) => <p key={a.id} id={`wazuh-alert-${a.id}`} className={a.id === highlightedAlertId ? 'empty highlighted' : 'empty'}>{a.ruleDescription} · niveau {a.level}</p>) : <p className="empty">Aucune alerte Wazuh.</p>) : <StatusBadge state="off" label="Non configuré" />)
                   : extraDataForWidget === 'error' || extraDataForWidget === undefined
                   ? <StatusBadge state="off" label="Non configuré" />
                   : extraDataForWidget.length > 0 ? extraDataForWidget.slice(0, 6).map((line, index) => <p className="empty" key={index}>{line}</p>) : <p className="empty">Aucune donnée.</p>;
                 return (
                   <section
-                    className={`widget-card${statDef ? ' stat-widget' : ''}${draggedWidgetId === w.id ? ' dragging' : ''}${dragOverWidgetId === w.id && draggedWidgetId !== w.id ? ' drag-over' : ''}`}
+                    className={`widget-card${statDef ? ' stat-widget' : ''}${def.size && def.size !== 'medium' ? ` widget-size-${def.size}` : ''}${draggedWidgetId === w.id ? ' dragging' : ''}${dragOverWidgetId === w.id && draggedWidgetId !== w.id ? ' drag-over' : ''}`}
                     key={w.id}
                     draggable={homeEditMode}
                     onDragStart={(event) => { setDraggedWidgetId(w.id); event.dataTransfer.effectAllowed = 'move'; }}
@@ -1436,8 +1726,12 @@ export function App() {
           </div>
         ) : panel === 'proxmox' ? (
           <ProxmoxPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
+        ) : panel === 'domains' ? (
+          <DomainsPanel />
         ) : panel === 'deployment' ? (
           <DeploymentPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
+        ) : panel === 'tools' ? (
+          <ToolsHubPanel />
         ) : panel === 'catalog' ? (
           <div className="items catalog-panel">
             <div className="filters" aria-label="Actions catalogue"><button type="button" onClick={() => void scanCatalog()}>Scanner les dépôts GitLab</button></div>
@@ -1467,7 +1761,7 @@ export function App() {
             {catalogError && <p className="error" role="alert">{catalogError}</p>}
             {!catalogError && catalogEntities.length === 0 && <p className="empty">Le catalogue est vide. Lancez un scan pour le peupler.</p>}
             {catalogEntities.map((entity) => (
-              <article className="item catalog-entity" key={`${entity.kind}:${entity.name}`}>
+              <article className={`item catalog-entity${`${entity.kind}:${entity.name}` === highlightedCatalogKey ? ' highlighted' : ''}`} id={`catalog-entity-${entity.kind}-${entity.name}`} key={`${entity.kind}:${entity.name}`}>
                 <span className={`type type-${entity.kind.toLowerCase()}`}>{entity.kind}</span>
                 <strong>{entity.name}</strong>
                 <span className="integrations">{entity.type} · {entity.owner} · {entity.sourceProject}</span>
@@ -1522,34 +1816,6 @@ export function App() {
               </article>
             ))}
           </div>
-        ) : panel === 'widgets' ? (
-          <div className="items widgets-panel">
-            <div className="filters" aria-label="Widgets activés">
-              <label><input type="checkbox" checked={enabledWidgets.pipelines} onChange={(event) => setEnabledWidgets((current) => ({ ...current, pipelines: event.target.checked }))} /> Pipelines</label>
-              <label><input type="checkbox" checked={enabledWidgets.alerts} onChange={(event) => setEnabledWidgets((current) => ({ ...current, alerts: event.target.checked }))} /> Alertes</label>
-            </div>
-            {widgetsError && <p className="error" role="alert">{widgetsError}</p>}
-            {!widgetsError && !widgetData && <p className="empty">Chargement des widgets…</p>}
-            {enabledWidgets.pipelines && widgetData && (
-              <section className="view-group">
-                <h3>Pipelines en cours ({widgetData.pipelines.running})</h3>
-                {widgetData.pipelines.items.map((pipeline) => <p className="empty" key={pipeline.id}>#{pipeline.id} · {pipeline.ref} · {pipeline.status}</p>)}
-                {widgetData.pipelines.items.length === 0 && <p className="empty">Aucun pipeline en cours.</p>}
-              </section>
-            )}
-            {enabledWidgets.alerts && widgetData && (
-              <section className="view-group">
-                <h3>Alertes actives ({widgetData.alerts.active}, dont {widgetData.alerts.critical} critiques)</h3>
-                {widgetData.alerts.items.map((alert) => <p className="empty" key={alert.fingerprint}>{alert.labels.alertname ?? alert.fingerprint} · {alert.status.state}</p>)}
-                {widgetData.alerts.items.length === 0 && <p className="empty">Aucune alerte active.</p>}
-              </section>
-            )}
-            <CustomWidgetsPanel onChange={() => {
-              void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/custom-widgets`)
-                .then(async (response) => { if (response.ok) setCustomWidgets(await response.json()); })
-                .catch(() => undefined);
-            }} />
-          </div>
         ) : panel === 'profile' ? (
           <ProfileSettingsPanel
             navLayout={navLayout}
@@ -1574,8 +1840,33 @@ export function App() {
             setProfileBackground={setProfileBackground}
             notificationPermission={notificationPermission}
             onRequestNotificationPermission={() => void Notification.requestPermission().then(setNotificationPermission)}
+            wazuhThreshold={wazuhThreshold}
+            notificationPreferences={notificationPreferences}
+            setNotificationPreferences={updateNotificationPreferences}
+            displayName={profileName}
+            setDisplayName={setDisplayName}
+            shortName={shortName}
+            setShortName={setShortName}
+            profileAvatarUrl={profileAvatarUrl}
+            avatarUploading={avatarUploading}
+            onAvatarFile={handleAvatarFile}
+            onRemoveAvatar={removeAvatarFile}
+            statusEmoji={statusEmoji}
+            setStatusEmoji={setStatusEmoji}
+            statusMessage={statusMessage}
+            setStatusMessage={setStatusMessage}
+            availability={availability}
+            setAvailability={setAvailability}
+            availabilityFrom={availabilityFrom}
+            setAvailabilityFrom={setAvailabilityFrom}
+            availabilityUntil={availabilityUntil}
+            setAvailabilityUntil={setAvailabilityUntil}
+            availabilityScheduleStart={availabilityScheduleStart}
+            setAvailabilityScheduleStart={setAvailabilityScheduleStart}
+            availabilityScheduleEnd={availabilityScheduleEnd}
+            setAvailabilityScheduleEnd={setAvailabilityScheduleEnd}
           />
-        ) : panel === 'settings-admin' ? (
+        ) : panel === 'settings-admin' ? isAdmin ? (
           <>
           <UpdatesPanel isAdmin />
           <section className="widget-card">
@@ -1601,19 +1892,26 @@ export function App() {
             setAdminLoginThemeId={setAdminLoginThemeId}
             platformThemePresets={platformThemePresets}
             addPlatformThemePreset={addPlatformThemePreset}
+            enabledWidgets={enabledWidgets}
+            setEnabledWidgets={setEnabledWidgets}
+            widgetData={widgetData}
+            widgetsError={widgetsError}
+            onCustomWidgetsChange={() => {
+              void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/custom-widgets`)
+                .then(async (response) => { if (response.ok) setCustomWidgets(await response.json()); })
+                .catch(() => undefined);
+            }}
           />
           </>
+        ) : (
+          <p className="empty">{language === 'fr' ? "Accès réservé aux administrateurs." : 'Restricted to administrators.'}</p>
         ) : panel === 'login' ? (
           <section className="login-screen" style={loginThemeVars as CSSProperties}>
             <div className="login-screen-panel login-screen-brand">
               <div className="login-logo-orbit" aria-hidden="true">
                 <span className="login-logo-ring login-logo-ring-1" />
                 <span className="login-logo-ring login-logo-ring-2" />
-                <svg className="login-logo-mark" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="DevOS">
-                  <rect width="64" height="64" rx="14" fill="var(--accent)" />
-                  <path d="M16 15h16.5c9.4 0 15.5 6.7 15.5 17s-6.1 17-15.5 17H16Zm9 8v18h6.8c5.4 0 8.7-3.4 8.7-9s-3.3-9-8.7-9Z" fill="#fffdf4" />
-                  <circle className="login-logo-dot" cx="49.5" cy="17" r="5.5" fill="var(--accent-2)" stroke="#fffdf4" strokeWidth="2" />
-                </svg>
+                <span className="login-logo-mark"><Logo size={64} /></span>
               </div>
               <span className="kicker">DEVOS ACCESS</span>
               <h2>{language === 'fr' ? 'Votre homelab, un seul endroit' : 'Your homelab, one place'}</h2>
