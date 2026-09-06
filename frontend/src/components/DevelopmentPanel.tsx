@@ -4,7 +4,8 @@ import { DevActivityPanel, type DevActivityTab } from './DevActivityPanel.js';
 import { DevReposPanel } from './DevReposPanel.js';
 import { DevCiCdPanel, type CiCdSubView } from './DevCiCdPanel.js';
 import { DevTasksPanel } from './DevTasksPanel.js';
-import { useStrings } from '../i18n/LanguageContext.js';
+import { DevTemplatesPanel } from './DevTemplatesPanel.js';
+import { useStrings, useLanguage } from '../i18n/LanguageContext.js';
 
 export interface DevProject {
   id: string;
@@ -110,11 +111,20 @@ type WizardStep = (typeof WIZARD_STEPS)[number];
  * imbriqués) sont remontés ici au même niveau que les autres onglets, dans une seule barre
  * scrollable — chaque nouvel onglet s'ajoute simplement à `DEV_TABS` et à son rendu conditionnel. */
 const DEV_TABS = [
-  'overview', 'new', 'dashboard', 'repos', 'tasks',
+  'overview', 'new', 'dashboard', 'repos', 'templates', 'tasks',
   'activity-search', 'activity-integrations', 'activity-dashboard', 'activity-ai',
   'cicd-pipelines', 'cicd-deployments', 'cicd-tests', 'cicd-quality',
 ] as const;
 type DevTab = (typeof DEV_TABS)[number];
+
+/** Regroupement visuel des sous-onglets (deuxième niveau de nav) : purement d'affichage, ne
+ * change pas le comportement de sélection (`setTab`). */
+const DEV_TAB_GROUPS: Array<{ labelFr: string; labelEn: string; tabs: DevTab[] }> = [
+  { labelFr: 'Projet', labelEn: 'Project', tabs: ['overview', 'new', 'dashboard', 'repos', 'templates', 'tasks'] },
+  { labelFr: 'CI/CD & déploiement', labelEn: 'CI/CD & deployment', tabs: ['cicd-pipelines', 'cicd-deployments'] },
+  { labelFr: 'Qualité', labelEn: 'Quality', tabs: ['cicd-tests', 'cicd-quality'] },
+  { labelFr: 'Personnel', labelEn: 'Personal', tabs: ['activity-search', 'activity-integrations', 'activity-dashboard', 'activity-ai'] },
+];
 
 const strings = {
   fr: {
@@ -128,6 +138,7 @@ const strings = {
     } as Record<WizardStep, string>,
     devTabLabels: {
       overview: 'Vue globale', new: 'Nouveau projet', dashboard: 'Dashboard projet', repos: 'Dépôts',
+      templates: 'Gabarits',
       tasks: 'Workflow', 'activity-search': 'Recherche globale', 'activity-integrations': 'Intégrations dev',
       'activity-dashboard': 'Dashboard perso', 'activity-ai': 'Assistant IA (aperçu)', 'cicd-pipelines': 'CI/CD',
       'cicd-deployments': 'Déploiements', 'cicd-tests': 'Tests', 'cicd-quality': 'Qualité & sécurité',
@@ -263,6 +274,7 @@ const strings = {
     } as Record<WizardStep, string>,
     devTabLabels: {
       overview: 'Overview', new: 'New project', dashboard: 'Project dashboard', repos: 'Repositories',
+      templates: 'Templates',
       tasks: 'Workflow', 'activity-search': 'Global search', 'activity-integrations': 'Dev integrations',
       'activity-dashboard': 'Personal dashboard', 'activity-ai': 'AI assistant (preview)', 'cicd-pipelines': 'CI/CD',
       'cicd-deployments': 'Deployments', 'cicd-tests': 'Tests', 'cicd-quality': 'Quality & security',
@@ -391,6 +403,7 @@ const strings = {
 
 export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
   const s = useStrings(strings);
+  const { language } = useLanguage();
   const [tab, setTab] = useState<DevTab>('overview');
   const [overview, setOverview] = useState<DevOverview | null>(null);
   const [search, setSearch] = useState('');
@@ -429,11 +442,16 @@ export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
 
   return (
     <div className="items dev-panel">
-      <nav className="views" aria-label={s.subViewsAria}>
-        {DEV_TABS.map((value) => (
-          <button key={value} className={tab === value ? 'filter active' : 'filter'} type="button" onClick={() => setTab(value)}>
-            {s.devTabLabels[value]}
-          </button>
+      <nav className="views dev-tab-groups" aria-label={s.subViewsAria}>
+        {DEV_TAB_GROUPS.map((group) => (
+          <div className="dev-tab-group" key={group.labelEn}>
+            <span className="dev-tab-group-label">{language === 'fr' ? group.labelFr : group.labelEn}</span>
+            {group.tabs.map((value) => (
+              <button key={value} className={tab === value ? 'filter active' : 'filter'} type="button" onClick={() => setTab(value)}>
+                {s.devTabLabels[value]}
+              </button>
+            ))}
+          </div>
         ))}
       </nav>
 
@@ -466,6 +484,8 @@ export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
       )}
 
       {tab === 'repos' && <DevReposPanel apiBase={apiBase} />}
+
+      {tab === 'templates' && <DevTemplatesPanel apiBase={apiBase} />}
 
       {tab === 'tasks' && <DevTasksPanel apiBase={apiBase} devProjectId={selectedProjectId} />}
 

@@ -42,7 +42,9 @@ test('reflects the request origin in CORS headers so the frontend can call a cro
   const server = createServer(undefined, { async list() { return []; }, async create() { return {}; }, async update() { return {}; }, async delete() { return {}; } });
   const result = await request(server, 'GET', '/api/items', undefined, { origin: 'http://localhost:5173' });
   assert.equal(result.headers.get('access-control-allow-origin'), 'http://localhost:5173');
-  assert.equal(result.headers.get('access-control-allow-credentials'), null);
+  // FRONTEND_ORIGIN is configured (backend/.env) to http://localhost:5173 for local dev, and Prisma
+  // auto-loads .env on import, so once it's explicitly configured credentials are allowed.
+  assert.equal(result.headers.get('access-control-allow-credentials'), 'true');
 });
 
 test('answers an OPTIONS preflight without routing it to a handler', async () => {

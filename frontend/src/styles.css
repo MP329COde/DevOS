@@ -465,6 +465,16 @@ h1 { max-width: 470px; margin: 18px 0 14px; font-size: clamp(42px, 8vw, 76px); l
 p { max-width: 420px; margin: 0 0 32px; font: 18px/1.5 Arial, sans-serif; }
 button { border: 0; border-radius: 8px; padding: 14px 18px; color: var(--surface); background: var(--accent-2); font: 700 14px -apple-system, sans-serif; cursor: pointer; transition: background .12s ease; }
 button:hover { background: var(--accent-2-hover); }
+button:disabled,
+button[disabled] {
+  opacity: .45;
+  cursor: not-allowed;
+  filter: saturate(.6);
+}
+button:disabled:hover,
+button[disabled]:hover {
+  background: var(--accent-2);
+}
 .status { display: block; margin-top: 16px; font: 13px Arial, sans-serif; color: var(--accent); }
 
 @media (max-width: 900px) {

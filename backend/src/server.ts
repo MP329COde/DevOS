@@ -636,6 +636,11 @@ export function createServer(
 
 if (require.main === module) {
   void (async () => {
+    if (process.env.NODE_ENV !== 'production' && !process.env.FRONTEND_ORIGIN) {
+      throw new Error(
+        "FRONTEND_ORIGIN doit être défini dans backend/.env pour activer CORS en développement local (ex: FRONTEND_ORIGIN=http://localhost:5173).",
+      );
+    }
     const database = new PrismaClient();
     const settingsService = new SettingsService(database);
     await applyStoredSettingsToEnv(settingsService);

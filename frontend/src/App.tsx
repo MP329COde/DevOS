@@ -14,7 +14,6 @@ import { UpdatesPanel } from './components/UpdatesPanel.js';
 import { ToolsHubPanel } from './components/ToolsHubPanel.js';
 import { NotesPanel } from './components/NotesPanel.js';
 import { DevelopmentPanel } from './components/DevelopmentPanel.js';
-import { DevTemplatesPanel } from './components/DevTemplatesPanel.js';
 import { TaskDetailPanel } from './components/TaskDetailPanel.js';
 import { ActivityTimelineDrawer } from './components/ActivityTimelineDrawer.js';
 import { Icon } from './components/Icon.js';
@@ -34,15 +33,13 @@ const AVAILABILITY_DOT_COLORS: Record<string, string> = {
   offline: '#7f8c8d',
 };
 
-// TODO(AM.1/AM.2) : 'dev-templates' est un panel autonome temporaire (catalogue de templates,
-// section AM.3) en attendant le panel racine "Développement" avec sous-navigation. À rattacher
-// comme sous-vue de ce module une fois posé, plutôt que de rester une entrée de nav séparée.
-const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'domains', 'catalog', 'docs', 'profile', 'settings-admin', 'network', 'dev-templates', 'development', 'deployment', 'tools', 'login'] as const;
+// Le catalogue de templates (ex-'dev-templates') a été fusionné comme sous-onglet du panel "Développement".
+const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'domains', 'catalog', 'docs', 'profile', 'settings-admin', 'network', 'development', 'deployment', 'tools', 'login'] as const;
 
 // Raccourcis clavier de navigation (Alt+1..9) : mêmes 9 premières entrées que la sidebar (`navItems`,
 // section rendu), dans le même ordre. Fixé ici (plutôt que dérivé de `navItems`) pour rester utilisable
 // dans l'effet keydown déclaré tôt dans le composant, avant que `navItems` n'existe.
-const NAV_SHORTCUT_PANELS: (typeof PANEL_IDS)[number][] = ['home', 'work', 'notes', 'dev-templates', 'development', 'catalog', 'network', 'haproxy', 'proxmox'];
+const NAV_SHORTCUT_PANELS: (typeof PANEL_IDS)[number][] = ['home', 'work', 'notes', 'development', 'catalog', 'network', 'haproxy', 'proxmox'];
 
 // Descriptions de fonctionnement des pages, centralisées ici (documentation) plutôt
 // qu'affichées en intro sur chaque page.
@@ -1283,7 +1280,6 @@ export function App() {
     { id: 'home', label: language === 'fr' ? 'Dashboard' : 'Dashboard', icon: 'home', group: language === 'fr' ? 'Vue d’ensemble' : 'Overview' },
     { id: 'work', label: language === 'fr' ? 'Travail' : 'Work', badge: triage.length, icon: 'tasks', group: language === 'fr' ? 'Travail' : 'Work' },
     { id: 'notes', label: language === 'fr' ? 'Notes' : 'Notes', icon: 'doc', group: language === 'fr' ? 'Travail' : 'Work' },
-    { id: 'dev-templates', label: language === 'fr' ? 'Templates dev' : 'Dev templates', icon: 'layers', group: language === 'fr' ? 'Travail' : 'Work' },
     { id: 'development', label: language === 'fr' ? 'Développement' : 'Development', icon: 'layers', group: language === 'fr' ? 'Développement' : 'Development' },
     { id: 'catalog', label: language === 'fr' ? 'Catalogue' : 'Catalog', icon: 'layers', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'network', label: language === 'fr' ? 'Topologie réseau' : 'Network topology', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
@@ -1937,8 +1933,6 @@ export function App() {
           </section>
         ) : panel === 'notes' ? (
           <NotesPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
-        ) : panel === 'dev-templates' ? (
-          <DevTemplatesPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
         ) : panel === 'development' ? (
           <DevelopmentPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
         ) : null}
