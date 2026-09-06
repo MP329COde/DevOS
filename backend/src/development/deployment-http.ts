@@ -1,6 +1,6 @@
 import { assertCan, type Role } from '../auth/permissions.js';
-import type { TimelineEventInput } from '../development/timeline-event-service.js';
-import type { DeploymentEnvironmentConfig, GenerateDeploymentManifestsResult } from './k8s-manifest-generator.js';
+import type { TimelineEventInput } from './timeline-event-service.js';
+import type { DeploymentEnvironmentConfig, GenerateDeploymentManifestsResult } from '../catalog/k8s-manifest-generator.js';
 
 export interface DeploymentHttpService {
   /**

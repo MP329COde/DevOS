@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { handleDeploymentRequest, type DeploymentHttpService } from './deployment-http.js';
-import type { GenerateDeploymentManifestsResult } from './k8s-manifest-generator.js';
+import type { GenerateDeploymentManifestsResult } from '../catalog/k8s-manifest-generator.js';
 
 const fakeResult: GenerateDeploymentManifestsResult = {
   appName: 'my-app',

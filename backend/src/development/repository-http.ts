@@ -1,5 +1,5 @@
 import { assertCan, type Role } from '../auth/permissions.js';
-import type { RepoRef } from '../catalog/cicd-http.js';
+import type { RepoRef } from './cicd-http.js';
 import type { CreateRepoInput, LinkRepoInput } from './repository-service.js';
 
 export interface RepositoryHttpService {

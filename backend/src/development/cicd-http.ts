@@ -1,8 +1,8 @@
 import { assertCan, type Role } from '../auth/permissions.js';
-import type { TimelineEventInput } from '../development/timeline-event-service.js';
+import type { TimelineEventInput } from './timeline-event-service.js';
 import type { GitLabPipelineDetail, GitLabPipelineJob } from '../integrations/gitlab-pipelines.js';
-import type { ArgoCDSyncHistoryEntry } from './argocd.js';
-import type { TrivyVulnerabilitySummary } from './harbor-trivy.js';
+import type { ArgoCDSyncHistoryEntry } from '../catalog/argocd.js';
+import type { TrivyVulnerabilitySummary } from '../catalog/harbor-trivy.js';
 
 /** Sous-ensemble minimal de `DevProjectCiCdConfig` nécessaire pour résoudre les pipelines d'un projet. */
 export interface RepoRef {

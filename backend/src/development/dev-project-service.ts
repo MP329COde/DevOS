@@ -1,6 +1,6 @@
 import type { DevProject, DevProjectStatus, PrismaClient } from '@prisma/client';
 
-import { resolveReposForDevProject, type RepositoryResolverService } from '../catalog/cicd-http.js';
+import { resolveReposForDevProject, type RepositoryResolverService } from './cicd-http.js';
 import type { GitLabPipelineDetail } from '../integrations/gitlab-pipelines.js';
 
 /** Sous-ensemble de `CiCdHttpService` nécessaire au dashboard (juste la lecture des pipelines). */

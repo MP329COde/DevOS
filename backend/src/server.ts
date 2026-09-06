@@ -75,7 +75,7 @@ import { NexusClient, VerdaccioClient } from './integrations/artifact-registries
 import { MeilisearchClient } from './integrations/meilisearch.js';
 import { RedpandaClient } from './integrations/redpanda.js';
 import { getJobLog, getPipeline, listPipelineJobs, listProjectPipelines, listRunningPipelines, retryPipeline } from './integrations/gitlab-pipelines.js';
-import { handleCiCdRequest, type CiCdHttpService } from './catalog/cicd-http.js';
+import { handleCiCdRequest, type CiCdHttpService } from './development/cicd-http.js';
 import { AlertmanagerClient } from './integrations/alertmanager.js';
 import { buildDashboardWidgets } from './tasks/dashboard-widgets.js';
 import { handleIntegrationBuilderRequest, type IntegrationBuilderHttpService, type SavedIntegration } from './catalog/integration-builder-http.js';
@@ -99,7 +99,7 @@ import { handleDevTemplateRequest, type DevTemplateHttpService } from './develop
 import { DevTemplateService } from './development/dev-template-service.js';
 import { handleRoadmapRequest, type RoadmapHttpService } from './tasks/roadmap-http.js';
 import { RoadmapService } from './tasks/roadmap-service.js';
-import { handleDeploymentRequest, type DeploymentHttpService } from './catalog/deployment-http.js';
+import { handleDeploymentRequest, type DeploymentHttpService } from './development/deployment-http.js';
 import { detectProjectType, generateDeploymentManifests } from './catalog/k8s-manifest-generator.js';
 import { handleReleaseRequest, type ReleaseHttpService } from './development/release-http.js';
 import { ReleaseService } from './development/release-service.js';
