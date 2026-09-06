@@ -53,6 +53,48 @@ interface DevProjectDashboard {
   security: DevProjectDashboardSection;
 }
 
+interface DevProjectRepo {
+  id: string;
+  devProjectId: string;
+  provider: 'gitlab' | 'github';
+  repoIdentifier: string;
+  role: string;
+  name?: string | null;
+  webUrl?: string | null;
+  defaultBranch?: string | null;
+  vaultSecretName: string;
+  argoAppName?: string | null;
+  harborProject?: string | null;
+  harborRepo?: string | null;
+}
+
+interface DevProjectResource {
+  id: string;
+  devProjectId: string;
+  name: string;
+  type: string;
+  host?: string | null;
+  note?: string | null;
+}
+
+interface DevRepoOption {
+  key: string;
+  provider: 'gitlab' | 'github';
+  id: string;
+  name: string;
+  webUrl: string;
+  defaultBranch: string | null;
+}
+
+interface DevProjectPipelineGroup {
+  cicdConfigId: string;
+  role: string;
+  name: string | null;
+  repoIdentifier: string;
+  pipelines?: Array<{ id: number; status: string; ref: string; webUrl: string; createdAt: string; updatedAt: string }>;
+  error?: string;
+}
+
 interface DevOverview {
   active: DevProject[];
   waiting: DevProject[];
@@ -166,6 +208,49 @@ const strings = {
     next: 'Suivant',
     deliveryGoal: (template: string, stack: string, environments: string, gitProvider: string) =>
       `Template ${template} · stack ${stack} · environnements ${environments} · dépôt ${gitProvider}`,
+    reposHeading: 'Dépôts liés',
+    reposLoadFailed: 'Impossible de charger les dépôts liés.',
+    noLinkedRepo: 'Aucun dépôt lié pour l\'instant.',
+    unlink: 'Délier',
+    showPipelines: 'Voir les pipelines',
+    hidePipelines: 'Masquer les pipelines',
+    pipelinesLoadFailed: 'Impossible de charger les pipelines.',
+    noPipeline: 'Aucun pipeline pour ce dépôt.',
+    linkExistingRepoHeading: 'Lier un dépôt existant',
+    createNewRepoHeading: 'Créer un nouveau dépôt',
+    repoRoleAria: 'Rôle du dépôt',
+    repoRolePlaceholder: 'Rôle (ex. backend, frontend, infra)',
+    vaultSecretAria: 'Nom du secret Vault',
+    vaultSecretPlaceholder: 'Nom du secret Vault',
+    repoNameAria: 'Nom du dépôt',
+    repoNamePlaceholder: 'Nom du dépôt',
+    selectRepoOption: 'Sélectionner un dépôt…',
+    link: 'Lier',
+    create: 'Créer',
+    repoOperationFailed: 'L\'opération sur le dépôt a échoué.',
+    resourcesHeading: 'Ressources',
+    resourcesLoadFailed: 'Impossible de charger les ressources.',
+    noResource: 'Aucune ressource pour l\'instant.',
+    resourceNameAria: 'Nom de la ressource',
+    resourceNamePlaceholder: 'Nom de la ressource',
+    resourceTypeAria: 'Type de ressource',
+    resourceTypePlaceholder: 'Type (ex. base de données, cache…)',
+    resourceHostAria: 'Hôte',
+    resourceHostPlaceholder: 'Hôte (optionnel)',
+    resourceNoteAria: 'Note',
+    resourceNotePlaceholder: 'Note (optionnelle)',
+    addResource: 'Ajouter',
+    resourceOperationFailed: 'L\'opération sur la ressource a échoué.',
+    delete: 'Supprimer',
+    defaultBranchLabel: 'Branche par défaut :',
+    gitModeLink: 'Lier des dépôts existants',
+    gitModeCreate: 'Créer un nouveau dépôt',
+    wizardAddedRepos: 'Dépôts à lier/créer',
+    wizardNoRepos: 'Aucun dépôt sélectionné pour l\'instant.',
+    wizardAddRepo: 'Ajouter à la liste',
+    wizardRemoveRepo: 'Retirer',
+    wizardRepoModeLinked: (provider: string, identifier: string, role: string) => `Lier ${provider}:${identifier} (${role})`,
+    wizardRepoModeCreated: (provider: string, name: string, role: string) => `Créer ${provider}:${name} (${role})`,
   },
   en: {
     statusLabels: {
@@ -258,6 +343,49 @@ const strings = {
     next: 'Next',
     deliveryGoal: (template: string, stack: string, environments: string, gitProvider: string) =>
       `Template ${template} · stack ${stack} · environments ${environments} · repo ${gitProvider}`,
+    reposHeading: 'Linked repositories',
+    reposLoadFailed: 'Unable to load linked repositories.',
+    noLinkedRepo: 'No linked repository yet.',
+    unlink: 'Unlink',
+    showPipelines: 'Show pipelines',
+    hidePipelines: 'Hide pipelines',
+    pipelinesLoadFailed: 'Unable to load pipelines.',
+    noPipeline: 'No pipeline for this repository.',
+    linkExistingRepoHeading: 'Link an existing repository',
+    createNewRepoHeading: 'Create a new repository',
+    repoRoleAria: 'Repository role',
+    repoRolePlaceholder: 'Role (e.g. backend, frontend, infra)',
+    vaultSecretAria: 'Vault secret name',
+    vaultSecretPlaceholder: 'Vault secret name',
+    repoNameAria: 'Repository name',
+    repoNamePlaceholder: 'Repository name',
+    selectRepoOption: 'Select a repository…',
+    link: 'Link',
+    create: 'Create',
+    repoOperationFailed: 'The repository operation failed.',
+    resourcesHeading: 'Resources',
+    resourcesLoadFailed: 'Unable to load resources.',
+    noResource: 'No resource yet.',
+    resourceNameAria: 'Resource name',
+    resourceNamePlaceholder: 'Resource name',
+    resourceTypeAria: 'Resource type',
+    resourceTypePlaceholder: 'Type (e.g. database, cache…)',
+    resourceHostAria: 'Host',
+    resourceHostPlaceholder: 'Host (optional)',
+    resourceNoteAria: 'Note',
+    resourceNotePlaceholder: 'Note (optional)',
+    addResource: 'Add',
+    resourceOperationFailed: 'The resource operation failed.',
+    delete: 'Delete',
+    defaultBranchLabel: 'Default branch:',
+    gitModeLink: 'Link existing repositories',
+    gitModeCreate: 'Create a new repository',
+    wizardAddedRepos: 'Repositories to link/create',
+    wizardNoRepos: 'No repository selected yet.',
+    wizardAddRepo: 'Add to list',
+    wizardRemoveRepo: 'Remove',
+    wizardRepoModeLinked: (provider: string, identifier: string, role: string) => `Link ${provider}:${identifier} (${role})`,
+    wizardRepoModeCreated: (provider: string, name: string, role: string) => `Create ${provider}:${name} (${role})`,
   },
 } as const;
 
@@ -328,6 +456,7 @@ export function DevelopmentPanel({ apiBase }: { apiBase: string }) {
 
       {tab === 'dashboard' && (
         <DevProjectDashboardTab
+          apiBase={apiBase}
           projectId={selectedProjectId}
           dashboard={dashboard}
           error={dashboardError}
@@ -397,7 +526,8 @@ function DevOverviewTab({ overview, error, search, onSearchChange, onOpen }: {
   );
 }
 
-function DevProjectDashboardTab({ projectId, dashboard, error, allProjects, onSelect }: {
+function DevProjectDashboardTab({ apiBase, projectId, dashboard, error, allProjects, onSelect }: {
+  apiBase: string;
   projectId: string | null;
   dashboard: DevProjectDashboard | null;
   error: string;
@@ -465,7 +595,259 @@ function DevProjectDashboardTab({ projectId, dashboard, error, allProjects, onSe
           </article>
         ))}
       </section>
+
+      <DevProjectRepositoriesSection apiBase={apiBase} projectId={projectId} />
+      <DevProjectResourcesSection apiBase={apiBase} projectId={projectId} />
     </div>
+  );
+}
+
+function DevProjectRepositoriesSection({ apiBase, projectId }: { apiBase: string; projectId: string }) {
+  const s = useStrings(strings);
+  const [repos, setRepos] = useState<DevProjectRepo[]>([]);
+  const [error, setError] = useState('');
+  const [availableRepos, setAvailableRepos] = useState<DevRepoOption[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [pipelines, setPipelines] = useState<DevProjectPipelineGroup[] | null>(null);
+  const [pipelinesError, setPipelinesError] = useState('');
+
+  const [linkRepoKey, setLinkRepoKey] = useState('');
+  const [linkRole, setLinkRole] = useState('');
+  const [linkVaultSecret, setLinkVaultSecret] = useState('');
+
+  const [createProvider, setCreateProvider] = useState<'gitlab' | 'github'>('gitlab');
+  const [createName, setCreateName] = useState('');
+  const [createRole, setCreateRole] = useState('');
+  const [createVaultSecret, setCreateVaultSecret] = useState('');
+
+  function loadRepos() {
+    void fetch(`${apiBase}/api/dev-projects/${projectId}/repositories`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        setRepos(await response.json());
+        setError('');
+      })
+      .catch(() => setError(s.reposLoadFailed));
+  }
+
+  useEffect(() => { loadRepos(); }, [apiBase, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    void fetch(`${apiBase}/api/extras/dev/repos`)
+      .then(async (response) => (response.ok ? setAvailableRepos(await response.json()) : setAvailableRepos([])))
+      .catch(() => setAvailableRepos([]));
+  }, [apiBase]);
+
+  async function unlink(cicdConfigId: string) {
+    try {
+      const response = await fetch(`${apiBase}/api/dev-projects/${projectId}/repositories/${cicdConfigId}`, { method: 'DELETE', credentials: 'include' });
+      if (!response.ok) throw new Error();
+      loadRepos();
+    } catch {
+      setError(s.repoOperationFailed);
+    }
+  }
+
+  function togglePipelines(cicdConfigId: string) {
+    if (expandedId === cicdConfigId) { setExpandedId(null); return; }
+    setExpandedId(cicdConfigId);
+    void fetch(`${apiBase}/api/dev-cicd/by-project/${projectId}/pipelines`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        setPipelines(await response.json());
+        setPipelinesError('');
+      })
+      .catch(() => setPipelinesError(s.pipelinesLoadFailed));
+  }
+
+  async function submitLink(event: FormEvent) {
+    event.preventDefault();
+    const repo = availableRepos.find((r) => r.key === linkRepoKey);
+    if (!repo || !linkRole.trim() || !linkVaultSecret.trim()) return;
+    try {
+      const response = await fetch(`${apiBase}/api/dev-projects/${projectId}/repositories`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          provider: repo.provider,
+          repoIdentifier: repo.id,
+          role: linkRole.trim(),
+          vaultSecretName: linkVaultSecret.trim(),
+          name: repo.name,
+          webUrl: repo.webUrl,
+          defaultBranch: repo.defaultBranch,
+        }),
+      });
+      if (!response.ok) throw new Error();
+      setLinkRepoKey(''); setLinkRole(''); setLinkVaultSecret('');
+      loadRepos();
+    } catch {
+      setError(s.repoOperationFailed);
+    }
+  }
+
+  async function submitCreate(event: FormEvent) {
+    event.preventDefault();
+    if (!createName.trim() || !createRole.trim() || !createVaultSecret.trim()) return;
+    try {
+      const response = await fetch(`${apiBase}/api/dev-projects/${projectId}/repositories/create`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ provider: createProvider, name: createName.trim(), role: createRole.trim(), vaultSecretName: createVaultSecret.trim() }),
+      });
+      if (!response.ok) throw new Error();
+      setCreateName(''); setCreateRole(''); setCreateVaultSecret('');
+      loadRepos();
+    } catch {
+      setError(s.repoOperationFailed);
+    }
+  }
+
+  return (
+    <section className="view-group">
+      <h3>{s.reposHeading}</h3>
+      {error && <p className="error" role="alert">{error}</p>}
+      {repos.length === 0 && !error && <p className="empty">{s.noLinkedRepo}</p>}
+      {repos.map((repo) => (
+        <article className="item widget-card" key={repo.id}>
+          <span className="item-title">
+            <strong>{repo.name ?? repo.repoIdentifier}</strong>{' '}
+            <span className={`type type-${repo.provider}`}>{repo.provider === 'gitlab' ? 'GitLab' : 'GitHub'}</span>{' '}
+            <span className="status-badge">{repo.role}</span>
+          </span>
+          <p className="empty">{s.defaultBranchLabel} <strong>{repo.defaultBranch ?? '—'}</strong></p>
+          <span className="item-actions">
+            {repo.webUrl && <a href={repo.webUrl} target="_blank" rel="noreferrer"><button type="button">{s.link}</button></a>}
+            <button type="button" onClick={() => togglePipelines(repo.id)}>{expandedId === repo.id ? s.hidePipelines : s.showPipelines}</button>
+            <button type="button" onClick={() => void unlink(repo.id)}>{s.unlink}</button>
+          </span>
+          {expandedId === repo.id && (
+            <div className="dev-repo-detail">
+              {pipelinesError && <p className="error" role="alert">{pipelinesError}</p>}
+              {!pipelinesError && (() => {
+                const group = pipelines?.find((p) => p.cicdConfigId === repo.id);
+                if (!group || !group.pipelines || group.pipelines.length === 0) return <p className="empty">{s.noPipeline}</p>;
+                return (
+                  <ul>
+                    {group.pipelines.map((pipeline) => (
+                      <li key={pipeline.id}>
+                        <a href={pipeline.webUrl} target="_blank" rel="noreferrer">#{pipeline.id}</a>{' '}
+                        <span className="status-badge">{pipeline.status}</span>{' '}
+                        <span className="empty">{pipeline.ref}</span>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+            </div>
+          )}
+        </article>
+      ))}
+
+      <form className="item widget-card" onSubmit={(event) => void submitLink(event)}>
+        <h4>{s.linkExistingRepoHeading}</h4>
+        <select aria-label={s.repoNameAria} value={linkRepoKey} onChange={(event) => setLinkRepoKey(event.target.value)}>
+          <option value="">{s.selectRepoOption}</option>
+          {availableRepos.map((repo) => <option key={repo.key} value={repo.key}>{repo.name} ({repo.provider})</option>)}
+        </select>
+        <input aria-label={s.repoRoleAria} placeholder={s.repoRolePlaceholder} value={linkRole} onChange={(event) => setLinkRole(event.target.value)} />
+        <input aria-label={s.vaultSecretAria} placeholder={s.vaultSecretPlaceholder} value={linkVaultSecret} onChange={(event) => setLinkVaultSecret(event.target.value)} />
+        <button type="submit">{s.link}</button>
+      </form>
+
+      <form className="item widget-card" onSubmit={(event) => void submitCreate(event)}>
+        <h4>{s.createNewRepoHeading}</h4>
+        <select aria-label={s.gitAria} value={createProvider} onChange={(event) => setCreateProvider(event.target.value as 'gitlab' | 'github')}>
+          <option value="gitlab">GitLab</option>
+          <option value="github">GitHub</option>
+        </select>
+        <input aria-label={s.repoNameAria} placeholder={s.repoNamePlaceholder} value={createName} onChange={(event) => setCreateName(event.target.value)} />
+        <input aria-label={s.repoRoleAria} placeholder={s.repoRolePlaceholder} value={createRole} onChange={(event) => setCreateRole(event.target.value)} />
+        <input aria-label={s.vaultSecretAria} placeholder={s.vaultSecretPlaceholder} value={createVaultSecret} onChange={(event) => setCreateVaultSecret(event.target.value)} />
+        <button type="submit">{s.create}</button>
+      </form>
+    </section>
+  );
+}
+
+function DevProjectResourcesSection({ apiBase, projectId }: { apiBase: string; projectId: string }) {
+  const s = useStrings(strings);
+  const [resources, setResources] = useState<DevProjectResource[]>([]);
+  const [error, setError] = useState('');
+  const [name, setName] = useState('');
+  const [type, setType] = useState('');
+  const [host, setHost] = useState('');
+  const [note, setNote] = useState('');
+
+  function loadResources() {
+    void fetch(`${apiBase}/api/dev-projects/${projectId}/resources`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        setResources(await response.json());
+        setError('');
+      })
+      .catch(() => setError(s.resourcesLoadFailed));
+  }
+
+  useEffect(() => { loadResources(); }, [apiBase, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!name.trim() || !type.trim()) return;
+    try {
+      const response = await fetch(`${apiBase}/api/dev-projects/${projectId}/resources`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name: name.trim(), type: type.trim(), host: host.trim() || undefined, note: note.trim() || undefined }),
+      });
+      if (!response.ok) throw new Error();
+      setName(''); setType(''); setHost(''); setNote('');
+      loadResources();
+    } catch {
+      setError(s.resourceOperationFailed);
+    }
+  }
+
+  async function remove(resourceId: string) {
+    try {
+      const response = await fetch(`${apiBase}/api/dev-projects/${projectId}/resources/${resourceId}`, { method: 'DELETE', credentials: 'include' });
+      if (!response.ok) throw new Error();
+      loadResources();
+    } catch {
+      setError(s.resourceOperationFailed);
+    }
+  }
+
+  return (
+    <section className="view-group">
+      <h3>{s.resourcesHeading}</h3>
+      {error && <p className="error" role="alert">{error}</p>}
+      {resources.length === 0 && !error && <p className="empty">{s.noResource}</p>}
+      {resources.map((resource) => (
+        <article className="item widget-card" key={resource.id}>
+          <span className="item-title">
+            <strong>{resource.name}</strong>{' '}
+            <span className="status-badge">{resource.type}</span>
+          </span>
+          {resource.host && <p className="empty">{resource.host}</p>}
+          {resource.note && <p className="empty">{resource.note}</p>}
+          <span className="item-actions">
+            <button type="button" onClick={() => void remove(resource.id)}>{s.delete}</button>
+          </span>
+        </article>
+      ))}
+
+      <form className="item widget-card" onSubmit={(event) => void submit(event)}>
+        <input aria-label={s.resourceNameAria} placeholder={s.resourceNamePlaceholder} value={name} onChange={(event) => setName(event.target.value)} />
+        <input aria-label={s.resourceTypeAria} placeholder={s.resourceTypePlaceholder} value={type} onChange={(event) => setType(event.target.value)} />
+        <input aria-label={s.resourceHostAria} placeholder={s.resourceHostPlaceholder} value={host} onChange={(event) => setHost(event.target.value)} />
+        <input aria-label={s.resourceNoteAria} placeholder={s.resourceNotePlaceholder} value={note} onChange={(event) => setNote(event.target.value)} />
+        <button type="submit">{s.addResource}</button>
+      </form>
+    </section>
   );
 }
 
@@ -481,6 +863,47 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
   const [owner, setOwner] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  type WizardRepoEntry =
+    | { mode: 'link'; provider: 'gitlab' | 'github'; repoIdentifier: string; name: string | null; webUrl: string | null; defaultBranch: string | null; role: string; vaultSecretName: string }
+    | { mode: 'create'; provider: 'gitlab' | 'github'; name: string; role: string; vaultSecretName: string };
+  const [wizardRepos, setWizardRepos] = useState<WizardRepoEntry[]>([]);
+  const [gitMode, setGitMode] = useState<'link' | 'create'>('link');
+  const [availableRepos, setAvailableRepos] = useState<DevRepoOption[]>([]);
+  const [wizardLinkRepoKey, setWizardLinkRepoKey] = useState('');
+  const [wizardRepoRole, setWizardRepoRole] = useState('');
+  const [wizardVaultSecret, setWizardVaultSecret] = useState('');
+  const [wizardCreateName, setWizardCreateName] = useState('');
+
+  useEffect(() => {
+    void fetch(`${apiBase}/api/extras/dev/repos`)
+      .then(async (response) => (response.ok ? setAvailableRepos(await response.json()) : setAvailableRepos([])))
+      .catch(() => setAvailableRepos([]));
+  }, [apiBase]);
+
+  function addWizardRepo() {
+    if (!wizardRepoRole.trim() || !wizardVaultSecret.trim()) return;
+    if (gitMode === 'link') {
+      const repo = availableRepos.find((r) => r.key === wizardLinkRepoKey);
+      if (!repo) return;
+      setWizardRepos((current) => [...current, {
+        mode: 'link', provider: repo.provider, repoIdentifier: repo.id, name: repo.name,
+        webUrl: repo.webUrl, defaultBranch: repo.defaultBranch, role: wizardRepoRole.trim(), vaultSecretName: wizardVaultSecret.trim(),
+      }]);
+      setWizardLinkRepoKey('');
+    } else {
+      if (!wizardCreateName.trim()) return;
+      setWizardRepos((current) => [...current, {
+        mode: 'create', provider: gitProvider, name: wizardCreateName.trim(), role: wizardRepoRole.trim(), vaultSecretName: wizardVaultSecret.trim(),
+      }]);
+      setWizardCreateName('');
+    }
+    setWizardRepoRole(''); setWizardVaultSecret('');
+  }
+
+  function removeWizardRepo(index: number) {
+    setWizardRepos((current) => current.filter((_, i) => i !== index));
+  }
 
   const [templates, setTemplates] = useState<DevTemplateOption[]>([]);
   const [templateLoadError, setTemplateLoadError] = useState('');
@@ -530,8 +953,32 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
       });
       if (!response.ok) throw new Error();
       const created = await response.json();
+      for (const entry of wizardRepos) {
+        try {
+          if (entry.mode === 'link') {
+            await fetch(`${apiBase}/api/dev-projects/${created.id}/repositories`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                provider: entry.provider, repoIdentifier: entry.repoIdentifier, role: entry.role,
+                vaultSecretName: entry.vaultSecretName, name: entry.name, webUrl: entry.webUrl, defaultBranch: entry.defaultBranch,
+              }),
+            });
+          } else {
+            await fetch(`${apiBase}/api/dev-projects/${created.id}/repositories/create`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ provider: entry.provider, name: entry.name, role: entry.role, vaultSecretName: entry.vaultSecretName }),
+            });
+          }
+        } catch {
+          // Un dépôt en échec ne doit pas bloquer les autres ni la création du projet.
+        }
+      }
       onCreated(created);
-      setName(''); setDescription(''); setOwner(''); setStep('template'); setSelectedTemplate(null);
+      setName(''); setDescription(''); setOwner(''); setStep('template'); setSelectedTemplate(null); setWizardRepos([]);
     } catch {
       setError(s.creationFailed);
     } finally {
@@ -642,11 +1089,50 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
       {step === 'git' && (
         <section className="view-group">
           <h3>{s.gitHeading}</h3>
-          <select aria-label={s.gitAria} value={gitProvider} onChange={(event) => setGitProvider(event.target.value as 'gitlab' | 'github')}>
-            <option value="gitlab">GitLab</option>
-            <option value="github">GitHub</option>
-          </select>
           <p className="empty">{s.gitHint}</p>
+
+          <div className="item-actions">
+            <label className="note-checkbox">
+              <input type="radio" checked={gitMode === 'link'} onChange={() => setGitMode('link')} />
+              <span>{s.gitModeLink}</span>
+            </label>
+            <label className="note-checkbox">
+              <input type="radio" checked={gitMode === 'create'} onChange={() => setGitMode('create')} />
+              <span>{s.gitModeCreate}</span>
+            </label>
+          </div>
+
+          {gitMode === 'link' ? (
+            <>
+              <select aria-label={s.repoNameAria} value={wizardLinkRepoKey} onChange={(event) => setWizardLinkRepoKey(event.target.value)}>
+                <option value="">{s.selectRepoOption}</option>
+                {availableRepos.map((repo) => <option key={repo.key} value={repo.key}>{repo.name} ({repo.provider})</option>)}
+              </select>
+            </>
+          ) : (
+            <>
+              <select aria-label={s.gitAria} value={gitProvider} onChange={(event) => setGitProvider(event.target.value as 'gitlab' | 'github')}>
+                <option value="gitlab">GitLab</option>
+                <option value="github">GitHub</option>
+              </select>
+              <input aria-label={s.repoNameAria} placeholder={s.repoNamePlaceholder} value={wizardCreateName} onChange={(event) => setWizardCreateName(event.target.value)} />
+            </>
+          )}
+          <input aria-label={s.repoRoleAria} placeholder={s.repoRolePlaceholder} value={wizardRepoRole} onChange={(event) => setWizardRepoRole(event.target.value)} />
+          <input aria-label={s.vaultSecretAria} placeholder={s.vaultSecretPlaceholder} value={wizardVaultSecret} onChange={(event) => setWizardVaultSecret(event.target.value)} />
+          <button type="button" onClick={addWizardRepo}>{s.wizardAddRepo}</button>
+
+          <h4>{s.wizardAddedRepos}</h4>
+          {wizardRepos.length === 0 && <p className="empty">{s.wizardNoRepos}</p>}
+          <ul>
+            {wizardRepos.map((entry, index) => (
+              <li key={index}>
+                {entry.mode === 'link' ? s.wizardRepoModeLinked(entry.provider, entry.repoIdentifier, entry.role) : s.wizardRepoModeCreated(entry.provider, entry.name, entry.role)}
+                {' '}
+                <button type="button" onClick={() => removeWizardRepo(index)}>{s.wizardRemoveRepo}</button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -663,7 +1149,15 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
             <li>{s.summaryTemplate(selectedTemplate?.name ?? s.templateBlank)}</li>
             <li>{s.summaryStack(stack)}</li>
             <li>{s.summaryEnvironments(environments.join(', ') || s.none)}</li>
-            <li>{s.summaryGitProvider(gitProvider)}</li>
+          </ul>
+          <h4>{s.wizardAddedRepos}</h4>
+          {wizardRepos.length === 0 && <p className="empty">{s.wizardNoRepos}</p>}
+          <ul>
+            {wizardRepos.map((entry, index) => (
+              <li key={index}>
+                {entry.mode === 'link' ? s.wizardRepoModeLinked(entry.provider, entry.repoIdentifier, entry.role) : s.wizardRepoModeCreated(entry.provider, entry.name, entry.role)}
+              </li>
+            ))}
           </ul>
           {error && <p className="error" role="alert">{error}</p>}
           <button type="submit" disabled={submitting}>{submitting ? s.creating : s.createProject}</button>
