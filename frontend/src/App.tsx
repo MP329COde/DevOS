@@ -35,12 +35,12 @@ const AVAILABILITY_DOT_COLORS: Record<string, string> = {
 };
 
 // Le catalogue de templates (ex-'dev-templates') a été fusionné comme sous-onglet du panel "Développement".
-const PANEL_IDS = ['home', 'work', 'notes', 'proxmox', 'domains', 'catalog', 'docs', 'profile', 'settings-admin', 'network', 'development', 'deployment', 'tools', 'login'] as const;
+const PANEL_IDS = ['home', 'work', 'notes', 'infrastructure', 'domains', 'docs', 'profile', 'settings-admin', 'network', 'development', 'tools', 'login'] as const;
 
 // Raccourcis clavier de navigation (Alt+1..9) : mêmes 9 premières entrées que la sidebar (`navItems`,
 // section rendu), dans le même ordre. Fixé ici (plutôt que dérivé de `navItems`) pour rester utilisable
 // dans l'effet keydown déclaré tôt dans le composant, avant que `navItems` n'existe.
-const NAV_SHORTCUT_PANELS: (typeof PANEL_IDS)[number][] = ['home', 'work', 'notes', 'development', 'catalog', 'network', 'proxmox'];
+const NAV_SHORTCUT_PANELS: (typeof PANEL_IDS)[number][] = ['home', 'work', 'notes', 'development', 'infrastructure', 'network', 'domains'];
 
 // Descriptions de fonctionnement des pages, centralisées ici (documentation) plutôt
 // qu'affichées en intro sur chaque page.
@@ -207,6 +207,7 @@ export function App() {
   const isAdmin = currentRole === 'Admin';
   const [workTab, setWorkTab] = useState<WorkTab>(() => readUrlWorkTab('tasks'));
   const [networkTab, setNetworkTab] = useState<'topology' | 'haproxy' | 'certificates'>('topology');
+  const [infrastructureTab, setInfrastructureTab] = useState<'catalog' | 'proxmox' | 'deployment'>('catalog');
   const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => (localStorage.getItem('devos.theme') as ThemeMode | null) ?? 'system');
   const [themeColors, setThemeColors] = useState<Record<string, string>>(() => {
@@ -824,8 +825,8 @@ export function App() {
   };
   const navigateToNotificationResource = (resourceKind: string | null, resourceId: string | null) => {
     if (resourceKind === 'item' && resourceId) { setPanel('work'); setDetailItemId(resourceId); }
-    else if (resourceKind === 'catalog' && resourceId) { setPanel('catalog'); setHighlightedCatalogKey(resourceId); }
-    else if (resourceKind === 'deployment') { setPanel('deployment'); }
+    else if (resourceKind === 'catalog' && resourceId) { setPanel('infrastructure'); setInfrastructureTab('catalog'); setHighlightedCatalogKey(resourceId); }
+    else if (resourceKind === 'deployment') { setPanel('infrastructure'); setInfrastructureTab('deployment'); }
     else if (resourceKind === 'wazuh' && resourceId) { setPanel('home'); setHighlightedAlertId(resourceId); }
     setNotificationsOpen(false);
   };
@@ -1058,7 +1059,7 @@ export function App() {
   }
 
   useEffect(() => {
-    if (panel !== 'catalog') return;
+    if (panel !== 'infrastructure') return;
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/catalog/entities`)
       .then(async (response) => {
         if (!response.ok) throw new Error(response.status === 503 ? 'Le catalogue n’est pas configuré sur ce backend.' : 'Impossible de charger le catalogue.');
@@ -1283,11 +1284,9 @@ export function App() {
     { id: 'work', label: language === 'fr' ? 'Travail' : 'Work', badge: triage.length, icon: 'tasks', group: language === 'fr' ? 'Travail' : 'Work' },
     { id: 'notes', label: language === 'fr' ? 'Notes' : 'Notes', icon: 'doc', group: language === 'fr' ? 'Travail' : 'Work' },
     { id: 'development', label: language === 'fr' ? 'Développement' : 'Development', icon: 'layers', group: language === 'fr' ? 'Développement' : 'Development' },
-    { id: 'catalog', label: language === 'fr' ? 'Catalogue' : 'Catalog', icon: 'layers', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
+    { id: 'infrastructure', label: language === 'fr' ? 'Infrastructure' : 'Infrastructure', icon: 'layers', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'network', label: language === 'fr' ? 'Réseau' : 'Network', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
-    { id: 'proxmox', label: language === 'fr' ? 'VMs Proxmox' : 'Proxmox VMs', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'domains', label: language === 'fr' ? 'Domaines' : 'Domains', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
-    { id: 'deployment', label: language === 'fr' ? 'Déploiement' : 'Deployment', icon: 'layers', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'tools', label: language === 'fr' ? "Gestionnaire d'outils" : 'Tools hub', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     ...(isAdmin ? [{ id: 'settings-admin' as const, label: language === 'fr' ? 'Administration' : 'Administration', icon: 'gear', group: language === 'fr' ? 'Autres' : 'Other' }] : []),
     { id: 'docs', label: 'Docs', icon: 'doc', group: language === 'fr' ? 'Autres' : 'Other' },
@@ -1731,15 +1730,22 @@ export function App() {
               </section>
             )}
           </div>
-        ) : panel === 'proxmox' ? (
-          <ProxmoxPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
         ) : panel === 'domains' ? (
           <DomainsPanel />
-        ) : panel === 'deployment' ? (
-          <DeploymentPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
         ) : panel === 'tools' ? (
           <ToolsHubPanel />
-        ) : panel === 'catalog' ? (
+        ) : panel === 'infrastructure' ? (
+          <div className="items infrastructure-panel">
+            <nav className="views" aria-label="Sous-vues Infrastructure">
+              <button type="button" className={infrastructureTab === 'catalog' ? 'filter active' : 'filter'} onClick={() => setInfrastructureTab('catalog')}>Catalogue</button>
+              <button type="button" className={infrastructureTab === 'proxmox' ? 'filter active' : 'filter'} onClick={() => setInfrastructureTab('proxmox')}>Proxmox</button>
+              <button type="button" className={infrastructureTab === 'deployment' ? 'filter active' : 'filter'} onClick={() => setInfrastructureTab('deployment')}>Déploiement</button>
+            </nav>
+
+            {infrastructureTab === 'proxmox' && <ProxmoxPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />}
+            {infrastructureTab === 'deployment' && <DeploymentPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />}
+
+            {infrastructureTab === 'catalog' && (
           <div className="items catalog-panel">
             <div className="filters" aria-label="Actions catalogue"><button type="button" onClick={() => void scanCatalog()}>Scanner les dépôts GitLab</button></div>
             <section className="view-group catalog-template-form">
@@ -1791,6 +1797,8 @@ export function App() {
                 <h3>Applications ArgoCD</h3>
                 {argoApps.map((app) => <p className="empty" key={app.name}>{app.name} — {app.syncStatus} / {app.healthStatus}</p>)}
               </section>
+            )}
+          </div>
             )}
           </div>
         ) : panel === 'docs' ? (
