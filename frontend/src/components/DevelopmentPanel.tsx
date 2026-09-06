@@ -175,7 +175,9 @@ const strings = {
     lastActivity: (value: string) => `Dernière activité : ${value}`,
     notAvailable: 'Non disponible',
     projectNameRequired: 'Le titre du projet est requis.',
-    creationFailed: 'La création du projet a échoué. Vérifiez que le backend est démarré.',
+    errorCreate: (detail?: string) => detail
+      ? `La création du projet a échoué : ${detail}`
+      : 'La création du projet a échoué. Vérifiez que le backend est démarré.',
     wizardStepsAria: 'Étapes de création de projet',
     templateHeading: 'Template de départ',
     templateHint: 'Choisissez un template du catalogue (interne ou communautaire) ou partez d\'un projet vierge ; ce choix reste modifiable jusqu\'au résumé.',
@@ -262,6 +264,7 @@ const strings = {
     wizardRemoveRepo: 'Retirer',
     wizardRepoModeLinked: (provider: string, identifier: string, role: string) => `Lier ${provider}:${identifier} (${role})`,
     wizardRepoModeCreated: (provider: string, name: string, role: string) => `Créer ${provider}:${name} (${role})`,
+    wizardRepoFieldsRequired: 'Rôle et nom du secret Vault requis.',
   },
   en: {
     statusLabels: {
@@ -311,7 +314,9 @@ const strings = {
     lastActivity: (value: string) => `Last activity: ${value}`,
     notAvailable: 'Not available',
     projectNameRequired: 'The project title is required.',
-    creationFailed: 'Failed to create the project. Check that the backend is running.',
+    errorCreate: (detail?: string) => detail
+      ? `Failed to create the project: ${detail}`
+      : 'Failed to create the project. Check that the backend is running.',
     wizardStepsAria: 'Project creation steps',
     templateHeading: 'Starting template',
     templateHint: 'Choose a template from the catalog (internal or community) or start from a blank project; this choice can still be changed until the summary.',
@@ -398,6 +403,7 @@ const strings = {
     wizardRemoveRepo: 'Remove',
     wizardRepoModeLinked: (provider: string, identifier: string, role: string) => `Link ${provider}:${identifier} (${role})`,
     wizardRepoModeCreated: (provider: string, name: string, role: string) => `Create ${provider}:${name} (${role})`,
+    wizardRepoFieldsRequired: 'Role and Vault secret name are required.',
   },
 } as const;
 
@@ -894,6 +900,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
   const [wizardRepoRole, setWizardRepoRole] = useState('');
   const [wizardVaultSecret, setWizardVaultSecret] = useState('');
   const [wizardCreateName, setWizardCreateName] = useState('');
+  const [wizardRepoError, setWizardRepoError] = useState('');
 
   useEffect(() => {
     void fetch(`${apiBase}/api/extras/dev/repos`)
@@ -902,7 +909,10 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
   }, [apiBase]);
 
   function addWizardRepo() {
-    if (!wizardRepoRole.trim() || !wizardVaultSecret.trim()) return;
+    if (!wizardRepoRole.trim() || !wizardVaultSecret.trim()) {
+      setWizardRepoError(s.wizardRepoFieldsRequired);
+      return;
+    }
     if (gitMode === 'link') {
       const repo = availableRepos.find((r) => r.key === wizardLinkRepoKey);
       if (!repo) return;
@@ -918,6 +928,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
       }]);
       setWizardCreateName('');
     }
+    setWizardRepoError('');
     setWizardRepoRole(''); setWizardVaultSecret('');
   }
 
@@ -971,7 +982,10 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
           deliveryGoal: s.deliveryGoal(selectedTemplate?.name ?? s.templateBlank, stack, environments.join(', ') || s.none, gitProvider),
         }),
       });
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data && typeof data.error === 'string' ? data.error : undefined);
+      }
       const created = await response.json();
       for (const entry of wizardRepos) {
         try {
@@ -999,8 +1013,8 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
       }
       onCreated(created);
       setName(''); setDescription(''); setOwner(''); setStep('template'); setSelectedTemplate(null); setWizardRepos([]);
-    } catch {
-      setError(s.creationFailed);
+    } catch (err) {
+      setError(err instanceof Error && err.message ? s.errorCreate(err.message) : s.errorCreate());
     } finally {
       setSubmitting(false);
     }
@@ -1141,6 +1155,7 @@ function NewProjectWizard({ apiBase, onCreated }: { apiBase: string; onCreated: 
           <input aria-label={s.repoRoleAria} placeholder={s.repoRolePlaceholder} value={wizardRepoRole} onChange={(event) => setWizardRepoRole(event.target.value)} />
           <input aria-label={s.vaultSecretAria} placeholder={s.vaultSecretPlaceholder} value={wizardVaultSecret} onChange={(event) => setWizardVaultSecret(event.target.value)} />
           <button type="button" onClick={addWizardRepo}>{s.wizardAddRepo}</button>
+          {wizardRepoError && <p className="error" role="alert">{wizardRepoError}</p>}
 
           <h4>{s.wizardAddedRepos}</h4>
           {wizardRepos.length === 0 && <p className="empty">{s.wizardNoRepos}</p>}
