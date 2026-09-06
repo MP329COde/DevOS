@@ -218,7 +218,9 @@ model DevProject {
   environments   Environment[]
   permissions    ProjectPermission[]
   timelineEvents TimelineEvent[]
-  cicdConfig     DevProjectCiCdConfig?
+  cicdConfigs    DevProjectCiCdConfig[]
+  resources      ProjectResource[]
+  catalogEntities CatalogEntity[]
   createdAt      DateTime              @default(now()) @map("created_at")
   updatedAt      DateTime              @updatedAt @map("updated_at")
 
@@ -233,18 +235,27 @@ enum CiCdProvider {
 }
 
 /**
- * Liaison d'un DevProject à son dépôt CI/CD réel (AM.7). Le token n'est jamais stocké en clair
- * en base : seul un nom de secret Vault (`vaultSecretName`) y est persisté, la valeur elle-même
- * vit dans Vault KV2 via le même mécanisme que SecretsService (backend/src/tasks/secrets-service.ts),
- * sous un mount dédié `devos-cicd-tokens` distinct des secrets applicatifs génériques.
+ * Liaison d'un DevProject à un de ses dépôts CI/CD réels (AM.7). Un projet peut désormais avoir
+ * plusieurs dépôts liés (ex: backend/frontend/infra), chacun avec un `role` texte libre — d'où
+ * l'unicité déplacée sur (devProjectId, provider, repoIdentifier) plutôt que sur devProjectId
+ * seul. Le token n'est jamais stocké en clair en base : seul un nom de secret Vault
+ * (`vaultSecretName`) y est persisté, la valeur elle-même vit dans Vault KV2 via le même
+ * mécanisme que SecretsService (backend/src/tasks/secrets-service.ts), sous un mount dédié
+ * `devos-cicd-tokens` distinct des secrets applicatifs génériques.
  */
 model DevProjectCiCdConfig {
   id              String       @id @default(uuid()) @db.Uuid
-  devProjectId    String       @unique @map("dev_project_id") @db.Uuid
+  devProjectId    String       @map("dev_project_id") @db.Uuid
   devProject      DevProject   @relation(fields: [devProjectId], references: [id], onDelete: Cascade)
   provider        CiCdProvider
+  /// Rôle libre du dépôt dans le projet (ex: "backend", "frontend", "infra", "autre")
+  role            String       @db.VarChar(50)
+  /// Nom lisible du dépôt, distinct de `repoIdentifier` (ex: pour l'affichage frontend)
+  name            String?      @db.VarChar(200)
   /// GitLab : project ID (ex "12345" ou "groupe/projet") ; GitHub : "owner/repo"
   repoIdentifier  String       @map("repo_identifier") @db.VarChar(300)
+  webUrl          String?      @map("web_url") @db.VarChar(500)
+  defaultBranch   String?      @map("default_branch") @db.VarChar(100)
   /// Nom de la clé Vault KV2 sous le mount `devos-cicd-tokens` (jamais la valeur elle-même)
   vaultSecretName String       @map("vault_secret_name") @db.VarChar(150)
   argoAppName     String?      @map("argo_app_name") @db.VarChar(200)
@@ -253,7 +264,30 @@ model DevProjectCiCdConfig {
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
+  @@unique([devProjectId, provider, repoIdentifier])
+  @@index([devProjectId])
   @@map("dev_project_cicd_configs")
+}
+
+/**
+ * Ressource externe rattachée à un DevProject à titre indicatif (AM.7+) : base de données,
+ * cache, bucket... Volontairement simple (texte libre pour `type`/`host`/`note`) : pas de
+ * connexion réelle ni de credentials, juste un aide-mémoire pour l'équipe (le stockage de
+ * secrets réels reste le rôle de SecretsService/Vault).
+ */
+model ProjectResource {
+  id           String     @id @default(uuid()) @db.Uuid
+  devProjectId String     @map("dev_project_id") @db.Uuid
+  devProject   DevProject @relation(fields: [devProjectId], references: [id], onDelete: Cascade)
+  name         String     @db.VarChar(200)
+  type         String     @db.VarChar(50)
+  host         String?    @db.VarChar(300)
+  note         String?    @db.Text
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@index([devProjectId])
+  @@map("project_resources")
 }
 
 /**
@@ -430,23 +464,28 @@ model DocLink {
 }
 
 model CatalogEntity {
-  id            String   @id @default(uuid()) @db.Uuid
-  kind          String   @db.VarChar(50)
-  name          String   @db.VarChar(200)
-  sourceProject String   @map("source_project") @db.VarChar(200)
-  description   String?  @db.Text
-  type          String   @db.VarChar(50)
-  lifecycle     String   @db.VarChar(50)
-  owner         String   @db.VarChar(200)
-  system        String?  @db.VarChar(100)
-  dependsOn     String[] @map("depends_on")
-  providesApis  String[] @map("provides_apis")
+  id            String      @id @default(uuid()) @db.Uuid
+  kind          String      @db.VarChar(50)
+  name          String      @db.VarChar(200)
+  sourceProject String      @map("source_project") @db.VarChar(200)
+  description   String?     @db.Text
+  type          String      @db.VarChar(50)
+  lifecycle     String      @db.VarChar(50)
+  owner         String      @db.VarChar(200)
+  system        String?     @db.VarChar(100)
+  dependsOn     String[]    @map("depends_on")
+  providesApis  String[]    @map("provides_apis")
   annotations   Json
   links         Json
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  /// Rattachement optionnel au DevProject dont cette entité est issue (AM.7+) ; `SetNull` à la
+  /// suppression du projet pour ne jamais perdre l'entrée de catalogue elle-même.
+  devProjectId  String?     @map("dev_project_id") @db.Uuid
+  devProject    DevProject? @relation(fields: [devProjectId], references: [id], onDelete: SetNull)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
 
   @@unique([kind, name])
+  @@index([devProjectId])
   @@map("catalog_entities")
 }
 

@@ -154,6 +154,19 @@ export async function getJobLog(gitlab: GitLabPipelinesClientOptions, projectId:
   return response.text();
 }
 
+/** Crée un nouveau dépôt (projet GitLab) vide, pour l'assistant "créer et lier un dépôt" (AM.7+). */
+export async function createGitLabProject(gitlab: GitLabPipelinesClientOptions, name: string): Promise<{ id: number; path_with_namespace: string; web_url: string; default_branch: string }> {
+  const fetchImpl = gitlab.fetchImpl ?? fetch;
+  const token = await gitlab.tokenProvider.getToken();
+  const response = await fetchImpl(`${gitlab.baseUrl}/projects`, {
+    method: 'POST',
+    headers: { 'private-token': token, 'content-type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) throw new Error(`GitLab API request failed (${response.status})`);
+  return (await response.json()) as { id: number; path_with_namespace: string; web_url: string; default_branch: string };
+}
+
 /** Relance (retry) une pipeline entière. */
 export async function retryPipeline(gitlab: GitLabPipelinesClientOptions, projectId: string, pipelineId: number): Promise<GitLabPipelineDetail> {
   const fetchImpl = gitlab.fetchImpl ?? fetch;

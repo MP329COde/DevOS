@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { handleCiCdRequest, type CiCdHttpService } from './cicd-http.js';
+import { handleCiCdRequest, type CiCdHttpService, type RepositoryResolverService } from './cicd-http.js';
 
 test('returns 503 when the pipelines integration is not configured', async () => {
   const response = await handleCiCdRequest('GET', '/api/dev-cicd/group%2Fproject/pipelines', 'Admin', {});
@@ -91,4 +91,32 @@ test('returns 503 for the security scan when not configured', async () => {
 test('returns 404 for unknown routes', async () => {
   const response = await handleCiCdRequest('GET', '/api/dev-cicd/unknown', 'Admin', {});
   assert.equal(response.status, 404);
+});
+
+test('returns 503 for by-project pipelines when the repository resolver is not configured', async () => {
+  const response = await handleCiCdRequest('GET', '/api/dev-cicd/by-project/p1/pipelines', 'Admin', {});
+  assert.equal(response.status, 503);
+});
+
+test('resolves pipelines per linked repository, tolerant to per-repo failures', async () => {
+  const repositoryService: RepositoryResolverService = {
+    listRepositories: async () => [
+      { id: 'c1', role: 'backend', name: 'API', repoIdentifier: 'group/api' },
+      { id: 'c2', role: 'frontend', name: 'Web', repoIdentifier: 'group/web' },
+    ],
+  };
+  const service: CiCdHttpService = {
+    listPipelines: async (projectId) => {
+      if (projectId === 'group/api') return [{ id: 1, status: 'success', ref: 'main', sha: 's', webUrl: 'u', createdAt: 'c', updatedAt: 'u2', durationSeconds: 10, authorName: 'A', commitTitle: 'msg' }];
+      throw new Error('boom');
+    },
+  };
+  const response = await handleCiCdRequest('GET', '/api/dev-cicd/by-project/p1/pipelines', 'Admin', service, undefined, undefined, repositoryService);
+  assert.equal(response.status, 200);
+  const body = response.body as Array<{ role: string; pipelines?: unknown[]; error?: string }>;
+  assert.equal(body.length, 2);
+  assert.equal(body[0].role, 'backend');
+  assert.equal(body[0].pipelines?.length, 1);
+  assert.equal(body[1].role, 'frontend');
+  assert.equal(body[1].error, 'boom');
 });

@@ -20,6 +20,8 @@ export const TIMELINE_EVENT_TYPES = [
   'item_created',
   'item_updated',
   'comment',
+  'repository.linked',
+  'repository.created',
 ] as const;
 export type TimelineEventType = (typeof TIMELINE_EVENT_TYPES)[number] | (string & {});
 

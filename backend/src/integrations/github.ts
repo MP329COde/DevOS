@@ -179,6 +179,19 @@ export class GitHubClient {
     return this.request<GitHubRepo>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);
   }
 
+  /**
+   * Crée un nouveau dépôt vide sous le compte authentifié, pour l'assistant "créer et lier un
+   * dépôt" (AM.7+). GitHub n'a pas de notion d'organisation cible ici — le token détermine le
+   * propriétaire (compte utilisateur), suffisant pour l'usage DevOS actuel.
+   */
+  public async createRepo(name: string): Promise<GitHubRepo> {
+    return this.request<GitHubRepo>('/user/repos', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, private: true }),
+    });
+  }
+
   public async *listBranches(owner: string, repo: string): AsyncGenerator<GitHubBranch> {
     let url: string | undefined = `${this.options.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`;
     while (url) {

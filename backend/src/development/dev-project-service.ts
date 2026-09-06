@@ -1,5 +1,13 @@
 import type { DevProject, DevProjectStatus, PrismaClient } from '@prisma/client';
 
+import { resolveReposForDevProject, type RepositoryResolverService } from '../catalog/cicd-http.js';
+import type { GitLabPipelineDetail } from '../integrations/gitlab-pipelines.js';
+
+/** Sous-ensemble de `CiCdHttpService` nécessaire au dashboard (juste la lecture des pipelines). */
+export interface DashboardCiCdService {
+  listPipelines?(projectId: string): Promise<GitLabPipelineDetail[]>;
+}
+
 export interface DevProjectInput {
   name: string;
   description?: string | null;
@@ -45,7 +53,11 @@ const NOT_AVAILABLE: DevProjectDashboardSection = { available: false, summary: '
  * erreur ou un champ manquant, pour que la page reste utilisable dès cette fondation.
  */
 export class DevProjectService {
-  public constructor(private readonly database: PrismaClient) {}
+  public constructor(
+    private readonly database: PrismaClient,
+    private readonly repositoryService?: RepositoryResolverService,
+    private readonly cicdService?: DashboardCiCdService,
+  ) {}
 
   public list(): Promise<DevProject[]> {
     return this.database.devProject.findMany({ orderBy: { updatedAt: 'desc' } });
@@ -136,11 +148,31 @@ export class DevProjectService {
       progress: { openTasks, totalTasks, percentDone },
       lastActivityAt,
       lastRelease: NOT_AVAILABLE,
-      pipeline: NOT_AVAILABLE,
+      pipeline: await this.pipelineSection(id),
       deployment: NOT_AVAILABLE,
       openTasks: totalTasks > 0 ? { available: true, summary: `${openTasks} tâche(s) ouverte(s) sur ${totalTasks}` } : NOT_AVAILABLE,
       knownBugs: NOT_AVAILABLE,
       security: NOT_AVAILABLE,
     };
+  }
+
+  /**
+   * Résume l'état des pipelines des dépôts liés au projet (AM.7+, plusieurs dépôts possibles).
+   * `NOT_AVAILABLE` si aucun dépôt n'est lié, si le provider CI/CD n'est pas configuré, ou si
+   * l'appel échoue (voir `resolveReposForDevProject`, tolérant par dépôt) — jamais une erreur
+   * qui casserait le dashboard.
+   */
+  private async pipelineSection(devProjectId: string): Promise<DevProjectDashboardSection> {
+    if (!this.repositoryService || !this.cicdService) return NOT_AVAILABLE;
+    try {
+      const results = await resolveReposForDevProject(devProjectId, this.repositoryService, this.cicdService);
+      if (results.length === 0) return NOT_AVAILABLE;
+      const withPipelines = results.filter((r) => r.pipelines && r.pipelines.length > 0);
+      if (withPipelines.length === 0) return NOT_AVAILABLE;
+      const latestStatuses = withPipelines.map((r) => `${r.role}: ${r.pipelines![0].status}`);
+      return { available: true, summary: latestStatuses.join(', ') };
+    } catch {
+      return NOT_AVAILABLE;
+    }
   }
 }

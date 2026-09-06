@@ -4,6 +4,51 @@ import type { GitLabPipelineDetail, GitLabPipelineJob } from '../integrations/gi
 import type { ArgoCDSyncHistoryEntry } from './argocd.js';
 import type { TrivyVulnerabilitySummary } from './harbor-trivy.js';
 
+/** Sous-ensemble minimal de `DevProjectCiCdConfig` nécessaire pour résoudre les pipelines d'un projet. */
+export interface RepoRef {
+  id: string;
+  role: string;
+  name: string | null;
+  repoIdentifier: string;
+}
+
+export interface RepositoryResolverService {
+  listRepositories(devProjectId: string): Promise<RepoRef[]>;
+}
+
+export interface PipelinesByRepo {
+  cicdConfigId: string;
+  role: string;
+  name: string | null;
+  repoIdentifier: string;
+  pipelines?: GitLabPipelineDetail[];
+  error?: string;
+}
+
+/**
+ * Résout les dépôts liés d'un `DevProject` (AM.7+, plusieurs dépôts possibles) puis récupère les
+ * pipelines de chacun. Tolérant aux erreurs par dépôt : un dépôt en échec (provider mal
+ * configuré, dépôt renommé...) n'empêche pas les autres de répondre.
+ */
+export async function resolveReposForDevProject(
+  devProjectId: string,
+  repositoryService: RepositoryResolverService,
+  service: Pick<CiCdHttpService, 'listPipelines'>,
+): Promise<PipelinesByRepo[]> {
+  const repos = await repositoryService.listRepositories(devProjectId);
+  return Promise.all(
+    repos.map(async (repo): Promise<PipelinesByRepo> => {
+      const base = { cicdConfigId: repo.id, role: repo.role, name: repo.name, repoIdentifier: repo.repoIdentifier };
+      if (!service.listPipelines) return { ...base, error: 'GitLab (pipelines) is not configured' };
+      try {
+        return { ...base, pipelines: await service.listPipelines(repo.repoIdentifier) };
+      } catch (error) {
+        return { ...base, error: error instanceof Error ? error.message : 'Failed to fetch pipelines' };
+      }
+    }),
+  );
+}
+
 /**
  * Endpoints CI/CD par projet (AM.7) : pipelines/étapes/logs/relance (GitLab), historique de
  * déploiement (ArgoCD, réutilisé tel quel — pas de rollback réel disponible côté ArgoCD en
@@ -33,10 +78,18 @@ export async function handleCiCdRequest(
   service: CiCdHttpService,
   recordEvent?: (input: TimelineEventInput) => Promise<unknown>,
   actorEmail?: string,
+  repositoryService?: RepositoryResolverService,
 ): Promise<CiCdHttpResponse> {
   const [path] = url.split('?');
 
   try {
+    const byProject = path.match(/^\/api\/dev-cicd\/by-project\/([^/]+)\/pipelines$/);
+    if (byProject && method === 'GET') {
+      if (!repositoryService) return { status: 503, body: { error: 'Repository resolution is not configured' } };
+      const results = await resolveReposForDevProject(decodeURIComponent(byProject[1]), repositoryService, service);
+      return { status: 200, body: results };
+    }
+
     const pipelines = path.match(/^\/api\/dev-cicd\/([^/]+)\/pipelines$/);
     if (pipelines && method === 'GET') {
       return call(service.listPipelines, 'GitLab (pipelines)', () => service.listPipelines!(decodeURIComponent(pipelines[1])));

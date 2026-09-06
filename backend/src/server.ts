@@ -105,6 +105,10 @@ import { handleReleaseRequest, type ReleaseHttpService } from './development/rel
 import { ReleaseService } from './development/release-service.js';
 import { handleEnvironmentRequest, type EnvironmentHttpService } from './development/environment-http.js';
 import { EnvironmentService } from './development/environment-service.js';
+import { handleRepositoryRequest, type RepositoryHttpService } from './development/repository-http.js';
+import { RepositoryService, type RepositoryProviderClients } from './development/repository-service.js';
+import { handleProjectResourceRequest, type ProjectResourceHttpService } from './development/project-resource-http.js';
+import { ProjectResourceService } from './development/project-resource-service.js';
 import { handleProfileRequest, type ProfileActor, type ProfileHttpService } from './profiles/profile-http.js';
 import { ProfileService } from './profiles/profile-service.js';
 import { saveAvatarImage, deleteAvatarImage, readUploadedFile } from './profiles/avatar-storage.js';
@@ -155,6 +159,8 @@ export function createServer(
   sessionAuth?: SessionRoleResolver,
   onboarding?: OnboardingHttpService,
   domains?: DomainHttpService,
+  repositories?: RepositoryHttpService,
+  projectResources?: ProjectResourceHttpService,
 ) {
   async function resolveRole(request: IncomingMessage): Promise<Role | undefined> {
     if (!sessionAuth) return undefined;
@@ -267,6 +273,27 @@ export function createServer(
       if (!profiles) { writeJson(response, 503, { error: 'Profiles/permissions module is not configured' }); return; }
       const actor = await resolveActor(request);
       const result = await handleProfileRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), actor, profiles);
+      if (result.status === 204) { response.writeHead(204); response.end(); return; }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    // Doit être vérifié avant le bloc générique /api/dev-projects (même contrainte que /permissions ci-dessus).
+    if (request.url?.match(/^\/api\/dev-projects\/[^/]+\/repositories(\/[^/]+)?(\?|$)/)) {
+      if (!repositories) { writeJson(response, 503, { error: 'Repository management is not configured' }); return; }
+      const role = await resolveRole(request);
+      const actor = await resolveActor(request);
+      const result = await handleRepositoryRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, actor?.email, repositories);
+      if (result.status === 204) { response.writeHead(204); response.end(); return; }
+      writeJson(response, result.status, result.body);
+      return;
+    }
+
+    // Doit être vérifié avant le bloc générique /api/dev-projects (même contrainte que /permissions ci-dessus).
+    if (request.url?.match(/^\/api\/dev-projects\/[^/]+\/resources(\/[^/]+)?(\?|$)/)) {
+      if (!projectResources) { writeJson(response, 503, { error: 'Project resources are not configured' }); return; }
+      const role = await resolveRole(request);
+      const result = await handleProjectResourceRequest(request.method ?? 'GET', request.url, await readJsonIfNeeded(request), role, projectResources);
       if (result.status === 204) { response.writeHead(204); response.end(); return; }
       writeJson(response, result.status, result.body);
       return;
@@ -586,6 +613,7 @@ export function createServer(
         cicd,
         devActivity ? (input) => devActivity.recordEvent(input) : undefined,
         actor?.email,
+        repositories,
       );
       writeJson(response, result.status, result.body);
       return;
@@ -637,7 +665,6 @@ if (require.main === module) {
     const comments = buildCommentsServiceFromEnv(database);
     const roadmapService = new RoadmapService(database);
     const roadmap: RoadmapHttpService = { get: () => roadmapService.get() };
-    const devProjects: DevProjectHttpService = new DevProjectService(database);
     const devTemplates: DevTemplateHttpService = new DevTemplateService(database);
     const deployment = buildDeploymentServiceFromEnv();
     const workflowService = new WorkflowService(database);
@@ -651,6 +678,11 @@ if (require.main === module) {
     const timelineEvents = new TimelineEventService(database);
     const devActivity: DevActivityHttpService = new DevActivityService(database, timelineEvents);
     const cicd = buildCiCdServiceFromEnv();
+    const repositoryProviders = buildRepositoryProviderClientsFromEnv();
+    const repositoryServiceInstance = new RepositoryService(database, repositoryProviders, timelineEvents);
+    const repositories: RepositoryHttpService = repositoryServiceInstance;
+    const projectResources: ProjectResourceHttpService = new ProjectResourceService(database);
+    const devProjects: DevProjectHttpService = new DevProjectService(database, repositoryServiceInstance, cicd);
     const releases: ReleaseHttpService = new ReleaseService(database, timelineEvents);
     const environments: EnvironmentHttpService = new EnvironmentService(database);
     const profileService = new ProfileService(database);
@@ -662,7 +694,7 @@ if (require.main === module) {
     const keycloakAdmin = await buildKeycloakAdminClientFromEnv();
     const onboarding: OnboardingHttpService = new OnboardingService({ database, settings: settingsService, profiles: profileService, keycloakAdmin });
     const domains = await buildDomainServiceFromEnv(database);
-    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, roadmap, devProjects, devTemplates, deployment, workflow, cicd, devActivity, releases, environments, profiles, search, updates, sessionAuth, onboarding, domains).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
+    createServer(auth, items, cycles, triage, time, undefined, undefined, undefined, dashboard, haproxy, catalog, infra, docs, workspace, extras, settingsService, integrationBuilder, secrets, calendar, notifications, customWidgets, comments, roadmap, devProjects, devTemplates, deployment, workflow, cicd, devActivity, releases, environments, profiles, search, updates, sessionAuth, onboarding, domains, repositories, projectResources).listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   })();
 }
 
@@ -1327,6 +1359,25 @@ function buildCiCdServiceFromEnv(): CiCdHttpService | undefined {
   if (argocd) service.getDeploymentHistory = (appName) => argocd.getSyncHistory(appName);
   if (harbor) service.getSecuritySummary = (project, repository, tag) => harbor.getVulnerabilitySummary(project, repository, tag);
   return service;
+}
+
+/**
+ * Clients GitLab/GitHub pour la création de dépôts distants (AM.7+) : réutilise les mêmes
+ * variables d'environnement que `buildCiCdServiceFromEnv`, un client par provider configuré.
+ */
+function buildRepositoryProviderClientsFromEnv(): RepositoryProviderClients {
+  const gitlabBaseUrl = process.env.GITLAB_BASE_URL;
+  const gitlabToken = process.env.GITLAB_TOKEN;
+  const githubToken = process.env.GITHUB_TOKEN;
+
+  const clients: RepositoryProviderClients = {};
+  if (gitlabBaseUrl && gitlabToken) {
+    clients.gitlab = { baseUrl: gitlabBaseUrl, tokenProvider: { async getToken() { return gitlabToken; } } };
+  }
+  if (githubToken) {
+    clients.github = new GitHubClient({ baseUrl: process.env.GITHUB_BASE_URL ?? 'https://api.github.com', token: githubToken });
+  }
+  return clients;
 }
 
 function buildInfraServiceFromEnv(database: PrismaClient): InfraHttpService | undefined {
