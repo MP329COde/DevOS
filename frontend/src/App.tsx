@@ -1743,8 +1743,8 @@ export function App() {
           <div className="items catalog-panel">
             <div className="filters" aria-label="Actions catalogue"><button type="button" onClick={() => void scanCatalog()}>Scanner les dépôts GitLab</button></div>
             <section className="view-group catalog-template-form">
-              <h3>Créer un projet depuis un template</h3>
-              <p className="empty">Génère un nouveau document <code>catalog-info.yaml</code> à partir d'un template existant du catalogue. Rien n'est poussé vers GitLab automatiquement — le document généré reste à copier manuellement dans le nouveau dépôt.</p>
+              <h3>Générer un catalog-info.yaml depuis un template</h3>
+              <p className="empty">Génère un nouveau document <code>catalog-info.yaml</code> à partir d'un template existant du catalogue — pour enregistrer un service/dépôt déjà existant dans le catalogue, pas pour créer un nouveau projet DevOS (voir Développement → Nouveau projet pour ça). Rien n'est poussé vers GitLab automatiquement — le document généré reste à copier manuellement dans le dépôt concerné.</p>
               <form className="new-item" onSubmit={(event) => void createProjectFromTemplate(event)}>
                 <select aria-label="Template" value={templateSource} onChange={(event) => setTemplateSource(event.target.value)} required>
                   <option value="">Choisir un template…</option>
