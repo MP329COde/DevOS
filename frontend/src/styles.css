@@ -442,6 +442,9 @@ input:not([type="checkbox"]) { flex: 1; min-width: 0; }
 .status-badge-warn { color: var(--accent-2); background: rgba(var(--rgb-accent2), .12); }
 .status-badge-ok { color: var(--status-ok); background: rgba(47, 107, 58, .12); }
 .empty, .error { font: 14px Arial, sans-serif; }.error { color: var(--accent-2); }
+.loading-state { display: flex; align-items: center; gap: 8px; font: 14px Arial, sans-serif; color: var(--muted, #888); }
+.loading-state-spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; opacity: .5; animation: loading-state-spin .7s linear infinite; }
+@keyframes loading-state-spin { to { transform: rotate(360deg); } }
 .status { max-width: 1120px; margin: 24px auto 0; }
 [cmdk-dialog] { position: fixed; inset: 0; display: grid; place-items: start center; padding-top: 16vh; background: rgba(var(--rgb-text), .38); }
 [cmdk-dialog] > [cmdk-root] { width: min(92vw, 520px); overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 12px 32px rgba(var(--rgb-text), .22); }

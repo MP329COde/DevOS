@@ -17,6 +17,7 @@ import { DevelopmentPanel } from './components/DevelopmentPanel.js';
 import { TaskDetailPanel } from './components/TaskDetailPanel.js';
 import { ActivityTimelineDrawer } from './components/ActivityTimelineDrawer.js';
 import { Icon } from './components/Icon.js';
+import { LoadingState } from './components/LoadingState.js';
 import { Logo } from './components/Logo.js';
 import { readUrlFilter, readUrlPanel, useUrlState } from './hooks/useUrlState.js';
 import { THEME_COLOR_SETTINGS, THEME_PRESETS, type ThemeMode, type ThemePreset } from './theme.js';
@@ -34,12 +35,12 @@ const AVAILABILITY_DOT_COLORS: Record<string, string> = {
 };
 
 // Le catalogue de templates (ex-'dev-templates') a été fusionné comme sous-onglet du panel "Développement".
-const PANEL_IDS = ['home', 'work', 'notes', 'haproxy', 'proxmox', 'domains', 'catalog', 'docs', 'profile', 'settings-admin', 'network', 'development', 'deployment', 'tools', 'login'] as const;
+const PANEL_IDS = ['home', 'work', 'notes', 'proxmox', 'domains', 'catalog', 'docs', 'profile', 'settings-admin', 'network', 'development', 'deployment', 'tools', 'login'] as const;
 
 // Raccourcis clavier de navigation (Alt+1..9) : mêmes 9 premières entrées que la sidebar (`navItems`,
 // section rendu), dans le même ordre. Fixé ici (plutôt que dérivé de `navItems`) pour rester utilisable
 // dans l'effet keydown déclaré tôt dans le composant, avant que `navItems` n'existe.
-const NAV_SHORTCUT_PANELS: (typeof PANEL_IDS)[number][] = ['home', 'work', 'notes', 'development', 'catalog', 'network', 'haproxy', 'proxmox'];
+const NAV_SHORTCUT_PANELS: (typeof PANEL_IDS)[number][] = ['home', 'work', 'notes', 'development', 'catalog', 'network', 'proxmox'];
 
 // Descriptions de fonctionnement des pages, centralisées ici (documentation) plutôt
 // qu'affichées en intro sur chaque page.
@@ -205,6 +206,7 @@ export function App() {
   }, []);
   const isAdmin = currentRole === 'Admin';
   const [workTab, setWorkTab] = useState<WorkTab>(() => readUrlWorkTab('tasks'));
+  const [networkTab, setNetworkTab] = useState<'topology' | 'haproxy' | 'certificates'>('topology');
   const [navLayout, setNavLayout] = useState<'sidebar' | 'topbar'>(() => (localStorage.getItem('devos.navLayout') as 'sidebar' | 'topbar' | null) ?? 'sidebar');
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => (localStorage.getItem('devos.theme') as ThemeMode | null) ?? 'system');
   const [themeColors, setThemeColors] = useState<Record<string, string>>(() => {
@@ -1000,7 +1002,7 @@ export function App() {
   }, [panel]);
 
   useEffect(() => {
-    if (panel !== 'haproxy') return;
+    if (panel !== 'network') return;
     void fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api/haproxy/backends`)
       .then(async (response) => {
         if (!response.ok) throw new Error(response.status === 503 ? 'HAProxy n’est pas configuré sur ce backend.' : 'Impossible de charger les backends HAProxy.');
@@ -1282,8 +1284,7 @@ export function App() {
     { id: 'notes', label: language === 'fr' ? 'Notes' : 'Notes', icon: 'doc', group: language === 'fr' ? 'Travail' : 'Work' },
     { id: 'development', label: language === 'fr' ? 'Développement' : 'Development', icon: 'layers', group: language === 'fr' ? 'Développement' : 'Development' },
     { id: 'catalog', label: language === 'fr' ? 'Catalogue' : 'Catalog', icon: 'layers', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
-    { id: 'network', label: language === 'fr' ? 'Topologie réseau' : 'Network topology', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
-    { id: 'haproxy', label: 'Infra HAProxy', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
+    { id: 'network', label: language === 'fr' ? 'Réseau' : 'Network', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'proxmox', label: language === 'fr' ? 'VMs Proxmox' : 'Proxmox VMs', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'domains', label: language === 'fr' ? 'Domaines' : 'Domains', icon: 'network', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
     { id: 'deployment', label: language === 'fr' ? 'Déploiement' : 'Deployment', icon: 'layers', group: language === 'fr' ? 'Infrastructure' : 'Infrastructure' },
@@ -1663,12 +1664,19 @@ export function App() {
         )}
         </>) : panel === 'network' ? (
           <div className="items network-panel">
-            {networkError && <p className="error" role="alert">{networkError}</p>}
-            {!networkError && !networkGraph && <p className="empty">Chargement de la topologie…</p>}
-            {!networkError && networkGraph && <NetworkGraph nodes={networkGraph.nodes} edges={networkGraph.edges} />}
-          </div>
-        ) : panel === 'haproxy' ? (
-          <div className="items haproxy-panel">
+            <nav className="views" aria-label="Sous-vues Réseau">
+              <button type="button" className={networkTab === 'topology' ? 'filter active' : 'filter'} onClick={() => setNetworkTab('topology')}>Topologie</button>
+              <button type="button" className={networkTab === 'haproxy' ? 'filter active' : 'filter'} onClick={() => setNetworkTab('haproxy')}>HAProxy</button>
+              <button type="button" className={networkTab === 'certificates' ? 'filter active' : 'filter'} onClick={() => setNetworkTab('certificates')}>Certificats</button>
+            </nav>
+
+            {networkTab === 'topology' && (<>
+              {networkError && <p className="error" role="alert">{networkError}</p>}
+              {!networkError && !networkGraph && <LoadingState label="Chargement de la topologie…" />}
+              {!networkError && networkGraph && <NetworkGraph nodes={networkGraph.nodes} edges={networkGraph.edges} />}
+            </>)}
+
+            {networkTab === 'haproxy' && (<>
             {haproxyError && <p className="error" role="alert">{haproxyError}</p>}
             {!haproxyError && haproxyBackends.length === 0 && haproxyFrontends.length === 0 && <p className="empty">Aucune configuration HAProxy à afficher.</p>}
 
@@ -1711,14 +1719,17 @@ export function App() {
                 {(haproxyServers[backend.name] ?? []).length === 0 && <p className="empty">Aucun serveur pour ce backend.</p>}
               </section>
             ))}
+            </>)}
 
-            <section className="view-group">
-              <h3>Certificats TLS</h3>
-              {haproxyCertificates.map((cert) => (
-                <p className="empty" key={cert.storageName}>{cert.storageName}{cert.description ? ` — ${cert.description}` : ''}</p>
-              ))}
-              {haproxyCertificates.length === 0 && <p className="empty">Aucun certificat TLS listé (Data Plane API non configurée ou magasin vide).</p>}
-            </section>
+            {networkTab === 'certificates' && (
+              <section className="view-group">
+                <h3>Certificats TLS</h3>
+                {haproxyCertificates.map((cert) => (
+                  <p className="empty" key={cert.storageName}>{cert.storageName}{cert.description ? ` — ${cert.description}` : ''}</p>
+                ))}
+                {haproxyCertificates.length === 0 && <p className="empty">Aucun certificat TLS listé (Data Plane API non configurée ou magasin vide).</p>}
+              </section>
+            )}
           </div>
         ) : panel === 'proxmox' ? (
           <ProxmoxPanel apiBase={import.meta.env.VITE_API_URL ?? 'http://localhost:3000'} />
